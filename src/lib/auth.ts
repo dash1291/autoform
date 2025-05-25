@@ -31,6 +31,11 @@ export const authOptions: NextAuthOptions = {
           },
         })
         
+        console.log('Access token exists:', !!account?.access_token)
+        console.log('Access token length:', account?.access_token?.length || 0)
+        console.log('Refresh token exists:', !!account?.refresh_token)
+        console.log('Full account object:', JSON.stringify(account, null, 2))
+        
         if (account?.access_token) {
           session.accessToken = account.access_token
         }
@@ -51,10 +56,33 @@ export const authOptions: NextAuthOptions = {
       return token
     },
     async signIn({ user, account, profile }) {
+      // Log the account object during sign in to debug
+      console.log('Sign in account object:', JSON.stringify(account, null, 2))
+      
+      // Ensure access token is preserved during sign in
+      if (account && account.access_token) {
+        console.log('Access token found during sign in, ensuring it gets stored')
+        // The PrismaAdapter should handle this automatically, but let's log it
+      }
+      
       return true
     },
   },
-  events: {},
+  events: {
+    async linkAccount({ user, account, profile }) {
+      console.log('Account linked:', {
+        provider: account.provider,
+        hasAccessToken: !!account.access_token,
+        accessTokenLength: account.access_token?.length || 0,
+        hasRefreshToken: !!account.refresh_token,
+        tokenType: account.token_type,
+        scope: account.scope
+      })
+    },
+    async createUser({ user }) {
+      console.log('User created:', user.id)
+    }
+  },
   session: {
     strategy: 'database',
   },

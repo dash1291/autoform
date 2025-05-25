@@ -307,49 +307,227 @@ export class DeploymentService {
       }
       await this.ensureECRRepository(repositoryName);
 
-      // Ensure Docker buildx is available for cross-platform builds
+      // Start CodeBuild project to build and push image
       if (deploymentId) {
-        await this.logToDatabase(deploymentId, 'Setting up Docker buildx for cross-platform builds...');
+        await this.logToDatabase(deploymentId, 'Starting CodeBuild project for container build...');
       }
-      try {
-        await this.execWithLogging('docker buildx version', projectId, deploymentId);
-      } catch (error) {
-        if (deploymentId) {
-          await this.logToDatabase(deploymentId, 'Docker buildx not available, using regular docker build');
-        }
+      
+      const buildId = await this.startCodeBuild(projectName, repositoryName, commitSha, cloneDir, deploymentId);
+      
+      if (deploymentId) {
+        await this.logToDatabase(deploymentId, `CodeBuild started: ${buildId}`);
       }
 
-      // Build image for AMD64 platform (required for ECS Fargate)
-      if (deploymentId) {
-        await this.logToDatabase(deploymentId, `Building Docker image: ${imageTag} for linux/amd64 platform`);
-      }
-      await this.execWithLogging(`cd ${cloneDir} && docker build --platform linux/amd64 -t ${imageTag} .`, projectId, deploymentId);
-
-      // Tag for ECR
-      if (deploymentId) {
-        await this.logToDatabase(deploymentId, `Tagging image for ECR: ${imageUri}`);
-      }
-      await this.execWithLogging(`docker tag ${imageTag} ${imageUri}`, projectId, deploymentId);
-
-      // Login to ECR
-      if (deploymentId) {
-        await this.logToDatabase(deploymentId, 'Logging into ECR...');
-      }
-      await this.execWithLogging(`aws ecr get-login-password --region ${this.region} | docker login --username AWS --password-stdin ${ecrRegistry}`, projectId, deploymentId);
-
-      // Push to ECR
-      if (deploymentId) {
-        await this.logToDatabase(deploymentId, `Pushing image to ECR: ${imageUri}`);
-      }
-      await this.execWithLogging(`docker push ${imageUri}`, projectId, deploymentId);
+      // Wait for build to complete
+      await this.waitForCodeBuildCompletion(buildId, deploymentId);
 
       if (deploymentId) {
-        await this.logToDatabase(deploymentId, `✅ Successfully pushed image: ${imageUri}`);
+        await this.logToDatabase(deploymentId, `✅ Successfully built and pushed image: ${imageUri}`);
       }
       return imageUri;
     } catch (error) {
       throw new Error(`Failed to build/push image: ${error}`);
     }
+  }
+
+
+  private async startCodeBuild(projectName: string, repositoryName: string, commitSha: string, cloneDir: string, deploymentId?: string): Promise<string> {
+    const codebuild = new AWS.CodeBuild({ region: this.region });
+    
+    // Upload source to S3 first
+    const sourceLocation = await this.uploadSourceToS3(cloneDir, projectName, commitSha);
+    
+    const buildProjectName = `${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-build`;
+    
+    // Create buildspec content
+    const buildspec = `version: 0.2
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region ${this.region} | docker login --username AWS --password-stdin ${await this.getECRRegistry()}
+  build:
+    commands:
+      - echo Build started on \`date\`
+      - echo Building the Docker image...
+      - docker build -t ${repositoryName}:${commitSha} .
+      - docker tag ${repositoryName}:${commitSha} ${await this.getECRRegistry()}/${repositoryName}:${commitSha}
+  post_build:
+    commands:
+      - echo Build completed on \`date\`
+      - echo Pushing the Docker image...
+      - docker push ${await this.getECRRegistry()}/${repositoryName}:${commitSha}`;
+
+    const params = {
+      name: buildProjectName,
+      source: {
+        type: 'S3',
+        location: sourceLocation,
+        buildspec: buildspec
+      },
+      artifacts: {
+        type: 'NO_ARTIFACTS'
+      },
+      environment: {
+        type: 'LINUX_CONTAINER',
+        image: 'aws/codebuild/amazonlinux2-x86_64-standard:4.0',
+        computeType: 'BUILD_GENERAL1_SMALL',
+        privilegedMode: true
+      },
+      serviceRole: await this.getCodeBuildRole()
+    };
+
+    // Create or update CodeBuild project
+    try {
+      await codebuild.createProject(params).promise();
+      if (deploymentId) {
+        await this.logToDatabase(deploymentId, `Created CodeBuild project: ${buildProjectName}`);
+      }
+    } catch (error: any) {
+      if (error.code === 'ResourceAlreadyExistsException') {
+        // Update existing project
+        await codebuild.updateProject(params).promise();
+        if (deploymentId) {
+          await this.logToDatabase(deploymentId, `Updated CodeBuild project: ${buildProjectName}`);
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    // Start build
+    const result = await codebuild.startBuild({
+      projectName: buildProjectName
+    }).promise();
+    
+    return result.build!.id!;
+  }
+
+  private async waitForCodeBuildCompletion(buildId: string, deploymentId?: string): Promise<void> {
+    const codebuild = new AWS.CodeBuild({ region: this.region });
+    const cloudwatchLogs = new AWS.CloudWatchLogs({ region: this.region });
+    
+    let logGroupName: string | undefined;
+    let logStreamName: string | undefined;
+    let nextToken: string | undefined;
+    
+    while (true) {
+      const result = await codebuild.batchGetBuilds({
+        ids: [buildId]
+      }).promise();
+
+      const build = result.builds![0];
+      const status = build.buildStatus;
+
+      // Get log info if available
+      if (build.logs?.cloudWatchLogs?.groupName && !logGroupName) {
+        logGroupName = build.logs.cloudWatchLogs.groupName;
+        logStreamName = build.logs.cloudWatchLogs.streamName;
+        
+        if (deploymentId) {
+          await this.logToDatabase(deploymentId, `📋 Streaming CodeBuild logs from CloudWatch...`);
+        }
+      }
+
+      // Stream logs if available
+      if (logGroupName && logStreamName && deploymentId) {
+        try {
+          const logsResult = await cloudwatchLogs.getLogEvents({
+            logGroupName,
+            logStreamName,
+            nextToken,
+            startFromHead: true
+          }).promise();
+
+          for (const event of logsResult.events || []) {
+            if (event.message) {
+              await this.logToDatabase(deploymentId, `🔨 ${event.message.trim()}`);
+            }
+          }
+
+          nextToken = logsResult.nextForwardToken;
+        } catch (error) {
+          // Ignore log streaming errors, continue with build monitoring
+          console.warn('Failed to stream logs:', error);
+        }
+      }
+
+      if (deploymentId) {
+        await this.logToDatabase(deploymentId, `CodeBuild status: ${status}`);
+      }
+
+      if (status === 'SUCCEEDED') {
+        // Get final logs
+        if (logGroupName && logStreamName && deploymentId) {
+          try {
+            const finalLogs = await cloudwatchLogs.getLogEvents({
+              logGroupName,
+              logStreamName,
+              nextToken,
+              startFromHead: true
+            }).promise();
+
+            for (const event of finalLogs.events || []) {
+              if (event.message) {
+                await this.logToDatabase(deploymentId, `🔨 ${event.message.trim()}`);
+              }
+            }
+          } catch (error) {
+            console.warn('Failed to get final logs:', error);
+          }
+        }
+        return;
+      } else if (status === 'FAILED' || status === 'FAULT' || status === 'STOPPED' || status === 'TIMED_OUT') {
+        if (logGroupName && deploymentId) {
+          await this.logToDatabase(deploymentId, `❌ CodeBuild logs available in CloudWatch: ${logGroupName}`);
+        }
+        throw new Error(`CodeBuild failed with status: ${status}`);
+      }
+
+      // Wait 5 seconds before checking again (shorter for better log streaming)
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
+
+  private async uploadSourceToS3(cloneDir: string, projectName: string, commitSha: string): Promise<string> {
+    const s3 = new AWS.S3({ region: this.region });
+    const bucketName = `${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-builds-${this.region}`;
+    const keyName = `source/${commitSha}.zip`;
+
+    // Create bucket if it doesn't exist
+    try {
+      await s3.createBucket({
+        Bucket: bucketName,
+        CreateBucketConfiguration: this.region === 'us-east-1' ? undefined : { LocationConstraint: this.region }
+      }).promise();
+    } catch (error: any) {
+      if (error.code !== 'BucketAlreadyOwnedByYou' && error.code !== 'BucketAlreadyExists') {
+        throw error;
+      }
+    }
+
+    // Create zip of source code
+    await this.execWithLogging(`cd ${cloneDir} && zip -r /tmp/${commitSha}.zip . -x "*.git*"`, '', undefined);
+
+    // Upload to S3
+    const fileContent = require('fs').readFileSync(`/tmp/${commitSha}.zip`);
+    await s3.upload({
+      Bucket: bucketName,
+      Key: keyName,
+      Body: fileContent
+    }).promise();
+
+    // Clean up local zip
+    await this.execWithLogging(`rm -f /tmp/${commitSha}.zip`, '', undefined);
+
+    return `${bucketName}/${keyName}`;
+  }
+
+  private async getCodeBuildRole(): Promise<string> {
+    // Return a pre-created CodeBuild service role ARN
+    // This role needs permissions for ECR, S3, and CloudWatch Logs
+    const accountId = (await this.sts.getCallerIdentity().promise()).Account!;
+    return `arn:aws:iam::${accountId}:role/CodeBuildServiceRole`;
   }
 
   private async deployInfrastructure(projectId: string, projectName: string, imageUri: string, deploymentId?: string): Promise<ECSInfrastructureOutput> {

@@ -8,11 +8,27 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install git
+# Install git, zip, and AWS CLI
 RUN apt-get update && apt-get install -y \
     git \
+    curl \
+    wget \
+    gnupg \
+    software-properties-common \
+    unzip \
+    zip \
     && rm -rf /var/lib/apt/lists/*
 
+# Install AWS CLI v2 (detect architecture)
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "arm64" ]; then \
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"; \
+    else \
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"; \
+    fi && \
+    unzip awscliv2.zip && \
+    ./aws/install && \
+    rm -rf awscliv2.zip aws/
 # Install dependencies only when needed
 FROM base AS deps
 WORKDIR /app
@@ -59,6 +75,7 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
 
 
 EXPOSE 3000
