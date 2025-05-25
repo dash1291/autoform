@@ -1,15 +1,18 @@
 # Multi-stage build for Next.js application
-FROM node:18-alpine AS base
+FROM node:18-slim AS base
+
+# Install OpenSSL and other dependencies needed for Prisma
+RUN apt-get update && apt-get install -y \
+    openssl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies only when needed
 FROM base AS deps
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Install dependencies based on the preferred package manager
 COPY package.json package-lock.json ./
-RUN ls -la
 RUN npm ci --omit=dev
 
 # Rebuild the source code only when needed
@@ -23,7 +26,7 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Generate Prisma Client
+# Generate Prisma Client for the correct platform
 RUN npx prisma generate
 
 # Build the application
@@ -36,9 +39,6 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
 
 # Copy the public folder
 COPY --from=builder /app/public ./public

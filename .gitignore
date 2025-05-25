@@ -41,7 +41,6 @@ next-env.d.ts
 /Pulumi.yaml
 
 # Lock files
-package-lock.json
 
 # Temporary build directories
 /tmp
