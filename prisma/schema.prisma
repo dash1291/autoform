@@ -13,16 +13,15 @@ model Account {
   type                     String
   provider                 String
   providerAccountId        String
-  refresh_token            String? @db.Text
-  access_token             String? @db.Text
+  refresh_token            String?
+  access_token             String?
   expires_at               Int?
   token_type               String?
   scope                    String?
-  id_token                 String? @db.Text
+  id_token                 String?
   session_state            String?
   refresh_token_expires_in Int?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -42,11 +41,11 @@ model User {
   emailVerified DateTime?
   image         String?
   githubId      String?   @unique
-  accounts      Account[]
-  sessions      Session[]
-  projects      Project[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  projects      Project[]
+  sessions      Session[]
 }
 
 model VerificationToken {
@@ -58,32 +57,48 @@ model VerificationToken {
 }
 
 model Project {
-  id             String        @id @default(cuid())
-  name           String
-  gitRepoUrl     String
-  branch         String        @default("main")
-  userId         String
-  status         ProjectStatus @default(CREATED)
-  ecsClusterArn  String?
-  ecsServiceArn  String?
-  albArn         String?
-  domain         String?
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deployments    Deployment[]
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id              String                @id @default(cuid())
+  name            String
+  gitRepoUrl      String
+  branch          String                @default("main")
+  userId          String
+  status          ProjectStatus         @default(CREATED)
+  ecsClusterArn   String?
+  ecsServiceArn   String?
+  albArn          String?
+  domain          String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  secretsArn      String?
+  deployments     Deployment[]
+  environmentVars EnvironmentVariable[]
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Deployment {
-  id               String           @id @default(cuid())
-  projectId        String
-  status           DeploymentStatus @default(PENDING)
-  imageTag         String
-  commitSha        String
-  logs             String?          @db.Text
-  project          Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id        String           @id @default(cuid())
+  projectId String
+  status    DeploymentStatus @default(PENDING)
+  imageTag  String
+  commitSha String
+  logs      String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model EnvironmentVariable {
+  id        String   @id @default(cuid())
+  projectId String
+  key       String
+  value     String?
+  isSecret  Boolean  @default(false)
+  secretKey String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, key])
 }
 
 enum ProjectStatus {

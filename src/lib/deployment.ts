@@ -170,7 +170,7 @@ export class DeploymentService {
       if (deploymentId) {
         await this.logToDatabase(deploymentId, '☁️ Provisioning AWS infrastructure...');
       }
-      const result = await this.deployInfrastructure(config.projectName, imageUri, deploymentId);
+      const result = await this.deployInfrastructure(config.projectId, config.projectName, imageUri, deploymentId);
 
       // Mark deployment as completed
       if (deploymentId) {
@@ -352,12 +352,20 @@ export class DeploymentService {
     }
   }
 
-  private async deployInfrastructure(projectName: string, imageUri: string, deploymentId?: string): Promise<ECSInfrastructureOutput> {
+  private async deployInfrastructure(projectId: string, projectName: string, imageUri: string, deploymentId?: string): Promise<ECSInfrastructureOutput> {
+    // Fetch environment variables for the project
+    const environmentVariables = await this.getEnvironmentVariables(projectId);
+
+    if (deploymentId && environmentVariables.length > 0) {
+      await this.logToDatabase(deploymentId, `📋 Found ${environmentVariables.length} environment variables`);
+    }
+
     const infrastructure = new ECSInfrastructure({
       projectName,
       imageUri,
       containerPort: 3000,
       region: this.region,
+      environmentVariables,
     });
 
     if (deploymentId) {
@@ -366,6 +374,9 @@ export class DeploymentService {
       await this.logToDatabase(deploymentId, '- Creating security groups');
       await this.logToDatabase(deploymentId, '- Setting up ECS cluster and service');
       await this.logToDatabase(deploymentId, '- Configuring load balancer');
+      if (environmentVariables.length > 0) {
+        await this.logToDatabase(deploymentId, `- Configuring ${environmentVariables.length} environment variables and secrets`);
+      }
     }
 
     const result = await infrastructure.createOrUpdateInfrastructure();
@@ -377,5 +388,25 @@ export class DeploymentService {
     }
 
     return result;
+  }
+
+  private async getEnvironmentVariables(projectId: string) {
+    try {
+      const envVars = await prisma.environmentVariable.findMany({
+        where: {
+          projectId
+        }
+      });
+
+      return envVars.map(envVar => ({
+        key: envVar.key,
+        value: envVar.value || undefined,
+        isSecret: envVar.isSecret,
+        secretKey: envVar.secretKey || undefined
+      }));
+    } catch (error) {
+      console.error('Error fetching environment variables:', error);
+      return [];
+    }
   }
 }

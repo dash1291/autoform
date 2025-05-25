@@ -29,6 +29,7 @@ export interface Project {
   ecsServiceArn?: string
   albArn?: string
   domain?: string
+  secretsArn?: string
   createdAt: Date
   updatedAt: Date
 }
@@ -61,4 +62,15 @@ export enum DeploymentStatus {
   DEPLOYING = 'DEPLOYING',
   SUCCESS = 'SUCCESS',
   FAILED = 'FAILED'
+}
+
+export interface EnvironmentVariable {
+  id: string
+  projectId: string
+  key: string
+  value?: string
+  isSecret: boolean
+  secretKey?: string
+  createdAt: Date
+  updatedAt: Date
 }

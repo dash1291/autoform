@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Project, Deployment } from '@/types'
 import LogsViewer from '@/components/LogsViewer'
+import EnvironmentVariables from '@/components/EnvironmentVariables'
 
 export default function ProjectDetail() {
   const { data: session } = useSession()
@@ -17,7 +18,7 @@ export default function ProjectDetail() {
   const [error, setError] = useState('')
   const [liveLogs, setLiveLogs] = useState<string>('')
   const [activeDeploymentId, setActiveDeploymentId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'overview' | 'deployments' | 'logs' | 'resources'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'deployments' | 'logs' | 'environment' | 'resources'>('overview')
 
   useEffect(() => {
     if (session && params.id) {
@@ -285,6 +286,16 @@ export default function ProjectDetail() {
                 Application Logs
               </button>
               <button
+                onClick={() => setActiveTab('environment')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'environment'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Environment
+              </button>
+              <button
                 onClick={() => setActiveTab('resources')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'resources'
@@ -416,6 +427,12 @@ export default function ProjectDetail() {
               <div className="bg-white shadow rounded-lg p-6">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">Application Logs</h2>
                 <LogsViewer projectId={params.id as string} />
+              </div>
+            )}
+
+            {activeTab === 'environment' && (
+              <div className="bg-white shadow rounded-lg p-6">
+                <EnvironmentVariables projectId={params.id as string} />
               </div>
             )}
 

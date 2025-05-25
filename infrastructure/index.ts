@@ -1,5 +1,12 @@
 import * as AWS from 'aws-sdk';
 
+export interface EnvironmentVariable {
+  key: string;
+  value?: string;
+  isSecret: boolean;
+  secretKey?: string;
+}
+
 export interface ECSInfrastructureArgs {
   projectName: string;
   imageUri: string;
@@ -8,6 +15,7 @@ export interface ECSInfrastructureArgs {
   existingVpcId?: string;
   existingSubnetIds?: string[];
   existingClusterArn?: string;
+  environmentVariables?: EnvironmentVariable[];
 }
 
 export interface ECSInfrastructureOutput {
@@ -578,20 +586,90 @@ export class ECSInfrastructure {
       []
     );
 
-    const executionRoleArn = await this.createOrUpdateIAMRole(
-      `${this.projectName}-execution-role`,
-      {
-        Version: '2012-10-17',
-        Statement: [{
-          Action: 'sts:AssumeRole',
-          Effect: 'Allow',
-          Principal: { Service: 'ecs-tasks.amazonaws.com' }
-        }]
-      },
-      ['arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy']
-    );
+    const executionRoleArn = await this.createOrUpdateExecutionRole();
 
     return { taskRoleArn, executionRoleArn };
+  }
+
+  private async createOrUpdateExecutionRole(): Promise<string> {
+    const roleName = `${this.projectName}-execution-role`;
+    const accountId = await this.getAccountId();
+    
+    try {
+      // Check if role already exists
+      const role = await this.iam.getRole({ RoleName: roleName }).promise();
+      console.log(`Found existing execution role: ${roleName}`);
+      
+      // Update the inline policy for Secrets Manager access
+      await this.attachSecretsManagerPolicy(roleName, accountId);
+      
+      return role.Role.Arn!;
+    } catch (error: any) {
+      if (error.code === 'NoSuchEntity') {
+        console.log(`Creating new execution role: ${roleName}`);
+        
+        // Create the role
+        const roleResult = await this.iam.createRole({
+          RoleName: roleName,
+          AssumeRolePolicyDocument: JSON.stringify({
+            Version: '2012-10-17',
+            Statement: [{
+              Action: 'sts:AssumeRole',
+              Effect: 'Allow',
+              Principal: { Service: 'ecs-tasks.amazonaws.com' }
+            }]
+          }),
+          Tags: [{ Key: 'Name', Value: roleName }]
+        }).promise();
+
+        // Attach the basic ECS task execution policy
+        await this.iam.attachRolePolicy({
+          RoleName: roleName,
+          PolicyArn: 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+        }).promise();
+
+        // Attach Secrets Manager policy
+        await this.attachSecretsManagerPolicy(roleName, accountId);
+
+        console.log(`Created execution role: ${roleResult.Role.Arn}`);
+        return roleResult.Role.Arn!;
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  private async attachSecretsManagerPolicy(roleName: string, accountId: string): Promise<void> {
+    const policyName = `${this.projectName}-secrets-policy`;
+    
+    const secretsPolicy = {
+      Version: '2012-10-17',
+      Statement: [
+        {
+          Effect: 'Allow',
+          Action: [
+            'secretsmanager:GetSecretValue'
+          ],
+          Resource: [
+            `arn:aws:secretsmanager:${this.region}:${accountId}:secret:${this.projectName}/*`
+          ]
+        }
+      ]
+    };
+
+    try {
+      // Try to update existing policy
+      await this.iam.putRolePolicy({
+        RoleName: roleName,
+        PolicyName: policyName,
+        PolicyDocument: JSON.stringify(secretsPolicy)
+      }).promise();
+      
+      console.log(`Updated Secrets Manager policy for role: ${roleName}`);
+    } catch (error) {
+      console.error(`Failed to attach Secrets Manager policy: ${error}`);
+      throw error;
+    }
   }
 
   private async createOrUpdateIAMRole(roleName: string, assumeRolePolicy: any, managedPolicies: string[]) {
@@ -772,6 +850,57 @@ export class ECSInfrastructure {
   }
 
   private async createTaskDefinition(roles: { taskRoleArn: string; executionRoleArn: string }) {
+    // Prepare environment variables and secrets
+    const environment: AWS.ECS.KeyValuePair[] = [];
+    const secrets: AWS.ECS.Secret[] = [];
+
+    if (this.args.environmentVariables) {
+      for (const envVar of this.args.environmentVariables) {
+        if (envVar.isSecret && envVar.secretKey) {
+          // Add to secrets array for AWS Secrets Manager
+          // The ARN format should include the full secret ARN with suffix
+          secrets.push({
+            name: envVar.key,
+            valueFrom: await this.getSecretArn(envVar.secretKey)
+          });
+        } else if (!envVar.isSecret && envVar.value) {
+          // Add to environment array for regular environment variables
+          environment.push({
+            name: envVar.key,
+            value: envVar.value
+          });
+        }
+      }
+    }
+
+    const containerDef: AWS.ECS.ContainerDefinition = {
+      name: this.projectName,
+      image: this.imageUri,
+      portMappings: [{
+        containerPort: this.containerPort,
+        protocol: 'tcp'
+      }],
+      essential: true,
+      logConfiguration: {
+        logDriver: 'awslogs',
+        options: {
+          'awslogs-group': `/ecs/${this.projectName}`,
+          'awslogs-region': this.region,
+          'awslogs-stream-prefix': 'ecs'
+        }
+      }
+    };
+
+    // Add environment variables if any
+    if (environment.length > 0) {
+      containerDef.environment = environment;
+    }
+
+    // Add secrets if any
+    if (secrets.length > 0) {
+      containerDef.secrets = secrets;
+    }
+
     return await this.ecs.registerTaskDefinition({
       family: `${this.projectName}-task`,
       networkMode: 'awsvpc',
@@ -780,25 +909,35 @@ export class ECSInfrastructure {
       memory: '512',
       executionRoleArn: roles.executionRoleArn,
       taskRoleArn: roles.taskRoleArn,
-      containerDefinitions: [{
-        name: this.projectName,
-        image: this.imageUri,
-        portMappings: [{
-          containerPort: this.containerPort,
-          protocol: 'tcp'
-        }],
-        essential: true,
-        logConfiguration: {
-          logDriver: 'awslogs',
-          options: {
-            'awslogs-group': `/ecs/${this.projectName}`,
-            'awslogs-region': this.region,
-            'awslogs-stream-prefix': 'ecs'
-          }
-        }
-      }],
+      containerDefinitions: [containerDef],
       tags: [{ key: 'Name', value: `${this.projectName}-task` }]
     }).promise();
+  }
+
+  private async getAccountId(): Promise<string> {
+    const sts = new AWS.STS();
+    const identity = await sts.getCallerIdentity().promise();
+    return identity.Account!;
+  }
+
+  private async getSecretArn(secretName: string): Promise<string> {
+    try {
+      const secretsManager = new AWS.SecretsManager({ region: this.region });
+      const result = await secretsManager.describeSecret({
+        SecretId: secretName
+      }).promise();
+      
+      if (!result.ARN) {
+        throw new Error(`Could not get ARN for secret: ${secretName}`);
+      }
+      
+      return result.ARN;
+    } catch (error) {
+      console.error(`Failed to get secret ARN for ${secretName}:`, error);
+      // Fallback to constructed ARN (though this might not work)
+      const accountId = await this.getAccountId();
+      return `arn:aws:secretsmanager:${this.region}:${accountId}:secret:${secretName}`;
+    }
   }
 
   private async createLoadBalancer(subnets: string[], securityGroupId: string) {
