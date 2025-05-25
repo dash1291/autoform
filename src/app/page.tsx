@@ -21,7 +21,7 @@ export default function Home() {
       <div className="container mx-auto px-4 py-16">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Formaton
+            Autoform
           </h1>
           <p className="text-xl text-gray-600 mb-8">
             Deploy your applications to AWS ECS with ease

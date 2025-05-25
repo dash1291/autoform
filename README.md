@@ -1,4 +1,4 @@
-# Formaton
+# Autoform
 
 A Heroku-like Platform-as-a-Service (PaaS) system that deploys applications to AWS ECS.
 
@@ -36,7 +36,7 @@ A Heroku-like Platform-as-a-Service (PaaS) system that deploys applications to A
 1. Clone and install:
 \`\`\`bash
 git clone <your-repo-url>
-cd formaton
+cd autoform
 npm install
 \`\`\`
 

@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Project, Deployment } from '@/types'
+import LogsViewer from '@/components/LogsViewer'
 
 export default function ProjectDetail() {
   const { data: session } = useSession()
@@ -16,6 +17,7 @@ export default function ProjectDetail() {
   const [error, setError] = useState('')
   const [liveLogs, setLiveLogs] = useState<string>('')
   const [activeDeploymentId, setActiveDeploymentId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'overview' | 'deployments' | 'logs' | 'resources'>('overview')
 
   useEffect(() => {
     if (session && params.id) {
@@ -248,160 +250,260 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Project Info */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Status Card */}
-            <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Project Status</h2>
-              <div className="space-y-4">
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Current Status</span>
-                  <div className="mt-1">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      project.status === 'DEPLOYED' ? 'bg-green-100 text-green-800' :
-                      project.status === 'FAILED' ? 'bg-red-100 text-red-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {project.status}
-                    </span>
-                  </div>
-                </div>
-                
-                {project.domain && (
-                  <div>
-                    <span className="text-sm font-medium text-gray-500">Application URL</span>
-                    <div className="mt-1">
-                      <a
-                        href={`http://${project.domain}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-700"
-                      >
-                        {project.domain}
-                      </a>
+        {/* Tabs */}
+        <div className="mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setActiveTab('overview')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'overview'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Overview
+              </button>
+              <button
+                onClick={() => setActiveTab('deployments')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'deployments'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Deployments ({deployments.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('logs')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'logs'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Application Logs
+              </button>
+              <button
+                onClick={() => setActiveTab('resources')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'resources'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                AWS Resources
+              </button>
+            </nav>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+            {activeTab === 'overview' && (
+              <>
+                {/* Status Card */}
+                <div className="bg-white shadow rounded-lg p-6">
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">Project Status</h2>
+                  <div className="space-y-4">
+                    <div>
+                      <span className="text-sm font-medium text-gray-500">Current Status</span>
+                      <div className="mt-1">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          project.status === 'DEPLOYED' ? 'bg-green-100 text-green-800' :
+                          project.status === 'FAILED' ? 'bg-red-100 text-red-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {project.status}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {project.domain && (
+                      <div>
+                        <span className="text-sm font-medium text-gray-500">Application URL</span>
+                        <div className="mt-1">
+                          <a
+                            href={`http://${project.domain}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-700"
+                          >
+                            {project.domain}
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div>
+                      <span className="text-sm font-medium text-gray-500">Created</span>
+                      <div className="mt-1 text-sm text-gray-900">
+                        {new Date(project.createdAt).toLocaleString()}
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <span className="text-sm font-medium text-gray-500">Last Updated</span>
+                      <div className="mt-1 text-sm text-gray-900">
+                        {new Date(project.updatedAt).toLocaleString()}
+                      </div>
                     </div>
                   </div>
-                )}
-                
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Created</span>
-                  <div className="mt-1 text-sm text-gray-900">
-                    {new Date(project.createdAt).toLocaleString()}
-                  </div>
                 </div>
-                
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Last Updated</span>
-                  <div className="mt-1 text-sm text-gray-900">
-                    {new Date(project.updatedAt).toLocaleString()}
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            {/* Live Deployment Logs */}
-            {activeDeploymentId && liveLogs && (
+                {/* Live Deployment Logs */}
+                {activeDeploymentId && liveLogs && (
+                  <div className="bg-white shadow rounded-lg p-6">
+                    <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                      🔴 Live Deployment Logs
+                    </h2>
+                    <div className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto max-h-96 font-mono text-sm">
+                      <pre className="whitespace-pre-wrap">{liveLogs}</pre>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-2">
+                      Logs update automatically every 2 seconds
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === 'deployments' && (
               <div className="bg-white shadow rounded-lg p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  🔴 Live Deployment Logs
-                </h2>
-                <div className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto max-h-96 font-mono text-sm">
-                  <pre className="whitespace-pre-wrap">{liveLogs}</pre>
-                </div>
-                <p className="text-sm text-gray-500 mt-2">
-                  Logs update automatically every 2 seconds
-                </p>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Deployment History</h2>
+                {deployments.length === 0 ? (
+                  <p className="text-gray-500">No deployments yet.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {deployments.map((deployment) => (
+                      <div key={deployment.id} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                deployment.status === 'SUCCESS' ? 'bg-green-100 text-green-800' :
+                                deployment.status === 'FAILED' ? 'bg-red-100 text-red-800' :
+                                'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {deployment.status}
+                              </span>
+                              <code className="text-sm bg-gray-100 px-2 py-1 rounded">
+                                {deployment.commitSha.substring(0, 8)}
+                              </code>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {new Date(deployment.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        {deployment.logs && (
+                          <div className="mt-3">
+                            <details className="text-sm">
+                              <summary className="cursor-pointer text-gray-600">View Deployment Logs</summary>
+                              <pre className="mt-2 bg-gray-50 p-3 rounded text-xs overflow-auto max-h-48">
+                                {deployment.logs}
+                              </pre>
+                            </details>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Deployments */}
-            <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Deployment History</h2>
-              {deployments.length === 0 ? (
-                <p className="text-gray-500">No deployments yet.</p>
-              ) : (
-                <div className="space-y-4">
-                  {deployments.map((deployment) => (
-                    <div key={deployment.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              deployment.status === 'SUCCESS' ? 'bg-green-100 text-green-800' :
-                              deployment.status === 'FAILED' ? 'bg-red-100 text-red-800' :
-                              'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {deployment.status}
-                            </span>
-                            <code className="text-sm bg-gray-100 px-2 py-1 rounded">
-                              {deployment.commitSha.substring(0, 8)}
-                            </code>
-                          </div>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {new Date(deployment.createdAt).toLocaleString()}
-                          </p>
-                        </div>
+            {activeTab === 'logs' && (
+              <div className="bg-white shadow rounded-lg p-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Application Logs</h2>
+                <LogsViewer projectId={params.id as string} />
+              </div>
+            )}
+
+            {activeTab === 'resources' && (
+              <div className="bg-white shadow rounded-lg p-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">AWS Resources</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {project.ecsClusterArn && (
+                    <div className="border border-gray-200 rounded-lg p-4">
+                      <h3 className="font-medium text-gray-900 mb-2">ECS Cluster</h3>
+                      <p className="text-sm text-gray-600 break-all">{project.ecsClusterArn}</p>
+                      <div className="mt-2">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          Active
+                        </span>
                       </div>
-                      {deployment.logs && (
-                        <div className="mt-3">
-                          <details className="text-sm">
-                            <summary className="cursor-pointer text-gray-600">View Logs</summary>
-                            <pre className="mt-2 bg-gray-50 p-3 rounded text-xs overflow-auto">
-                              {deployment.logs}
-                            </pre>
-                          </details>
-                        </div>
-                      )}
                     </div>
-                  ))}
+                  )}
+                  
+                  {project.ecsServiceArn && (
+                    <div className="border border-gray-200 rounded-lg p-4">
+                      <h3 className="font-medium text-gray-900 mb-2">ECS Service</h3>
+                      <p className="text-sm text-gray-600 break-all">{project.ecsServiceArn}</p>
+                      <div className="mt-2">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          Running
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {project.albArn && (
+                    <div className="border border-gray-200 rounded-lg p-4">
+                      <h3 className="font-medium text-gray-900 mb-2">Application Load Balancer</h3>
+                      <p className="text-sm text-gray-600 break-all">{project.albArn}</p>
+                      <div className="mt-2">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          Active
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="border border-gray-200 rounded-lg p-4">
+                    <h3 className="font-medium text-gray-900 mb-2">CloudWatch Log Group</h3>
+                    <p className="text-sm text-gray-600">/ecs/{project.name}</p>
+                    <div className="mt-2">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        7 Day Retention
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="border border-gray-200 rounded-lg p-4">
+                    <h3 className="font-medium text-gray-900 mb-2">ECR Repository</h3>
+                    <p className="text-sm text-gray-600">{project.name.toLowerCase().replace(/[^a-z0-9-_]/g, '-')}</p>
+                    <div className="mt-2">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                        Container Registry
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="border border-gray-200 rounded-lg p-4">
+                    <h3 className="font-medium text-gray-900 mb-2">Repository</h3>
+                    <a
+                      href={project.gitRepoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:text-blue-700 break-all"
+                    >
+                      {project.gitRepoUrl}
+                    </a>
+                    <div className="mt-2">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        Branch: {project.branch}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
-          </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* AWS Resources */}
-            <div className="bg-white shadow rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">AWS Resources</h3>
-              <div className="space-y-3 text-sm">
-                {project.ecsClusterArn && (
-                  <div>
-                    <span className="font-medium text-gray-500">ECS Cluster:</span>
-                    <p className="text-gray-900 break-all">{project.ecsClusterArn}</p>
-                  </div>
-                )}
-                {project.ecsServiceArn && (
-                  <div>
-                    <span className="font-medium text-gray-500">ECS Service:</span>
-                    <p className="text-gray-900 break-all">{project.ecsServiceArn}</p>
-                  </div>
-                )}
-                {project.albArn && (
-                  <div>
-                    <span className="font-medium text-gray-500">Load Balancer:</span>
-                    <p className="text-gray-900 break-all">{project.albArn}</p>
+                {!project.ecsClusterArn && !project.ecsServiceArn && !project.albArn && (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500">No AWS resources found. Deploy your project to see resources here.</p>
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* Repository Info */}
-            <div className="bg-white shadow rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Repository</h3>
-              <div className="space-y-3">
-                <a
-                  href={project.gitRepoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-700 text-sm break-all"
-                >
-                  {project.gitRepoUrl}
-                </a>
-              </div>
-            </div>
-          </div>
+            )}
         </div>
       </div>
     </div>
