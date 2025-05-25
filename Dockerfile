@@ -8,6 +8,11 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Install git
+RUN apt-get update && apt-get install -y \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies only when needed
 FROM base AS deps
 WORKDIR /app
