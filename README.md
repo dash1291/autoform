@@ -1,4 +1,4 @@
-# Autopilot PaaS
+# Formaton
 
 A Heroku-like Platform-as-a-Service (PaaS) system that deploys applications to AWS ECS.
 
@@ -7,16 +7,17 @@ A Heroku-like Platform-as-a-Service (PaaS) system that deploys applications to A
 - 🔐 GitHub OAuth authentication
 - 📦 Automatic Docker image building and pushing to ECR
 - 🚀 One-click deployment to AWS ECS with Fargate
-- 🔧 Infrastructure provisioning with Pulumi
-- 📊 Real-time deployment status tracking
-- 🌐 Automatic load balancer setup
+- 🏗️ Automatic AWS infrastructure provisioning (VPC, ECS, ALB)
+- 📊 Real-time deployment logs and status tracking
+- ⚡ Project management with deployment history
+- 🛑 Deployment abort functionality
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14 with TypeScript
+- **Frontend**: Next.js 14 with TypeScript and Tailwind CSS
 - **Authentication**: NextAuth.js with GitHub provider
 - **Database**: PostgreSQL with Prisma ORM
-- **Infrastructure**: Pulumi with AWS provider
+- **Infrastructure**: AWS SDK (ECS, ECR, VPC, ALB, IAM)
 - **Container Registry**: Amazon ECR
 - **Orchestration**: Amazon ECS with Fargate
 - **Load Balancing**: Application Load Balancer (ALB)
@@ -27,101 +28,82 @@ A Heroku-like Platform-as-a-Service (PaaS) system that deploys applications to A
 
 - Node.js 18+
 - Docker
-- AWS CLI configured
-- PostgreSQL database
+- AWS CLI configured with appropriate permissions
 - GitHub OAuth App
 
-### Installation
+### Setup
 
-1. Clone the repository:
+1. Clone and install:
 \`\`\`bash
 git clone <your-repo-url>
-cd autopilot
-\`\`\`
-
-2. Install dependencies:
-\`\`\`bash
+cd formaton
 npm install
 \`\`\`
 
-3. Set up environment variables:
+2. Configure environment:
 \`\`\`bash
 cp .env.example .env
+# Edit .env with your credentials
 \`\`\`
 
-4. Configure your `.env` file with:
-   - Database connection string
-   - GitHub OAuth credentials
-   - AWS credentials
-   - Pulumi access token
-
-5. Set up the database:
+3. Start database and run migrations:
 \`\`\`bash
-npx prisma migrate dev
+npm run db:up
+npm run db:migrate
 \`\`\`
 
-6. Start the development server:
+4. Start development server:
 \`\`\`bash
 npm run dev
 \`\`\`
 
-### AWS Setup
+### Required Environment Variables
 
-1. Create an ECR repository for your projects
-2. Ensure your AWS credentials have the necessary permissions:
-   - ECS full access
-   - ECR full access
-   - VPC full access
-   - IAM role creation
-   - CloudWatch logs
+- \`DATABASE_URL\` - PostgreSQL connection string
+- \`NEXTAUTH_SECRET\` - Random secret for NextAuth.js
+- \`GITHUB_ID\` & \`GITHUB_SECRET\` - GitHub OAuth app credentials
+- \`AWS_REGION\` - AWS region (default: us-east-1)
+- AWS credentials via AWS CLI or environment variables
 
 ### GitHub OAuth Setup
 
-1. Go to GitHub Settings > Developer settings > OAuth Apps
-2. Create a new OAuth App with:
-   - Homepage URL: \`http://localhost:3000\`
-   - Authorization callback URL: \`http://localhost:3000/api/auth/callback/github\`
+Create a GitHub OAuth App:
+- Homepage URL: \`http://localhost:3000\`
+- Callback URL: \`http://localhost:3000/api/auth/callback/github\`
+- Required scopes: \`read:user\`, \`user:email\`, \`repo\`
 
 ## Usage
 
 1. **Sign in** with your GitHub account
 2. **Create a project** by providing:
    - Project name
-   - Git repository URL
+   - GitHub repository URL (must contain a Dockerfile)
 3. **Deploy** your application:
-   - The system will clone your repo
-   - Build a Docker image
-   - Push to ECR
-   - Deploy to ECS with auto-scaling
+   - System clones your repository
+   - Builds Docker image for linux/amd64
+   - Pushes to ECR
+   - Provisions AWS infrastructure (VPC, ECS, ALB)
+   - Deploys to ECS Fargate
 
 ## Project Structure
 
 \`\`\`
 src/
-├── app/                 # Next.js app router pages
+├── app/                 # Next.js app router
+│   ├── api/            # API routes for projects, deployments
+│   ├── dashboard/      # Dashboard page
+│   └── projects/       # Project management pages
 ├── components/          # React components
-├── lib/                 # Utility libraries
-├── types/               # TypeScript type definitions
-infrastructure/          # Pulumi infrastructure code
-prisma/                  # Database schema and migrations
+├── lib/                # Core services (auth, deployment, database)
+└── types/              # TypeScript definitions
+infrastructure/         # AWS infrastructure provisioning
+prisma/                # Database schema
 \`\`\`
 
-## Deployment Flow
+## Available Scripts
 
-1. **Repository Clone**: Git repository is cloned to a temporary directory
-2. **Image Build**: Docker image is built from the repository
-3. **ECR Push**: Image is tagged and pushed to Amazon ECR
-4. **Infrastructure**: Pulumi provisions ECS cluster, service, and ALB
-5. **Service Deploy**: ECS service is updated with the new image
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (\`git checkout -b feature/amazing-feature\`)
-3. Commit your changes (\`git commit -m 'Add some amazing feature'\`)
-4. Push to the branch (\`git push origin feature/amazing-feature\`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License.
+- \`npm run dev\` - Start development server
+- \`npm run build\` - Build for production
+- \`npm run typecheck\` - Run TypeScript checks
+- \`npm run db:up\` - Start PostgreSQL with Docker
+- \`npm run db:migrate\` - Run database migrations
