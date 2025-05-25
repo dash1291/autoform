@@ -36,9 +36,12 @@ next-env.d.ts
 # Prisma
 /prisma/migrations
 
-# Pulumi
+# Pulumi (not used)
 /Pulumi.*.yaml
 /Pulumi.yaml
+
+# Lock files
+package-lock.json
 
 # Temporary build directories
 /tmp

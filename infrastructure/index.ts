@@ -1,296 +1,1030 @@
-import * as pulumi from "@pulumi/pulumi";
-import * as aws from "@pulumi/aws";
+import * as AWS from 'aws-sdk';
 
 export interface ECSInfrastructureArgs {
   projectName: string;
   imageUri: string;
   containerPort?: number;
+  region?: string;
+  existingVpcId?: string;
+  existingSubnetIds?: string[];
+  existingClusterArn?: string;
 }
 
-export class ECSInfrastructure extends pulumi.ComponentResource {
-  public readonly cluster: aws.ecs.Cluster;
-  public readonly service: aws.ecs.Service;
-  public readonly loadBalancer: aws.lb.LoadBalancer;
-  public readonly targetGroup: aws.lb.TargetGroup;
-  public readonly taskDefinition: aws.ecs.TaskDefinition;
+export interface ECSInfrastructureOutput {
+  clusterArn: string;
+  serviceArn: string;
+  loadBalancerArn: string;
+  loadBalancerDns: string;
+}
 
-  constructor(
-    name: string,
-    args: ECSInfrastructureArgs,
-    opts?: pulumi.ComponentResourceOptions
-  ) {
-    super("autopilot:infrastructure:ECS", name, {}, opts);
+export class ECSInfrastructure {
+  private ec2: AWS.EC2;
+  private ecs: AWS.ECS;
+  private elbv2: AWS.ELBv2;
+  private iam: AWS.IAM;
+  private logs: AWS.CloudWatchLogs;
+  private projectName: string;
+  private imageUri: string;
+  private containerPort: number;
+  private args: ECSInfrastructureArgs;
+  private region: string;
 
-    const containerPort = args.containerPort || 3000;
+  constructor(args: ECSInfrastructureArgs) {
+    this.region = args.region || 'us-east-1';
+    AWS.config.update({ region: this.region });
 
-    // Create VPC
-    const vpc = new aws.ec2.Vpc(`${name}-vpc`, {
-      cidrBlock: "10.0.0.0/16",
-      enableDnsHostnames: true,
-      enableDnsSupport: true,
-      tags: {
-        Name: `${args.projectName}-vpc`,
-      },
-    }, { parent: this });
+    this.ec2 = new AWS.EC2();
+    this.ecs = new AWS.ECS();
+    this.elbv2 = new AWS.ELBv2();
+    this.iam = new AWS.IAM();
+    this.logs = new AWS.CloudWatchLogs();
+    this.projectName = args.projectName;
+    this.imageUri = args.imageUri;
+    this.containerPort = args.containerPort || 3000;
+    this.args = args;
+  }
 
-    // Create public subnets
-    const publicSubnet1 = new aws.ec2.Subnet(`${name}-public-subnet-1`, {
-      vpcId: vpc.id,
-      cidrBlock: "10.0.1.0/24",
-      availabilityZone: "us-east-1a",
-      mapPublicIpOnLaunch: true,
-      tags: {
-        Name: `${args.projectName}-public-subnet-1`,
-      },
-    }, { parent: this });
+  private async findExistingResources() {
+    try {
+      // Find existing VPC
+      const vpcs = await this.ec2.describeVpcs({
+        Filters: [
+          { Name: 'tag:Name', Values: [`${this.projectName}-vpc`] },
+          { Name: 'state', Values: ['available'] }
+        ]
+      }).promise();
 
-    const publicSubnet2 = new aws.ec2.Subnet(`${name}-public-subnet-2`, {
-      vpcId: vpc.id,
-      cidrBlock: "10.0.2.0/24",
-      availabilityZone: "us-east-1b",
-      mapPublicIpOnLaunch: true,
-      tags: {
-        Name: `${args.projectName}-public-subnet-2`,
-      },
-    }, { parent: this });
+      // Find existing subnets
+      const subnets = await this.ec2.describeSubnets({
+        Filters: [
+          { Name: 'tag:Name', Values: [`${this.projectName}-public-subnet-1`, `${this.projectName}-public-subnet-2`] },
+          { Name: 'state', Values: ['available'] }
+        ]
+      }).promise();
 
-    // Internet Gateway
-    const igw = new aws.ec2.InternetGateway(`${name}-igw`, {
-      vpcId: vpc.id,
-      tags: {
-        Name: `${args.projectName}-igw`,
-      },
-    }, { parent: this });
+      // Find existing ECS cluster
+      let cluster = null;
+      try {
+        const clusters = await this.ecs.describeClusters({
+          clusters: [`${this.projectName}-cluster`]
+        }).promise();
+        if (clusters.clusters && clusters.clusters.length > 0 && clusters.clusters[0].status === 'ACTIVE') {
+          cluster = clusters.clusters[0];
+        }
+      } catch (error) {
+        // Cluster doesn't exist
+      }
 
-    // Route table for public subnets
-    const publicRouteTable = new aws.ec2.RouteTable(`${name}-public-rt`, {
-      vpcId: vpc.id,
-      routes: [{
-        cidrBlock: "0.0.0.0/0",
-        gatewayId: igw.id,
-      }],
-      tags: {
-        Name: `${args.projectName}-public-rt`,
-      },
-    }, { parent: this });
+      // Find existing load balancer
+      let loadBalancer = null;
+      try {
+        const lbs = await this.elbv2.describeLoadBalancers({
+          Names: [`${this.projectName}-alb`]
+        }).promise();
+        if (lbs.LoadBalancers && lbs.LoadBalancers.length > 0) {
+          loadBalancer = lbs.LoadBalancers[0];
+        }
+      } catch (error) {
+        // Load balancer doesn't exist
+      }
 
-    // Associate route table with subnets
-    new aws.ec2.RouteTableAssociation(`${name}-public-rta-1`, {
-      subnetId: publicSubnet1.id,
-      routeTableId: publicRouteTable.id,
-    }, { parent: this });
+      return {
+        vpc: vpcs.Vpcs && vpcs.Vpcs.length > 0 ? vpcs.Vpcs[0] : null,
+        subnets: subnets.Subnets || [],
+        cluster,
+        loadBalancer
+      };
+    } catch (error) {
+      console.error('Error finding existing resources:', error);
+      return { vpc: null, subnets: [], cluster: null, loadBalancer: null };
+    }
+  }
 
-    new aws.ec2.RouteTableAssociation(`${name}-public-rta-2`, {
-      subnetId: publicSubnet2.id,
-      routeTableId: publicRouteTable.id,
-    }, { parent: this });
+  async createOrUpdateInfrastructure(): Promise<ECSInfrastructureOutput> {
+    try {
+      // Find existing resources first
+      const existing = await this.findExistingResources();
+      
+      let vpcId: string;
+      let subnetIds: string[];
+      let clusterArn: string;
 
-    // Security groups
-    const albSecurityGroup = new aws.ec2.SecurityGroup(`${name}-alb-sg`, {
-      vpcId: vpc.id,
-      description: "ALB Security Group",
-      ingress: [{
-        protocol: "tcp",
-        fromPort: 80,
-        toPort: 80,
-        cidrBlocks: ["0.0.0.0/0"],
+      // VPC - Use existing or create new
+      if (this.args.existingVpcId) {
+        vpcId = this.args.existingVpcId;
+        console.log(`Using existing VPC: ${vpcId}`);
+      } else if (existing.vpc) {
+        vpcId = existing.vpc.VpcId!;
+        console.log(`Found existing VPC for project: ${vpcId}`);
+      } else {
+        const vpc = await this.createOrUpdateVPC();
+        vpcId = vpc.VpcId!;
+        console.log(`Created new VPC: ${vpcId}`);
+      }
+      
+      // Subnets - Use existing or create new
+      if (this.args.existingSubnetIds) {
+        subnetIds = this.args.existingSubnetIds;
+        console.log(`Using provided subnet IDs: ${subnetIds.join(', ')}`);
+      } else if (existing.subnets.length >= 2) {
+        subnetIds = existing.subnets.map((s: any) => s.SubnetId!);
+        console.log(`Found existing subnets: ${subnetIds.join(', ')}`);
+      } else {
+        subnetIds = await this.createOrUpdateSubnets(vpcId);
+        console.log(`Created new subnets: ${subnetIds.join(', ')}`);
+      }
+
+      // Internet Gateway and routes - Only if creating new VPC
+      if (!this.args.existingVpcId && !existing.vpc) {
+        await this.createOrUpdateNetworking(vpcId, subnetIds);
+      }
+      
+      // Security groups - Always ensure they exist with correct rules
+      const securityGroups = await this.createOrUpdateSecurityGroups(vpcId);
+      
+      // IAM roles - Always ensure they exist
+      const roles = await this.createOrUpdateIAMRoles();
+      
+      // CloudWatch log group - Always ensure it exists
+      await this.createOrUpdateLogGroup();
+      
+      // ECS Cluster - Use existing or create new
+      if (this.args.existingClusterArn) {
+        clusterArn = this.args.existingClusterArn;
+        console.log(`Using provided cluster: ${clusterArn}`);
+      } else if (existing.cluster) {
+        clusterArn = existing.cluster.clusterArn!;
+        console.log(`Found existing cluster: ${clusterArn}`);
+      } else {
+        const clusterResult = await this.createOrUpdateECSCluster();
+        clusterArn = clusterResult.cluster?.clusterArn!;
+        console.log(`Created new cluster: ${clusterArn}`);
+      }
+      
+      // Task definition - Always create new version if image changed
+      // Verify log group exists before creating task definition
+      const logGroupName = `/ecs/${this.projectName}`;
+      try {
+        const logGroups = await this.logs.describeLogGroups({ 
+          logGroupNamePrefix: logGroupName 
+        }).promise();
+        
+        const logGroupExists = logGroups.logGroups?.some(lg => lg.logGroupName === logGroupName);
+        if (!logGroupExists) {
+          throw new Error(`Log group ${logGroupName} does not exist`);
+        }
+        console.log(`✅ Verified log group exists: ${logGroupName}`);
+      } catch (error) {
+        console.error(`Log group verification failed: ${error}`);
+        throw new Error(`Log group ${logGroupName} is required but does not exist. Infrastructure setup may have failed.`);
+      }
+      
+      const taskDefinition = await this.createTaskDefinition(roles);
+      
+      // Load balancer - Use existing or create new
+      let loadBalancer = existing.loadBalancer;
+      if (!loadBalancer) {
+        const lbResponse = await this.createLoadBalancer(subnetIds, securityGroups.albSecurityGroupId);
+        loadBalancer = lbResponse.LoadBalancers![0];
+        console.log(`Created new load balancer: ${loadBalancer.LoadBalancerArn}`);
+      }
+      
+      // Target group - Use existing or create new
+      const tgResponse = await this.createTargetGroup(vpcId);
+      const targetGroup = tgResponse.TargetGroups![0];
+      console.log(`Created target group: ${targetGroup.TargetGroupArn}`);
+      
+      // Listener - Ensure it exists
+      await this.createListener(loadBalancer.LoadBalancerArn!, targetGroup.TargetGroupArn!);
+      
+      // ECS service - Update existing or create new
+      const serviceResponse = await this.createOrUpdateECSService(
+        clusterArn,
+        taskDefinition.taskDefinition!.taskDefinitionArn!,
+        subnetIds,
+        securityGroups.ecsSecurityGroupId,
+        targetGroup.TargetGroupArn!
+      );
+      const service = serviceResponse.service!;
+      console.log(`ECS service ready: ${service.serviceArn}`);
+
+      return {
+        clusterArn,
+        serviceArn: service.serviceArn!,
+        loadBalancerArn: loadBalancer.LoadBalancerArn!,
+        loadBalancerDns: loadBalancer.DNSName!,
+      };
+    } catch (error) {
+      console.error('Error creating/updating infrastructure:', error);
+      throw error;
+    }
+  }
+
+  private async createOrUpdateVPC() {
+    // Check if VPC already exists
+    try {
+      const vpcs = await this.ec2.describeVpcs({
+        Filters: [
+          { Name: 'tag:Name', Values: [`${this.projectName}-vpc`] },
+          { Name: 'state', Values: ['available'] }
+        ]
+      }).promise();
+
+      if (vpcs.Vpcs && vpcs.Vpcs.length > 0) {
+        console.log(`Found existing VPC: ${vpcs.Vpcs[0].VpcId}`);
+        return vpcs.Vpcs[0];
+      }
+    } catch (error) {
+      console.log('No existing VPC found, creating new one');
+    }
+
+    return this.createVPC();
+  }
+
+  private async createVPC() {
+    const params = {
+      CidrBlock: '10.0.0.0/16',
+      TagSpecifications: [{
+        ResourceType: 'vpc',
+        Tags: [{ Key: 'Name', Value: `${this.projectName}-vpc` }]
+      }]
+    };
+
+    const result = await this.ec2.createVpc(params).promise();
+    
+    await this.ec2.modifyVpcAttribute({
+      VpcId: result.Vpc!.VpcId!,
+      EnableDnsHostnames: { Value: true }
+    }).promise();
+
+    await this.ec2.modifyVpcAttribute({
+      VpcId: result.Vpc!.VpcId!,
+      EnableDnsSupport: { Value: true }
+    }).promise();
+
+    return result.Vpc!;
+  }
+
+  private async createOrUpdateSubnets(vpcId: string): Promise<string[]> {
+    // Check if subnets already exist
+    try {
+      const subnets = await this.ec2.describeSubnets({
+        Filters: [
+          { Name: 'vpc-id', Values: [vpcId] },
+          { Name: 'tag:Name', Values: [`${this.projectName}-public-subnet-1`, `${this.projectName}-public-subnet-2`] },
+          { Name: 'state', Values: ['available'] }
+        ]
+      }).promise();
+
+      if (subnets.Subnets && subnets.Subnets.length >= 2) {
+        const subnetIds = subnets.Subnets.map((s: any) => s.SubnetId!).sort();
+        console.log(`Found existing subnets: ${subnetIds.join(', ')}`);
+        return subnetIds;
+      }
+    } catch (error) {
+      console.log('No existing subnets found, creating new ones');
+    }
+
+    return this.createSubnets(vpcId);
+  }
+
+  private async createSubnets(vpcId: string) {
+    const subnet1 = await this.ec2.createSubnet({
+      VpcId: vpcId,
+      CidrBlock: '10.0.1.0/24',
+      AvailabilityZone: `${this.region}a`,
+      TagSpecifications: [{
+        ResourceType: 'subnet',
+        Tags: [{ Key: 'Name', Value: `${this.projectName}-public-subnet-1` }]
+      }]
+    }).promise();
+
+    const subnet2 = await this.ec2.createSubnet({
+      VpcId: vpcId,
+      CidrBlock: '10.0.2.0/24',
+      AvailabilityZone: `${this.region}b`,
+      TagSpecifications: [{
+        ResourceType: 'subnet',
+        Tags: [{ Key: 'Name', Value: `${this.projectName}-public-subnet-2` }]
+      }]
+    }).promise();
+
+    await this.ec2.modifySubnetAttribute({
+      SubnetId: subnet1.Subnet!.SubnetId!,
+      MapPublicIpOnLaunch: { Value: true }
+    }).promise();
+
+    await this.ec2.modifySubnetAttribute({
+      SubnetId: subnet2.Subnet!.SubnetId!,
+      MapPublicIpOnLaunch: { Value: true }
+    }).promise();
+
+    return [subnet1.Subnet!.SubnetId!, subnet2.Subnet!.SubnetId!];
+  }
+
+  private async createInternetGateway(vpcId: string) {
+    const igw = await this.ec2.createInternetGateway({
+      TagSpecifications: [{
+        ResourceType: 'internet-gateway',
+        Tags: [{ Key: 'Name', Value: `${this.projectName}-igw` }]
+      }]
+    }).promise();
+
+    await this.ec2.attachInternetGateway({
+      VpcId: vpcId,
+      InternetGatewayId: igw.InternetGateway!.InternetGatewayId!
+    }).promise();
+
+    return igw.InternetGateway!;
+  }
+
+  private async createRouteTable(vpcId: string, igwId: string, subnets: string[]) {
+    const routeTable = await this.ec2.createRouteTable({
+      VpcId: vpcId,
+      TagSpecifications: [{
+        ResourceType: 'route-table',
+        Tags: [{ Key: 'Name', Value: `${this.projectName}-public-rt` }]
+      }]
+    }).promise();
+
+    await this.ec2.createRoute({
+      RouteTableId: routeTable.RouteTable!.RouteTableId!,
+      DestinationCidrBlock: '0.0.0.0/0',
+      GatewayId: igwId
+    }).promise();
+
+    for (const subnetId of subnets) {
+      await this.ec2.associateRouteTable({
+        RouteTableId: routeTable.RouteTable!.RouteTableId!,
+        SubnetId: subnetId
+      }).promise();
+    }
+  }
+
+  private async createOrUpdateNetworking(vpcId: string, subnetIds: string[]) {
+    const igw = await this.createOrUpdateInternetGateway(vpcId);
+    await this.createOrUpdateRouteTable(vpcId, igw.InternetGatewayId!, subnetIds);
+  }
+
+  private async createOrUpdateInternetGateway(vpcId: string) {
+    // Check if IGW already exists
+    try {
+      const igws = await this.ec2.describeInternetGateways({
+        Filters: [
+          { Name: 'attachment.vpc-id', Values: [vpcId] },
+          { Name: 'tag:Name', Values: [`${this.projectName}-igw`] }
+        ]
+      }).promise();
+
+      if (igws.InternetGateways && igws.InternetGateways.length > 0) {
+        console.log(`Found existing IGW: ${igws.InternetGateways[0].InternetGatewayId}`);
+        return igws.InternetGateways[0];
+      }
+    } catch (error) {
+      console.log('No existing IGW found, creating new one');
+    }
+
+    return this.createInternetGateway(vpcId);
+  }
+
+  private async createOrUpdateRouteTable(vpcId: string, igwId: string, subnets: string[]) {
+    // Check if route table already exists
+    try {
+      const routeTables = await this.ec2.describeRouteTables({
+        Filters: [
+          { Name: 'vpc-id', Values: [vpcId] },
+          { Name: 'tag:Name', Values: [`${this.projectName}-public-rt`] }
+        ]
+      }).promise();
+
+      if (routeTables.RouteTables && routeTables.RouteTables.length > 0) {
+        const routeTable = routeTables.RouteTables[0];
+        console.log(`Found existing route table: ${routeTable.RouteTableId}`);
+        
+        // Ensure IGW route exists
+        const hasIgwRoute = routeTable.Routes?.some(r => 
+          r.DestinationCidrBlock === '0.0.0.0/0' && r.GatewayId === igwId
+        );
+        
+        if (!hasIgwRoute) {
+          await this.ec2.createRoute({
+            RouteTableId: routeTable.RouteTableId!,
+            DestinationCidrBlock: '0.0.0.0/0',
+            GatewayId: igwId
+          }).promise();
+          console.log('Added IGW route to existing route table');
+        }
+        
+        // Ensure subnet associations
+        for (const subnetId of subnets) {
+          const hasAssociation = routeTable.Associations?.some(a => a.SubnetId === subnetId);
+          if (!hasAssociation) {
+            await this.ec2.associateRouteTable({
+              RouteTableId: routeTable.RouteTableId!,
+              SubnetId: subnetId
+            }).promise();
+            console.log(`Associated subnet ${subnetId} with route table`);
+          }
+        }
+        return;
+      }
+    } catch (error) {
+      console.log('No existing route table found, creating new one');
+    }
+
+    return this.createRouteTable(vpcId, igwId, subnets);
+  }
+
+  private async createOrUpdateSecurityGroups(vpcId: string) {
+    const albSg = await this.createOrUpdateSecurityGroup(
+      `${this.projectName}-alb-sg`,
+      'ALB Security Group',
+      vpcId,
+      [
+        { IpProtocol: 'tcp', FromPort: 80, ToPort: 80, IpRanges: [{ CidrIp: '0.0.0.0/0' }] },
+        { IpProtocol: 'tcp', FromPort: 443, ToPort: 443, IpRanges: [{ CidrIp: '0.0.0.0/0' }] }
+      ]
+    );
+
+    const ecsSg = await this.createOrUpdateSecurityGroup(
+      `${this.projectName}-ecs-sg`,
+      'ECS Security Group',
+      vpcId,
+      [
+        { IpProtocol: 'tcp', FromPort: this.containerPort, ToPort: this.containerPort, UserIdGroupPairs: [{ GroupId: albSg }] }
+      ]
+    );
+
+    return {
+      albSecurityGroupId: albSg,
+      ecsSecurityGroupId: ecsSg
+    };
+  }
+
+  private async createOrUpdateSecurityGroup(name: string, description: string, vpcId: string, rules: any[]) {
+    // Check if security group already exists
+    try {
+      const sgs = await this.ec2.describeSecurityGroups({
+        Filters: [
+          { Name: 'group-name', Values: [name] },
+          { Name: 'vpc-id', Values: [vpcId] }
+        ]
+      }).promise();
+
+      if (sgs.SecurityGroups && sgs.SecurityGroups.length > 0) {
+        const sg = sgs.SecurityGroups[0];
+        console.log(`Found existing security group: ${sg.GroupId}`);
+        
+        // Update rules if needed
+        await this.updateSecurityGroupRules(sg.GroupId!, rules);
+        return sg.GroupId!;
+      }
+    } catch (error) {
+      console.log(`No existing security group found for ${name}, creating new one`);
+    }
+
+    // Create new security group
+    const sg = await this.ec2.createSecurityGroup({
+      GroupName: name,
+      Description: description,
+      VpcId: vpcId,
+      TagSpecifications: [{
+        ResourceType: 'security-group',
+        Tags: [{ Key: 'Name', Value: name }]
+      }]
+    }).promise();
+
+    // Add rules
+    if (rules.length > 0) {
+      await this.ec2.authorizeSecurityGroupIngress({
+        GroupId: sg.GroupId!,
+        IpPermissions: rules
+      }).promise();
+    }
+
+    console.log(`Created new security group: ${sg.GroupId}`);
+    return sg.GroupId!;
+  }
+
+  private async updateSecurityGroupRules(groupId: string, newRules: any[]) {
+    // For simplicity, we'll assume rules are correct if SG exists
+    // In production, you might want to compare and update rules
+    console.log(`Security group ${groupId} rules assumed to be correct`);
+  }
+
+  private async createSecurityGroups(vpcId: string) {
+    const albSg = await this.ec2.createSecurityGroup({
+      GroupName: `${this.projectName}-alb-sg`,
+      Description: 'ALB Security Group',
+      VpcId: vpcId,
+      TagSpecifications: [{
+        ResourceType: 'security-group',
+        Tags: [{ Key: 'Name', Value: `${this.projectName}-alb-sg` }]
+      }]
+    }).promise();
+
+    await this.ec2.authorizeSecurityGroupIngress({
+      GroupId: albSg.GroupId!,
+      IpPermissions: [{
+        IpProtocol: 'tcp',
+        FromPort: 80,
+        ToPort: 80,
+        IpRanges: [{ CidrIp: '0.0.0.0/0' }]
       }, {
-        protocol: "tcp",
-        fromPort: 443,
-        toPort: 443,
-        cidrBlocks: ["0.0.0.0/0"],
-      }],
-      egress: [{
-        protocol: "-1",
-        fromPort: 0,
-        toPort: 0,
-        cidrBlocks: ["0.0.0.0/0"],
-      }],
-      tags: {
-        Name: `${args.projectName}-alb-sg`,
-      },
-    }, { parent: this });
+        IpProtocol: 'tcp',
+        FromPort: 443,
+        ToPort: 443,
+        IpRanges: [{ CidrIp: '0.0.0.0/0' }]
+      }]
+    }).promise();
 
-    const ecsSecurityGroup = new aws.ec2.SecurityGroup(`${name}-ecs-sg`, {
-      vpcId: vpc.id,
-      description: "ECS Security Group",
-      ingress: [{
-        protocol: "tcp",
-        fromPort: containerPort,
-        toPort: containerPort,
-        securityGroups: [albSecurityGroup.id],
-      }],
-      egress: [{
-        protocol: "-1",
-        fromPort: 0,
-        toPort: 0,
-        cidrBlocks: ["0.0.0.0/0"],
-      }],
-      tags: {
-        Name: `${args.projectName}-ecs-sg`,
-      },
-    }, { parent: this });
+    const ecsSg = await this.ec2.createSecurityGroup({
+      GroupName: `${this.projectName}-ecs-sg`,
+      Description: 'ECS Security Group',
+      VpcId: vpcId,
+      TagSpecifications: [{
+        ResourceType: 'security-group',
+        Tags: [{ Key: 'Name', Value: `${this.projectName}-ecs-sg` }]
+      }]
+    }).promise();
 
-    // ECS Cluster
-    this.cluster = new aws.ecs.Cluster(`${name}-cluster`, {
-      name: `${args.projectName}-cluster`,
-      tags: {
-        Name: `${args.projectName}-cluster`,
-      },
-    }, { parent: this });
+    await this.ec2.authorizeSecurityGroupIngress({
+      GroupId: ecsSg.GroupId!,
+      IpPermissions: [{
+        IpProtocol: 'tcp',
+        FromPort: this.containerPort,
+        ToPort: this.containerPort,
+        UserIdGroupPairs: [{ GroupId: albSg.GroupId! }]
+      }]
+    }).promise();
 
-    // IAM Role for ECS Task
-    const taskRole = new aws.iam.Role(`${name}-task-role`, {
-      assumeRolePolicy: JSON.stringify({
-        Version: "2012-10-17",
+    return {
+      albSecurityGroupId: albSg.GroupId!,
+      ecsSecurityGroupId: ecsSg.GroupId!
+    };
+  }
+
+  private async createOrUpdateIAMRoles() {
+    const taskRoleArn = await this.createOrUpdateIAMRole(
+      `${this.projectName}-task-role`,
+      {
+        Version: '2012-10-17',
         Statement: [{
-          Action: "sts:AssumeRole",
-          Effect: "Allow",
-          Principal: {
-            Service: "ecs-tasks.amazonaws.com",
-          },
-        }],
-      }),
-      tags: {
-        Name: `${args.projectName}-task-role`,
+          Action: 'sts:AssumeRole',
+          Effect: 'Allow',
+          Principal: { Service: 'ecs-tasks.amazonaws.com' }
+        }]
       },
-    }, { parent: this });
+      []
+    );
 
-    const executionRole = new aws.iam.Role(`${name}-execution-role`, {
-      assumeRolePolicy: JSON.stringify({
-        Version: "2012-10-17",
+    const executionRoleArn = await this.createOrUpdateIAMRole(
+      `${this.projectName}-execution-role`,
+      {
+        Version: '2012-10-17',
         Statement: [{
-          Action: "sts:AssumeRole",
-          Effect: "Allow",
-          Principal: {
-            Service: "ecs-tasks.amazonaws.com",
-          },
-        }],
-      }),
-      managedPolicyArns: [
-        "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
-      ],
-      tags: {
-        Name: `${args.projectName}-execution-role`,
+          Action: 'sts:AssumeRole',
+          Effect: 'Allow',
+          Principal: { Service: 'ecs-tasks.amazonaws.com' }
+        }]
       },
-    }, { parent: this });
+      ['arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy']
+    );
 
-    // Task Definition
-    this.taskDefinition = new aws.ecs.TaskDefinition(`${name}-task`, {
-      family: `${args.projectName}-task`,
-      networkMode: "awsvpc",
-      requiresCompatibilities: ["FARGATE"],
-      cpu: "256",
-      memory: "512",
-      executionRoleArn: executionRole.arn,
-      taskRoleArn: taskRole.arn,
-      containerDefinitions: JSON.stringify([{
-        name: args.projectName,
-        image: args.imageUri,
+    return { taskRoleArn, executionRoleArn };
+  }
+
+  private async createOrUpdateIAMRole(roleName: string, assumeRolePolicy: any, managedPolicies: string[]) {
+    try {
+      // Check if role already exists
+      const role = await this.iam.getRole({ RoleName: roleName }).promise();
+      console.log(`Found existing IAM role: ${roleName}`);
+      
+      // Ensure managed policies are attached
+      for (const policyArn of managedPolicies) {
+        try {
+          await this.iam.attachRolePolicy({ RoleName: roleName, PolicyArn: policyArn }).promise();
+        } catch (error) {
+          // Policy might already be attached
+        }
+      }
+      
+      return role.Role.Arn;
+    } catch (error) {
+      // Role doesn't exist, create it
+      console.log(`Creating new IAM role: ${roleName}`);
+      
+      const role = await this.iam.createRole({
+        RoleName: roleName,
+        AssumeRolePolicyDocument: JSON.stringify(assumeRolePolicy),
+        Tags: [{ Key: 'Name', Value: roleName }]
+      }).promise();
+
+      // Attach managed policies
+      for (const policyArn of managedPolicies) {
+        await this.iam.attachRolePolicy({ RoleName: roleName, PolicyArn: policyArn }).promise();
+      }
+
+      return role.Role.Arn;
+    }
+  }
+
+  private async createIAMRoles() {
+    const taskRole = await this.iam.createRole({
+      RoleName: `${this.projectName}-task-role`,
+      AssumeRolePolicyDocument: JSON.stringify({
+        Version: '2012-10-17',
+        Statement: [{
+          Action: 'sts:AssumeRole',
+          Effect: 'Allow',
+          Principal: { Service: 'ecs-tasks.amazonaws.com' }
+        }]
+      }),
+      Tags: [{ Key: 'Name', Value: `${this.projectName}-task-role` }]
+    }).promise();
+
+    const executionRole = await this.iam.createRole({
+      RoleName: `${this.projectName}-execution-role`,
+      AssumeRolePolicyDocument: JSON.stringify({
+        Version: '2012-10-17',
+        Statement: [{
+          Action: 'sts:AssumeRole',
+          Effect: 'Allow',
+          Principal: { Service: 'ecs-tasks.amazonaws.com' }
+        }]
+      }),
+      Tags: [{ Key: 'Name', Value: `${this.projectName}-execution-role` }]
+    }).promise();
+
+    await this.iam.attachRolePolicy({
+      RoleName: executionRole.Role!.RoleName!,
+      PolicyArn: 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+    }).promise();
+
+    return {
+      taskRoleArn: taskRole.Role!.Arn!,
+      executionRoleArn: executionRole.Role!.Arn!
+    };
+  }
+
+  private async createOrUpdateLogGroup() {
+    const logGroupName = `/ecs/${this.projectName}`;
+    
+    try {
+      // Check if log group exists
+      const response = await this.logs.describeLogGroups({ 
+        logGroupNamePrefix: logGroupName 
+      }).promise();
+      
+      // Check if the exact log group exists in the response
+      const existingLogGroup = response.logGroups?.find(lg => lg.logGroupName === logGroupName);
+      
+      if (existingLogGroup) {
+        console.log(`Found existing log group: ${logGroupName}`);
+        return;
+      }
+      
+      // Log group doesn't exist, create it
+      console.log(`Creating new log group: ${logGroupName}`);
+      
+      await this.logs.createLogGroup({
+        logGroupName,
+        tags: { Name: `${this.projectName}-logs` }
+      }).promise();
+      
+      await this.logs.putRetentionPolicy({
+        logGroupName,
+        retentionInDays: 7
+      }).promise();
+      
+      console.log(`✅ Created log group: ${logGroupName}`);
+      
+    } catch (error) {
+      console.error(`Error managing log group: ${error}`);
+      // Try to create it anyway
+      try {
+        console.log(`Attempting to create log group: ${logGroupName}`);
+        
+        await this.logs.createLogGroup({
+          logGroupName,
+          tags: { Name: `${this.projectName}-logs` }
+        }).promise();
+        
+        await this.logs.putRetentionPolicy({
+          logGroupName,
+          retentionInDays: 7
+        }).promise();
+        
+        console.log(`✅ Created log group: ${logGroupName}`);
+      } catch (createError) {
+        console.error(`Failed to create log group: ${createError}`);
+        throw createError;
+      }
+    }
+  }
+
+  private async createLogGroup() {
+    await this.logs.createLogGroup({
+      logGroupName: `/ecs/${this.projectName}`,
+      tags: { Name: `${this.projectName}-logs` }
+    }).promise();
+    
+    await this.logs.putRetentionPolicy({
+      logGroupName: `/ecs/${this.projectName}`,
+      retentionInDays: 7
+    }).promise();
+  }
+
+  private async createOrUpdateECSCluster() {
+    try {
+      // Check if cluster exists
+      const clusters = await this.ecs.describeClusters({
+        clusters: [`${this.projectName}-cluster`]
+      }).promise();
+
+      // AWS returns empty clusters array if cluster doesn't exist, not an error
+      if (clusters.clusters && clusters.clusters.length > 0) {
+        const cluster = clusters.clusters[0];
+        // Check if cluster actually exists (not just returned in response)
+        if (cluster.clusterName && cluster.status === 'ACTIVE') {
+          console.log(`Found existing ECS cluster: ${cluster.clusterArn}`);
+          return { cluster };
+        }
+      }
+      
+      console.log('No existing ECS cluster found, creating new one');
+    } catch (error) {
+      console.log('Error checking for existing cluster, creating new one:', error);
+    }
+
+    return this.createECSCluster();
+  }
+
+  private async createECSCluster() {
+    console.log(`Creating ECS cluster: ${this.projectName}-cluster in region ${this.region}`);
+    const result = await this.ecs.createCluster({
+      clusterName: `${this.projectName}-cluster`,
+      tags: [{ key: 'Name', value: `${this.projectName}-cluster` }]
+    }).promise();
+    
+    console.log(`Created ECS cluster: ${result.cluster?.clusterArn}`);
+    return result;
+  }
+
+  private async createTaskDefinition(roles: { taskRoleArn: string; executionRoleArn: string }) {
+    return await this.ecs.registerTaskDefinition({
+      family: `${this.projectName}-task`,
+      networkMode: 'awsvpc',
+      requiresCompatibilities: ['FARGATE'],
+      cpu: '256',
+      memory: '512',
+      executionRoleArn: roles.executionRoleArn,
+      taskRoleArn: roles.taskRoleArn,
+      containerDefinitions: [{
+        name: this.projectName,
+        image: this.imageUri,
         portMappings: [{
-          containerPort: containerPort,
-          protocol: "tcp",
+          containerPort: this.containerPort,
+          protocol: 'tcp'
         }],
         essential: true,
         logConfiguration: {
-          logDriver: "awslogs",
+          logDriver: 'awslogs',
           options: {
-            "awslogs-group": `/ecs/${args.projectName}`,
-            "awslogs-region": "us-east-1",
-            "awslogs-stream-prefix": "ecs",
-          },
-        },
-      }]),
-      tags: {
-        Name: `${args.projectName}-task`,
-      },
-    }, { parent: this });
-
-    // CloudWatch Log Group
-    new aws.cloudwatch.LogGroup(`${name}-logs`, {
-      name: `/ecs/${args.projectName}`,
-      retentionInDays: 7,
-      tags: {
-        Name: `${args.projectName}-logs`,
-      },
-    }, { parent: this });
-
-    // Application Load Balancer
-    this.loadBalancer = new aws.lb.LoadBalancer(`${name}-alb`, {
-      name: `${args.projectName}-alb`,
-      loadBalancerType: "application",
-      subnets: [publicSubnet1.id, publicSubnet2.id],
-      securityGroups: [albSecurityGroup.id],
-      tags: {
-        Name: `${args.projectName}-alb`,
-      },
-    }, { parent: this });
-
-    // Target Group
-    this.targetGroup = new aws.lb.TargetGroup(`${name}-tg`, {
-      name: `${args.projectName}-tg`,
-      port: containerPort,
-      protocol: "HTTP",
-      vpcId: vpc.id,
-      targetType: "ip",
-      healthCheck: {
-        enabled: true,
-        healthyThreshold: 2,
-        interval: 30,
-        matcher: "200",
-        path: "/",
-        port: "traffic-port",
-        protocol: "HTTP",
-        timeout: 5,
-        unhealthyThreshold: 2,
-      },
-      tags: {
-        Name: `${args.projectName}-tg`,
-      },
-    }, { parent: this });
-
-    // ALB Listener
-    new aws.lb.Listener(`${name}-listener`, {
-      loadBalancerArn: this.loadBalancer.arn,
-      port: "80",
-      protocol: "HTTP",
-      defaultActions: [{
-        type: "forward",
-        targetGroupArn: this.targetGroup.arn,
+            'awslogs-group': `/ecs/${this.projectName}`,
+            'awslogs-region': this.region,
+            'awslogs-stream-prefix': 'ecs'
+          }
+        }
       }],
-      tags: {
-        Name: `${args.projectName}-listener`,
-      },
-    }, { parent: this });
+      tags: [{ key: 'Name', value: `${this.projectName}-task` }]
+    }).promise();
+  }
 
-    // ECS Service
-    this.service = new aws.ecs.Service(`${name}-service`, {
-      name: `${args.projectName}-service`,
-      cluster: this.cluster.id,
-      taskDefinition: this.taskDefinition.arn,
+  private async createLoadBalancer(subnets: string[], securityGroupId: string) {
+    return await this.elbv2.createLoadBalancer({
+      Name: `${this.projectName}-alb`,
+      Subnets: subnets,
+      SecurityGroups: [securityGroupId],
+      Tags: [{ Key: 'Name', Value: `${this.projectName}-alb` }]
+    }).promise();
+  }
+
+  private async createTargetGroup(vpcId: string) {
+    return await this.elbv2.createTargetGroup({
+      Name: `${this.projectName}-tg`,
+      Port: this.containerPort,
+      Protocol: 'HTTP',
+      VpcId: vpcId,
+      TargetType: 'ip',
+      HealthCheckEnabled: true,
+      HealthCheckIntervalSeconds: 30,
+      HealthCheckPath: '/',
+      HealthCheckPort: 'traffic-port',
+      HealthCheckProtocol: 'HTTP',
+      HealthCheckTimeoutSeconds: 5,
+      HealthyThresholdCount: 2,
+      UnhealthyThresholdCount: 2,
+      Matcher: { HttpCode: '200' },
+      Tags: [{ Key: 'Name', Value: `${this.projectName}-tg` }]
+    }).promise();
+  }
+
+  private async createListener(loadBalancerArn: string, targetGroupArn: string) {
+    return await this.elbv2.createListener({
+      LoadBalancerArn: loadBalancerArn,
+      Port: 80,
+      Protocol: 'HTTP',
+      DefaultActions: [{
+        Type: 'forward',
+        TargetGroupArn: targetGroupArn
+      }],
+      Tags: [{ Key: 'Name', Value: `${this.projectName}-listener` }]
+    }).promise();
+  }
+
+  private async createOrUpdateECSService(
+    clusterArn: string,
+    taskDefinitionArn: string,
+    subnets: string[],
+    securityGroupId: string,
+    targetGroupArn: string
+  ) {
+    const serviceName = `${this.projectName}-service`;
+    
+    try {
+      // Check if service already exists
+      const existingServices = await this.ecs.describeServices({
+        cluster: clusterArn,
+        services: [serviceName]
+      }).promise();
+      
+      if (existingServices.services && existingServices.services.length > 0) {
+        const existingService = existingServices.services[0];
+        
+        if (existingService.status === 'ACTIVE') {
+          console.log(`Updating existing ECS service: ${existingService.serviceArn}`);
+          
+          // Update the service with new task definition
+          const updateResponse = await this.ecs.updateService({
+            cluster: clusterArn,
+            service: serviceName,
+            taskDefinition: taskDefinitionArn,
+            desiredCount: 1
+          }).promise();
+          
+          console.log('Service updated, waiting for deployment to stabilize...');
+          await this.waitForServiceStability(clusterArn, serviceName);
+          
+          return updateResponse;
+        }
+      }
+    } catch (error) {
+      console.log('No existing service found or error checking, creating new service');
+    }
+    
+    // Create new service if it doesn't exist
+    return this.createECSService(clusterArn, taskDefinitionArn, subnets, securityGroupId, targetGroupArn);
+  }
+
+  private async createECSService(
+    clusterArn: string,
+    taskDefinitionArn: string,
+    subnets: string[],
+    securityGroupId: string,
+    targetGroupArn: string
+  ) {
+    console.log(`Creating ECS service in cluster: ${clusterArn}`);
+    console.log(`Using task definition: ${taskDefinitionArn}`);
+    console.log(`Subnets: ${subnets.join(', ')}`);
+    console.log(`Security group: ${securityGroupId}`);
+    console.log(`Target group: ${targetGroupArn}`);
+    
+    const serviceResponse = await this.ecs.createService({
+      serviceName: `${this.projectName}-service`,
+      cluster: clusterArn,
+      taskDefinition: taskDefinitionArn,
       desiredCount: 1,
-      launchType: "FARGATE",
+      launchType: 'FARGATE',
       networkConfiguration: {
-        subnets: [publicSubnet1.id, publicSubnet2.id],
-        securityGroups: [ecsSecurityGroup.id],
-        assignPublicIp: true,
+        awsvpcConfiguration: {
+          subnets: subnets,
+          securityGroups: [securityGroupId],
+          assignPublicIp: 'ENABLED'
+        }
       },
       loadBalancers: [{
-        targetGroupArn: this.targetGroup.arn,
-        containerName: args.projectName,
-        containerPort: containerPort,
+        targetGroupArn: targetGroupArn,
+        containerName: this.projectName,
+        containerPort: this.containerPort
       }],
-      dependsOn: [this.loadBalancer],
-      tags: {
-        Name: `${args.projectName}-service`,
-      },
-    }, { parent: this });
+      tags: [{ key: 'Name', value: `${this.projectName}-service` }]
+    }).promise();
 
-    this.registerOutputs({
-      clusterArn: this.cluster.arn,
-      serviceArn: this.service.id,
-      loadBalancerArn: this.loadBalancer.arn,
-      loadBalancerDns: this.loadBalancer.dnsName,
-    });
+    console.log(`ECS service created: ${serviceResponse.service?.serviceArn}`);
+    console.log('Waiting for service deployment to become stable...');
+    
+    // Wait for the service to become stable
+    await this.waitForServiceStability(clusterArn, `${this.projectName}-service`);
+    
+    return serviceResponse;
+  }
+
+  private async waitForServiceStability(clusterArn: string, serviceName: string, maxWaitTime: number = 600): Promise<void> {
+    console.log(`Waiting for ECS service ${serviceName} to become stable (max ${maxWaitTime}s)...`);
+    
+    const startTime = Date.now();
+    const checkInterval = 30000; // Check every 30 seconds
+    let attempts = 0;
+    
+    while (Date.now() - startTime < maxWaitTime * 1000) {
+      attempts++;
+      
+      try {
+        console.log(`Stability check attempt ${attempts}...`);
+        
+        // Check service status
+        const services = await this.ecs.describeServices({
+          cluster: clusterArn,
+          services: [serviceName]
+        }).promise();
+        
+        if (!services.services || services.services.length === 0) {
+          throw new Error(`Service ${serviceName} not found`);
+        }
+        
+        const service = services.services[0];
+        const runningCount = service.runningCount || 0;
+        const desiredCount = service.desiredCount || 0;
+        const deploymentStatus = service.deployments?.[0]?.status || 'UNKNOWN';
+        
+        console.log(`Service status: Running=${runningCount}/${desiredCount}, Deployment=${deploymentStatus}`);
+        
+        // Check if service is stable
+        if (runningCount === desiredCount && runningCount > 0) {
+          // Check deployment status
+          const primaryDeployment = service.deployments?.find(d => d.status === 'PRIMARY');
+          if (primaryDeployment && primaryDeployment.runningCount === primaryDeployment.desiredCount) {
+            console.log('✅ ECS service deployment is stable!');
+            
+            // Additional check: ensure tasks are healthy by checking target group health
+            await this.checkTargetGroupHealth(serviceName);
+            
+            return;
+          }
+        }
+        
+        // Check for failed deployments
+        const failedDeployment = service.deployments?.find(d => d.status === 'FAILED');
+        if (failedDeployment) {
+          throw new Error(`Deployment failed: ${failedDeployment.status}`);
+        }
+        
+        console.log(`Service not yet stable, waiting ${checkInterval / 1000}s before next check...`);
+        await new Promise(resolve => setTimeout(resolve, checkInterval));
+        
+      } catch (error) {
+        console.error(`Error checking service stability: ${error}`);
+        throw error;
+      }
+    }
+    
+    throw new Error(`Service ${serviceName} did not become stable within ${maxWaitTime} seconds`);
+  }
+
+  private async checkTargetGroupHealth(serviceName: string): Promise<void> {
+    try {
+      // Get target groups for this service
+      const targetGroups = await this.elbv2.describeTargetGroups({
+        Names: [`${this.projectName}-tg`]
+      }).promise();
+      
+      if (targetGroups.TargetGroups && targetGroups.TargetGroups.length > 0) {
+        const targetGroup = targetGroups.TargetGroups[0];
+        
+        // Check target health
+        const health = await this.elbv2.describeTargetHealth({
+          TargetGroupArn: targetGroup.TargetGroupArn!
+        }).promise();
+        
+        const healthyTargets = health.TargetHealthDescriptions?.filter(t => t.TargetHealth?.State === 'healthy').length || 0;
+        const totalTargets = health.TargetHealthDescriptions?.length || 0;
+        
+        console.log(`Target group health: ${healthyTargets}/${totalTargets} targets healthy`);
+        
+        if (healthyTargets === 0 && totalTargets > 0) {
+          console.warn('⚠️ Service is running but targets are not yet healthy. This may take a few more minutes.');
+        } else if (healthyTargets > 0) {
+          console.log('✅ Service targets are healthy!');
+        }
+      }
+    } catch (error) {
+      console.warn('Could not check target group health:', error);
+      // Don't fail the deployment for target group health check issues
+    }
+  }
+
+  async destroyInfrastructure(): Promise<void> {
+    console.log('Infrastructure destruction would need to be implemented');
   }
 }
