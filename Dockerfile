@@ -5,6 +5,7 @@ FROM node:18-slim AS base
 RUN apt-get update && apt-get install -y \
     openssl \
     ca-certificates \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies only when needed
@@ -43,14 +44,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Copy the public folder
 COPY --from=builder /app/public ./public
 
-# Set the correct permission for prerender cache
 RUN mkdir .next
-RUN chown nextjs:nodejs .next
 
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 
 # Copy Prisma schema and generated client
 COPY --from=builder /app/prisma ./prisma
