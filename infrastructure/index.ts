@@ -566,6 +566,35 @@ export class ECSInfrastructure {
       }]
     }).promise();
 
+    // Remove default egress rule and add custom egress rules
+    try {
+      // First, remove the default "allow all" egress rule that might not work properly
+      await this.ec2.revokeSecurityGroupEgress({
+        GroupId: ecsSg.GroupId!,
+        IpPermissions: [
+          {
+            IpProtocol: '-1',
+            IpRanges: [{ CidrIp: '0.0.0.0/0' }]
+          }
+        ]
+      }).promise();
+    } catch (error) {
+      // Ignore error if rule doesn't exist
+      console.log('Default egress rule removal failed (might not exist):', error);
+    }
+
+    // Add specific egress rules for ECS to access external services
+    await this.ec2.authorizeSecurityGroupEgress({
+      GroupId: ecsSg.GroupId!,
+      IpPermissions: [
+        {
+          // Allow ALL outbound traffic
+          IpProtocol: '-1',
+          IpRanges: [{ CidrIp: '0.0.0.0/0' }]
+        }
+      ]
+    }).promise();
+
     return {
       albSecurityGroupId: albSg.GroupId!,
       ecsSecurityGroupId: ecsSg.GroupId!
@@ -573,22 +602,85 @@ export class ECSInfrastructure {
   }
 
   private async createOrUpdateIAMRoles() {
-    const taskRoleArn = await this.createOrUpdateIAMRole(
-      `${this.projectName}-task-role`,
-      {
-        Version: '2012-10-17',
-        Statement: [{
-          Action: 'sts:AssumeRole',
-          Effect: 'Allow',
-          Principal: { Service: 'ecs-tasks.amazonaws.com' }
-        }]
-      },
-      []
-    );
-
+    const taskRoleArn = await this.createOrUpdateTaskRole();
     const executionRoleArn = await this.createOrUpdateExecutionRole();
 
     return { taskRoleArn, executionRoleArn };
+  }
+
+  private async createOrUpdateTaskRole(): Promise<string> {
+    const roleName = `${this.projectName}-task-role`;
+    
+    try {
+      // Check if role already exists
+      const role = await this.iam.getRole({ RoleName: roleName }).promise();
+      console.log(`Found existing task role: ${roleName}`);
+      
+      // Update the inline policy for ECS exec access
+      await this.attachECSExecPolicy(roleName);
+      
+      return role.Role.Arn!;
+    } catch (error: any) {
+      if (error.code === 'NoSuchEntity') {
+        console.log(`Creating new task role: ${roleName}`);
+        
+        // Create the role
+        const roleResult = await this.iam.createRole({
+          RoleName: roleName,
+          AssumeRolePolicyDocument: JSON.stringify({
+            Version: '2012-10-17',
+            Statement: [{
+              Action: 'sts:AssumeRole',
+              Effect: 'Allow',
+              Principal: { Service: 'ecs-tasks.amazonaws.com' }
+            }]
+          }),
+          Tags: [{ Key: 'Name', Value: roleName }]
+        }).promise();
+
+        // Attach ECS exec policy
+        await this.attachECSExecPolicy(roleName);
+
+        console.log(`Created task role: ${roleResult.Role.Arn}`);
+        return roleResult.Role.Arn!;
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  private async attachECSExecPolicy(roleName: string): Promise<void> {
+    const policyName = `${this.projectName}-ecs-exec-policy`;
+    
+    const ecsExecPolicy = {
+      Version: '2012-10-17',
+      Statement: [
+        {
+          Effect: 'Allow',
+          Action: [
+            'ssmmessages:CreateControlChannel',
+            'ssmmessages:CreateDataChannel',
+            'ssmmessages:OpenControlChannel',
+            'ssmmessages:OpenDataChannel'
+          ],
+          Resource: '*'
+        }
+      ]
+    };
+
+    try {
+      // Try to update existing policy
+      await this.iam.putRolePolicy({
+        RoleName: roleName,
+        PolicyName: policyName,
+        PolicyDocument: JSON.stringify(ecsExecPolicy)
+      }).promise();
+      
+      console.log(`Updated ECS exec policy for role: ${roleName}`);
+    } catch (error) {
+      console.error(`Failed to attach ECS exec policy: ${error}`);
+      throw error;
+    }
   }
 
   private async createOrUpdateExecutionRole(): Promise<string> {
@@ -1009,7 +1101,8 @@ export class ECSInfrastructure {
             cluster: clusterArn,
             service: serviceName,
             taskDefinition: taskDefinitionArn,
-            desiredCount: 1
+            desiredCount: 1,
+            enableExecuteCommand: true
           }).promise();
           
           console.log('Service updated, waiting for deployment to stabilize...');
@@ -1045,6 +1138,7 @@ export class ECSInfrastructure {
       taskDefinition: taskDefinitionArn,
       desiredCount: 1,
       launchType: 'FARGATE',
+      enableExecuteCommand: true,
       networkConfiguration: {
         awsvpcConfiguration: {
           subnets: subnets,

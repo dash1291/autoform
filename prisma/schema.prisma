@@ -83,6 +83,7 @@ model Deployment {
   imageTag  String
   commitSha String
   logs      String?
+  details   String?
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)

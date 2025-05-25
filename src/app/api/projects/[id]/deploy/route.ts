@@ -43,7 +43,15 @@ async function startBackgroundDeployment(project: any, deployment: any, commitSh
 
     await prisma.deployment.update({
       where: { id: deployment.id },
-      data: { status: DeploymentStatus.SUCCESS }
+      data: { 
+        status: DeploymentStatus.SUCCESS,
+        details: JSON.stringify({
+          clusterArn: result.clusterArn,
+          serviceArn: result.serviceArn,
+          loadBalancerArn: result.loadBalancerArn,
+          loadBalancerDns: result.loadBalancerDns
+        })
+      }
     });
 
     console.log(`✅ Deployment ${deployment.id} completed successfully`);
@@ -74,6 +82,14 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    console.log('Deploy request - Project ID:', params.id, 'User ID:', session.user.id)
+
+    // First check if project exists at all
+    const projectExists = await prisma.project.findUnique({
+      where: { id: params.id }
+    })
+    console.log('Project exists (any user):', !!projectExists, projectExists?.userId)
+
     // Check if project exists and belongs to user
     const project = await prisma.project.findFirst({
       where: {
@@ -81,6 +97,8 @@ export async function POST(
         userId: session.user.id,
       },
     })
+
+    console.log('Project found for user:', !!project)
 
     if (!project) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
@@ -116,6 +134,9 @@ export async function POST(
 
       const [, owner, repo] = match
 
+      console.log('GitHub API call:', `https://api.github.com/repos/${owner}/${repo}/branches/${project.branch}`)
+      console.log('Access token exists:', !!user.accounts[0].access_token)
+
       // Get the latest commit from the branch
       const branchResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches/${project.branch}`, {
         headers: {
@@ -125,7 +146,10 @@ export async function POST(
         }
       })
 
+      console.log('GitHub API response status:', branchResponse.status)
       if (!branchResponse.ok) {
+        const errorText = await branchResponse.text()
+        console.log('GitHub API error:', errorText)
         return NextResponse.json({ 
           error: `Failed to fetch branch '${project.branch}'. Please check if the branch exists.` 
         }, { status: 400 })

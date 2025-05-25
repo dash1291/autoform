@@ -14,6 +14,7 @@ export const authOptions: NextAuthOptions = {
           scope: 'read:user user:email repo',
         },
       },
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
   callbacks: {
@@ -21,6 +22,18 @@ export const authOptions: NextAuthOptions = {
       // For database strategy, user object is available
       if (session?.user && user?.id) {
         session.user.id = user.id
+        
+        // Retrieve GitHub access token from database
+        const account = await prisma.account.findFirst({
+          where: {
+            userId: user.id,
+            provider: 'github',
+          },
+        })
+        
+        if (account?.access_token) {
+          session.accessToken = account.access_token
+        }
       }
       // Fallback for JWT strategy
       else if (session?.user && token?.sub) {

@@ -12,7 +12,13 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isAdding, setIsAdding] = useState(false)
+  const [editingVar, setEditingVar] = useState<string | null>(null)
   const [newVar, setNewVar] = useState({
+    key: '',
+    value: '',
+    isSecret: false
+  })
+  const [editVar, setEditVar] = useState({
     key: '',
     value: '',
     isSecret: false
@@ -79,6 +85,61 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add environment variable')
     }
+  }
+
+  const handleEditVariable = (envVar: EnvironmentVariable) => {
+    setEditingVar(envVar.key)
+    setEditVar({
+      key: envVar.key,
+      value: envVar.isSecret ? '' : (envVar.value || ''), // Don't show secret values
+      isSecret: envVar.isSecret
+    })
+    setError(null)
+  }
+
+  const handleUpdateVariable = async () => {
+    if (!editVar.key.trim()) {
+      setError('Variable name is required')
+      return
+    }
+
+    if (!editVar.isSecret && !editVar.value.trim()) {
+      setError('Value is required for non-secret variables')
+      return
+    }
+
+    if (editVar.isSecret && !editVar.value.trim()) {
+      setError('Value is required for secrets')
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/environment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(editVar),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update environment variable')
+      }
+
+      await fetchEnvironmentVariables()
+      setEditingVar(null)
+      setEditVar({ key: '', value: '', isSecret: false })
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update environment variable')
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditingVar(null)
+    setEditVar({ key: '', value: '', isSecret: false })
+    setError(null)
   }
 
   const handleDeleteVariable = async (key: string) => {
@@ -240,37 +301,100 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
             <tbody className="bg-white divide-y divide-gray-200">
               {envVars.map((envVar) => (
                 <tr key={envVar.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <code className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">
-                      {envVar.key}
-                    </code>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      envVar.isSecret 
-                        ? 'bg-red-100 text-red-800' 
-                        : 'bg-green-100 text-green-800'
-                    }`}>
-                      {envVar.isSecret ? 'Secret' : 'Environment Variable'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {envVar.isSecret ? (
-                      <span className="text-gray-400">••••••••</span>
-                    ) : (
-                      <code className="bg-gray-100 px-2 py-1 rounded text-xs">
-                        {envVar.value || '(empty)'}
-                      </code>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => handleDeleteVariable(envVar.key)}
-                      className="text-red-600 hover:text-red-900 transition-colors"
-                    >
-                      Delete
-                    </button>
-                  </td>
+                  {editingVar === envVar.key ? (
+                    // Edit mode
+                    <>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="text"
+                          value={editVar.key}
+                          onChange={(e) => setEditVar({ ...editVar, key: e.target.value.toUpperCase() })}
+                          disabled
+                          className="text-sm font-mono bg-gray-100 px-2 py-1 rounded border border-gray-300 w-full cursor-not-allowed"
+                        />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={editVar.isSecret}
+                            onChange={(e) => setEditVar({ ...editVar, isSecret: e.target.checked })}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-2"
+                          />
+                          <span className="text-xs">Secret</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input
+                          type={editVar.isSecret ? "password" : "text"}
+                          value={editVar.value}
+                          onChange={(e) => setEditVar({ ...editVar, value: e.target.value })}
+                          placeholder={editVar.isSecret ? "Enter new secret value" : "Enter value"}
+                          className="text-sm bg-gray-50 px-2 py-1 rounded border border-gray-300 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleUpdateVariable}
+                            disabled={!editVar.value || (editVar.key && !validateKey(editVar.key))}
+                            className="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="text-gray-600 hover:text-gray-900 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    // View mode
+                    <>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <code className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">
+                          {envVar.key}
+                        </code>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          envVar.isSecret 
+                            ? 'bg-red-100 text-red-800' 
+                            : 'bg-green-100 text-green-800'
+                        }`}>
+                          {envVar.isSecret ? 'Secret' : 'Environment Variable'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {envVar.isSecret ? (
+                          <span className="text-gray-400">••••••••</span>
+                        ) : (
+                          <code className="bg-gray-100 px-2 py-1 rounded text-xs">
+                            {envVar.value || '(empty)'}
+                          </code>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEditVariable(envVar)}
+                            className="text-blue-600 hover:text-blue-900 transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteVariable(envVar.key)}
+                            className="text-red-600 hover:text-red-900 transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>

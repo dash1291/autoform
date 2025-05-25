@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { Project, Deployment } from '@/types'
 import LogsViewer from '@/components/LogsViewer'
 import EnvironmentVariables from '@/components/EnvironmentVariables'
+import SimpleShell from '@/components/SimpleShell'
 
 export default function ProjectDetail() {
   const { data: session } = useSession()
@@ -18,7 +19,7 @@ export default function ProjectDetail() {
   const [error, setError] = useState('')
   const [liveLogs, setLiveLogs] = useState<string>('')
   const [activeDeploymentId, setActiveDeploymentId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'overview' | 'deployments' | 'logs' | 'environment' | 'resources'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'deployments' | 'logs' | 'environment' | 'resources' | 'shell'>('overview')
 
   useEffect(() => {
     if (session && params.id) {
@@ -305,6 +306,16 @@ export default function ProjectDetail() {
               >
                 AWS Resources
               </button>
+              <button
+                onClick={() => setActiveTab('shell')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'shell'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Shell Access
+              </button>
             </nav>
           </div>
         </div>
@@ -519,6 +530,12 @@ export default function ProjectDetail() {
                     <p className="text-gray-500">No AWS resources found. Deploy your project to see resources here.</p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'shell' && (
+              <div className="bg-white shadow rounded-lg p-6">
+                <SimpleShell projectId={params.id as string} />
               </div>
             )}
         </div>
