@@ -42,7 +42,6 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Copy the public folder
-COPY --from=builder /app/public ./public
 
 RUN mkdir .next
 
