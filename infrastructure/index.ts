@@ -115,7 +115,7 @@ export class ECSInfrastructure {
       
       let vpcId: string;
       let subnetIds: string[];
-      let clusterArn: string;
+      let clusterArn: string | undefined;
 
       // VPC - Use existing or create new
       if (this.args.existingVpcId) {

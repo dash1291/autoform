@@ -44,24 +44,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const latestDeployment = project.deployments[0];
     
     // Parse deployment details to get cluster and service info
+    const serviceName = `${project.name}-service`;
     let clusterArn: string;
-    let serviceName: string;
     
     try {
-      // First try to get from deployment details
+      // Get cluster ARN from deployment details or project
       if (latestDeployment.details) {
         const deploymentDetails = JSON.parse(latestDeployment.details);
         clusterArn = deploymentDetails.clusterArn;
-      }
-      
-      // Fallback to project-level cluster ARN for older deployments
-      if (!clusterArn && project.ecsClusterArn) {
+      } else if (project.ecsClusterArn) {
         clusterArn = project.ecsClusterArn;
-      }
-      
-      serviceName = `${project.name}-service`;
-      
-      if (!clusterArn) {
+      } else {
         throw new Error('Cluster ARN not found in deployment details or project');
       }
     } catch (error) {
@@ -155,24 +148,17 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const latestDeployment = project.deployments[0];
     
     // Parse deployment details to get cluster and service info
+    const serviceName = `${project.name}-service`;
     let clusterArn: string;
-    let serviceName: string;
     
     try {
-      // First try to get from deployment details
+      // Get cluster ARN from deployment details or project
       if (latestDeployment.details) {
         const deploymentDetails = JSON.parse(latestDeployment.details);
         clusterArn = deploymentDetails.clusterArn;
-      }
-      
-      // Fallback to project-level cluster ARN for older deployments
-      if (!clusterArn && project.ecsClusterArn) {
+      } else if (project.ecsClusterArn) {
         clusterArn = project.ecsClusterArn;
-      }
-      
-      serviceName = `${project.name}-service`;
-      
-      if (!clusterArn) {
+      } else {
         throw new Error('Cluster ARN not found in deployment details or project');
       }
     } catch (error) {
@@ -196,7 +182,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     const service = services.services[0];
-    const isAvailable = service.runningCount > 0 && service.status === 'ACTIVE';
+    const isAvailable = (service.runningCount ?? 0) > 0 && service.status === 'ACTIVE';
 
     let taskArn = null;
     if (isAvailable) {

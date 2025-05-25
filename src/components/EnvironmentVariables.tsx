@@ -7,18 +7,33 @@ interface EnvironmentVariablesProps {
   projectId: string
 }
 
+interface EnvVarState {
+  key: string;
+  value: string;
+  isSecret: boolean;
+}
+
+interface EnvVarDisplay extends Omit<EnvironmentVariable, 'isSecret'> {
+  isSecret: boolean;
+}
+
+type EnvVarResponse = Omit<EnvironmentVariable, 'createdAt' | 'updatedAt'> & {
+  createdAt: string;
+  updatedAt: string;
+};
+
 export default function EnvironmentVariables({ projectId }: EnvironmentVariablesProps) {
   const [envVars, setEnvVars] = useState<EnvironmentVariable[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isAdding, setIsAdding] = useState(false)
   const [editingVar, setEditingVar] = useState<string | null>(null)
-  const [newVar, setNewVar] = useState({
+  const [newVar, setNewVar] = useState<EnvVarState>({
     key: '',
     value: '',
     isSecret: false
   })
-  const [editVar, setEditVar] = useState({
+  const [editVar, setEditVar] = useState<EnvVarState>({
     key: '',
     value: '',
     isSecret: false
@@ -27,6 +42,20 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
   useEffect(() => {
     fetchEnvironmentVariables()
   }, [projectId])
+
+  const isEnvironmentVariable = (envVar: any): envVar is EnvironmentVariable => {
+    return (
+      typeof envVar === 'object' &&
+      typeof envVar.id === 'string' &&
+      typeof envVar.projectId === 'string' &&
+      typeof envVar.key === 'string' &&
+      (typeof envVar.value === 'string' || envVar.value === undefined) &&
+      typeof envVar.isSecret === 'boolean' &&
+      (typeof envVar.secretKey === 'string' || envVar.secretKey === undefined) &&
+      envVar.createdAt instanceof Date &&
+      envVar.updatedAt instanceof Date
+    );
+  };
 
   const fetchEnvironmentVariables = async () => {
     setLoading(true)
@@ -40,7 +69,13 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
       }
       
       const data = await response.json()
-      setEnvVars(data)
+      // Transform the API response
+      const transformedVars = data.map((envVar: EnvVarResponse) => ({
+        ...envVar,
+        createdAt: new Date(envVar.createdAt),
+        updatedAt: new Date(envVar.updatedAt)
+      }));
+      setEnvVars(transformedVars)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch environment variables')
     } finally {
@@ -54,12 +89,12 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
       return
     }
 
-    if (!newVar.isSecret && !newVar.value.trim()) {
+    if (!Boolean(newVar.isSecret) && !newVar.value.trim()) {
       setError('Value is required for non-secret variables')
       return
     }
 
-    if (newVar.isSecret && !newVar.value.trim()) {
+    if (Boolean(newVar.isSecret) && !newVar.value.trim()) {
       setError('Value is required for secrets')
       return
     }
@@ -91,7 +126,7 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
     setEditingVar(envVar.key)
     setEditVar({
       key: envVar.key,
-      value: envVar.isSecret ? '' : (envVar.value || ''), // Don't show secret values
+      value: envVar.isSecret ? '' : (envVar.value || ''),
       isSecret: envVar.isSecret
     })
     setError(null)
@@ -103,12 +138,12 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
       return
     }
 
-    if (!editVar.isSecret && !editVar.value.trim()) {
+    if (!Boolean(editVar.isSecret) && !editVar.value.trim()) {
       setError('Value is required for non-secret variables')
       return
     }
 
-    if (editVar.isSecret && !editVar.value.trim()) {
+    if (Boolean(editVar.isSecret) && !editVar.value.trim()) {
       setError('Value is required for secrets')
       return
     }
@@ -222,10 +257,10 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
                 Value
               </label>
               <input
-                type={newVar.isSecret ? "password" : "text"}
+                type={Boolean(newVar.isSecret) ? "password" : "text"}
                 value={newVar.value}
                 onChange={(e) => setNewVar({ ...newVar, value: e.target.value })}
-                placeholder={newVar.isSecret ? "Enter secret value" : "Enter value"}
+                placeholder={Boolean(newVar.isSecret) ? "Enter secret value" : "Enter value"}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -235,8 +270,8 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
             <input
               type="checkbox"
               id="isSecret"
-              checked={newVar.isSecret}
-              onChange={(e) => setNewVar({ ...newVar, isSecret: e.target.checked })}
+              checked={Boolean(newVar.isSecret)}
+              onChange={(e) => setNewVar({ ...newVar, isSecret: Boolean(e.target.checked) })}
               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
             <label htmlFor="isSecret" className="ml-2 block text-sm text-gray-700">
@@ -317,7 +352,7 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
                         <div className="flex items-center">
                           <input
                             type="checkbox"
-                            checked={editVar.isSecret}
+                            checked={Boolean(editVar.isSecret)}
                             onChange={(e) => setEditVar({ ...editVar, isSecret: e.target.checked })}
                             className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-2"
                           />
@@ -326,10 +361,10 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <input
-                          type={editVar.isSecret ? "password" : "text"}
+                          type={Boolean(editVar.isSecret) ? "password" : "text"}
                           value={editVar.value}
                           onChange={(e) => setEditVar({ ...editVar, value: e.target.value })}
-                          placeholder={editVar.isSecret ? "Enter new secret value" : "Enter value"}
+                          placeholder={Boolean(editVar.isSecret) ? "Enter new secret value" : "Enter value"}
                           className="text-sm bg-gray-50 px-2 py-1 rounded border border-gray-300 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </td>
@@ -337,7 +372,7 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
                         <div className="flex gap-2">
                           <button
                             onClick={handleUpdateVariable}
-                            disabled={!editVar.value || (editVar.key && !validateKey(editVar.key))}
+                            disabled={!editVar.value || (Boolean(editVar.key) && !validateKey(editVar.key))}
                             className="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
                             Save
@@ -361,7 +396,7 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          envVar.isSecret 
+                          envVar.isSecret
                             ? 'bg-red-100 text-red-800' 
                             : 'bg-green-100 text-green-800'
                         }`}>
