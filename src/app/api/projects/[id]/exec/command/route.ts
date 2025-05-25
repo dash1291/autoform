@@ -49,7 +49,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const latestDeployment = project.deployments[0];
     
     // Parse deployment details to get cluster and service info
-    let clusterArn: string;
+    let clusterArn: string | undefined;
     let serviceName: string;
     
     try {
