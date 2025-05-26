@@ -68,6 +68,9 @@ model Project {
   ecsServiceArn   String?
   albArn          String?
   domain          String?
+  existingVpcId   String?
+  existingSubnetIds String?  // JSON array of subnet IDs
+  existingClusterArn String?
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
   secretsArn      String?

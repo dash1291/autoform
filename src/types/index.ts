@@ -31,6 +31,9 @@ export interface Project {
   albArn?: string
   domain?: string
   secretsArn?: string
+  existingVpcId?: string
+  existingSubnetIds?: string
+  existingClusterArn?: string
   createdAt: Date
   updatedAt: Date
 }

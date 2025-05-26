@@ -550,13 +550,44 @@ phases:
       await this.logToDatabase(deploymentId, `📋 Found ${environmentVariables.length} environment variables`);
     }
 
-    const infrastructure = new ECSInfrastructure({
+    // Fetch project to get network configuration
+    const project = await this.getProjectNetworkConfig(projectId);
+    
+    const infrastructureArgs: any = {
       projectName,
       imageUri,
       containerPort: 3000,
       region: this.region,
       environmentVariables,
-    });
+    };
+
+    // Add existing network resources if configured
+    if (project.existingVpcId) {
+      infrastructureArgs.existingVpcId = project.existingVpcId;
+      if (deploymentId) {
+        await this.logToDatabase(deploymentId, `🌐 Using existing VPC: ${project.existingVpcId}`);
+      }
+    }
+
+    if (project.existingSubnetIds) {
+      try {
+        infrastructureArgs.existingSubnetIds = JSON.parse(project.existingSubnetIds);
+        if (deploymentId) {
+          await this.logToDatabase(deploymentId, `🌐 Using existing subnets: ${infrastructureArgs.existingSubnetIds.join(', ')}`);
+        }
+      } catch (error) {
+        console.warn('Failed to parse existing subnet IDs:', error);
+      }
+    }
+
+    if (project.existingClusterArn) {
+      infrastructureArgs.existingClusterArn = project.existingClusterArn;
+      if (deploymentId) {
+        await this.logToDatabase(deploymentId, `🚀 Using existing ECS cluster: ${project.existingClusterArn}`);
+      }
+    }
+
+    const infrastructure = new ECSInfrastructure(infrastructureArgs);
 
     if (deploymentId) {
       await this.logToDatabase(deploymentId, 'Creating/updating AWS infrastructure...');
@@ -597,6 +628,32 @@ phases:
     } catch (error) {
       console.error('Error fetching environment variables:', error);
       return [];
+    }
+  }
+
+  private async getProjectNetworkConfig(projectId: string) {
+    try {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: {
+          existingVpcId: true,
+          existingSubnetIds: true,
+          existingClusterArn: true
+        }
+      });
+
+      return project || {
+        existingVpcId: null,
+        existingSubnetIds: null,
+        existingClusterArn: null
+      };
+    } catch (error) {
+      console.error('Error fetching project network configuration:', error);
+      return {
+        existingVpcId: null,
+        existingSubnetIds: null,
+        existingClusterArn: null
+      };
     }
   }
 }
