@@ -432,6 +432,10 @@ phases:
       // Stream logs if available
       if (logGroupName && logStreamName && deploymentId) {
         try {
+          if (deploymentId) {
+            await this.logToDatabase(deploymentId, `Fetching logs from ${logGroupName}/${logStreamName}...`);
+          }
+
           const logsResult = await cloudwatchLogs.getLogEvents({
             logGroupName,
             logStreamName,
@@ -439,17 +443,25 @@ phases:
             startFromHead: true
           }).promise();
 
+          if (deploymentId) {
+            await this.logToDatabase(deploymentId, `Retrieved ${logsResult.events?.length || 0} log events`);
+          }
+
           for (const event of logsResult.events || []) {
-            if (event.message) {
+            if (event.message && event.message.trim()) {
               await this.logToDatabase(deploymentId, `🔨 ${event.message.trim()}`);
             }
           }
 
           nextToken = logsResult.nextForwardToken;
-        } catch (error) {
-          // Ignore log streaming errors, continue with build monitoring
+        } catch (error: any) {
+          if (deploymentId) {
+            await this.logToDatabase(deploymentId, `Log streaming error: ${error.message}`);
+          }
           console.warn('Failed to stream logs:', error);
         }
+      } else if (deploymentId && status === 'IN_PROGRESS') {
+        await this.logToDatabase(deploymentId, `Waiting for logs... (group: ${logGroupName || 'unknown'}, stream: ${logStreamName || 'unknown'})`);
       }
 
       if (deploymentId) {
