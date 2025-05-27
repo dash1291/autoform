@@ -2,11 +2,19 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 import Link from 'next/link'
 
 export default function Home() {
   const { data: session } = useSession()
   const router = useRouter()
+
+  // Redirect to dashboard if user is logged in
+  useEffect(() => {
+    if (session) {
+      router.push('/dashboard')
+    }
+  }, [session, router])
 
   const handleGetStarted = () => {
     if (session) {

@@ -206,44 +206,6 @@ export default function Shell({ projectId }: ShellProps) {
         </div>
       )}
 
-      {/* Status Card */}
-      <div className="bg-white border border-gray-200 rounded-lg p-4">
-        <h3 className="font-medium text-gray-900 mb-2">Service Status</h3>
-        {execStatus ? (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Shell Access:</span>
-              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                execStatus.available 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-red-100 text-red-800'
-              }`}>
-                {execStatus.available ? 'Available' : 'Unavailable'}
-              </span>
-            </div>
-            {execStatus.runningCount !== undefined && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Running Tasks:</span>
-                <span className="text-sm text-gray-900">
-                  {execStatus.runningCount}/{execStatus.desiredCount}
-                </span>
-              </div>
-            )}
-            {execStatus.status && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Service Status:</span>
-                <span className="text-sm text-gray-900">{execStatus.status}</span>
-              </div>
-            )}
-            {!execStatus.available && execStatus.reason && (
-              <p className="text-sm text-red-600 mt-2">{execStatus.reason}</p>
-            )}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-500">Loading status...</p>
-        )}
-      </div>
-
       {/* Shell Terminal */}
       {execStatus?.available && (
         <div className="bg-white border border-gray-200 rounded-lg p-4">

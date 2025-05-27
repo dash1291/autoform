@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 
 interface SimpleShellProps {
   projectId: string
+  isActive?: boolean
 }
 
 interface ExecStatus {
@@ -19,13 +20,12 @@ interface ShellCommand {
   timestamp: Date
 }
 
-export default function SimpleShell({ projectId }: SimpleShellProps) {
+export default function SimpleShell({ projectId, isActive = false }: SimpleShellProps) {
   const [execStatus, setExecStatus] = useState<ExecStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
-  const [shellCommands, setShellCommands] = useState<ShellCommand[]>([])
-  const outputRef = useRef<HTMLDivElement>(null)
+  const [shellCommand, setShellCommand] = useState<ShellCommand | null>(null)
 
   useEffect(() => {
     checkExecAvailability()
@@ -34,12 +34,12 @@ export default function SimpleShell({ projectId }: SimpleShellProps) {
     return () => clearInterval(interval)
   }, [projectId])
 
+  // Auto-generate shell command when tab becomes active and exec is available
   useEffect(() => {
-    // Auto-scroll output to bottom when new commands are added
-    if (outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight
+    if (isActive && execStatus?.available && !shellCommand && !isGenerating) {
+      generateShellCommand()
     }
-  }, [shellCommands])
+  }, [isActive, execStatus?.available])
 
   const checkExecAvailability = async () => {
     try {
@@ -82,17 +82,18 @@ export default function SimpleShell({ projectId }: SimpleShellProps) {
         
         // Generate the AWS CLI command for shell access
         const shellCommand = `aws ecs execute-command \\
+  --region "${data.region || 'us-east-1'}" \\
   --cluster "${data.clusterArn}" \\
   --task "${data.taskArn}" \\
   --container "${data.containerName}" \\
   --interactive \\
   --command "/bin/bash"`
 
-        // Add the command to history
-        setShellCommands(prev => [...prev, {
+        // Set the shell command
+        setShellCommand({
           command: shellCommand,
           timestamp: new Date()
-        }])
+        })
       } else {
         const errorData = await response.json()
         setError(errorData.error || 'Failed to get container information')
@@ -104,16 +105,6 @@ export default function SimpleShell({ projectId }: SimpleShellProps) {
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      generateShellCommand()
-    }
-  }
-
-  const clearHistory = () => {
-    setShellCommands([])
-  }
 
   if (loading) {
     return (
@@ -148,131 +139,50 @@ export default function SimpleShell({ projectId }: SimpleShellProps) {
         </div>
       )}
 
-      {/* Status Card */}
-      <div className="bg-white border border-gray-200 rounded-lg p-4">
-        <h3 className="font-medium text-gray-900 mb-2">Service Status</h3>
-        {execStatus ? (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Shell Access:</span>
-              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                execStatus.available 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-red-100 text-red-800'
-              }`}>
-                {execStatus.available ? 'Available' : 'Unavailable'}
-              </span>
-            </div>
-            {execStatus.runningCount !== undefined && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Running Tasks:</span>
-                <span className="text-sm text-gray-900">
-                  {execStatus.runningCount}/{execStatus.desiredCount}
-                </span>
-              </div>
-            )}
-            {execStatus.status && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Service Status:</span>
-                <span className="text-sm text-gray-900">{execStatus.status}</span>
-              </div>
-            )}
-            {!execStatus.available && execStatus.reason && (
-              <p className="text-sm text-red-600 mt-2">{execStatus.reason}</p>
-            )}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-500">Loading status...</p>
-        )}
-      </div>
-
       {/* Command Execution Interface */}
       {execStatus?.available && (
         <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-medium text-gray-900">Generate Shell Command</h3>
-            {shellCommands.length > 0 && (
-              <button
-                onClick={clearHistory}
-                className="text-sm text-gray-500 hover:text-gray-700"
-              >
-                Clear History
-              </button>
-            )}
-          </div>
-
-          {/* Generate Button */}
-          <div className="mb-4">
-            <button
-              onClick={generateShellCommand}
-              disabled={isGenerating}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors w-full"
-            >
-              {isGenerating ? 'Generating Command...' : 'Generate Shell Access Command'}
-            </button>
-            <p className="text-xs text-gray-500 mt-2">
-              Generates an AWS CLI command you can run in your terminal to access the container shell
-            </p>
-          </div>
-
-          {/* Generated Commands */}
-          {shellCommands.length > 0 ? (
-            <div 
-              ref={outputRef}
-              className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto"
-            >
-              <h4 className="text-sm font-medium text-gray-700 mb-3">Generated Commands</h4>
-              <div className="space-y-4">
-                {shellCommands.map((entry, index) => (
-                  <div key={index} className="bg-white border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-700">
-                        Shell Access Command #{shellCommands.length - index}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {entry.timestamp.toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <div className="bg-gray-900 text-green-400 p-3 rounded font-mono text-sm overflow-x-auto">
-                      <pre className="whitespace-pre-wrap">{entry.command}</pre>
-                    </div>
-                    <div className="mt-2 flex space-x-2">
-                      <button
-                        onClick={() => navigator.clipboard.writeText(entry.command)}
-                        className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
-                      >
-                        Copy Command
-                      </button>
-                      <span className="text-xs text-gray-500">
-                        Run this command in your terminal (requires AWS CLI configured)
-                      </span>
-                    </div>
-                  </div>
-                ))}
+          {shellCommand ? (
+            <>
+              <div className="mb-2">
+                <span className="text-sm font-medium text-gray-700">
+                  Shell Access Command
+                </span>
               </div>
+              <div className="bg-gray-900 text-green-400 p-3 rounded font-mono text-sm overflow-x-auto">
+                <pre className="whitespace-pre-wrap">{shellCommand.command}</pre>
+              </div>
+              <div className="mt-2 flex space-x-2">
+                <button
+                  onClick={() => navigator.clipboard.writeText(shellCommand.command)}
+                  className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
+                >
+                  Copy Command
+                </button>
+                <span className="text-xs text-gray-500">
+                  Run this command in your terminal (requires AWS CLI configured)
+                </span>
+              </div>
+            </>
+          ) : isGenerating ? (
+            <div className="bg-gray-50 p-8 rounded-lg text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-500 mb-2">Generating shell command...</p>
+              <p className="text-sm text-gray-400">
+                Please wait while we prepare your container shell access.
+              </p>
             </div>
           ) : (
             <div className="bg-gray-50 p-8 rounded-lg text-center">
               <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 002 2v14a2 2 0 002 2z" />
               </svg>
-              <p className="text-gray-500 mb-2">No commands generated yet</p>
+              <p className="text-gray-500 mb-2">Shell command will appear here</p>
               <p className="text-sm text-gray-400">
-                Click the button above to generate an AWS CLI command for shell access.
+                A shell access command is automatically generated when this tab opens.
               </p>
             </div>
           )}
-
-          <div className="mt-4 text-sm text-gray-500">
-            <p className="mb-1">💡 <strong>How to Use:</strong></p>
-            <ul className="list-disc list-inside space-y-1 text-xs">
-              <li>Click "Generate Shell Access Command" to get the AWS CLI command</li>
-              <li>Copy the generated command and run it in your terminal</li>
-              <li>Requires AWS CLI installed and configured with proper credentials</li>
-              <li>The command will give you an interactive bash shell in your container</li>
-              <li>You can run any commands like <code>ls</code>, <code>ps</code>, <code>cat</code>, etc.</li>
-            </ul>
-          </div>
         </div>
       )}
 

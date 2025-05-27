@@ -44,7 +44,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { existingVpcId, existingSubnetIds, existingClusterArn, cpu, memory, diskSize } = body
+    const { existingVpcId, existingSubnetIds, existingClusterArn, cpu, memory, diskSize, gitRepoUrl, branch } = body
 
     // Check if project exists and belongs to user
     const project = await prisma.project.findFirst({
@@ -95,6 +95,17 @@ export async function PUT(
       )
     }
 
+    // Validate Git repository URL if provided
+    if (gitRepoUrl !== undefined) {
+      const gitUrlRegex = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(?:\.git)?$/
+      if (gitRepoUrl && !gitUrlRegex.test(gitRepoUrl)) {
+        return NextResponse.json(
+          { error: 'Please provide a valid GitHub repository URL' },
+          { status: 400 }
+        )
+      }
+    }
+
     // Prepare update data
     const updateData: any = {}
     
@@ -107,6 +118,10 @@ export async function PUT(
     if (cpu !== undefined) updateData.cpu = cpu
     if (memory !== undefined) updateData.memory = memory
     if (diskSize !== undefined) updateData.diskSize = diskSize
+
+    // Repository configuration
+    if (gitRepoUrl !== undefined) updateData.gitRepoUrl = gitRepoUrl
+    if (branch !== undefined) updateData.branch = branch
 
     // Update project with network and resource configuration
     const updatedProject = await prisma.project.update({

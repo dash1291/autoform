@@ -10,6 +10,7 @@ import EnvironmentVariables from '@/components/EnvironmentVariables'
 import SimpleShell from '@/components/SimpleShell'
 import NetworkConfiguration from '@/components/NetworkConfiguration'
 import ResourceConfiguration from '@/components/ResourceConfiguration'
+import RepositoryConfiguration from '@/components/RepositoryConfiguration'
 
 export default function ProjectDetail() {
   const { data: session } = useSession()
@@ -21,7 +22,8 @@ export default function ProjectDetail() {
   const [error, setError] = useState('')
   const [liveLogs, setLiveLogs] = useState<string>('')
   const [activeDeploymentId, setActiveDeploymentId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'overview' | 'deployments' | 'logs' | 'environment' | 'resources' | 'shell'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'deployments' | 'logs' | 'settings' | 'shell'>('overview')
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'environment' | 'repository' | 'resources'>('repository')
 
   useEffect(() => {
     if (session && params.id) {
@@ -289,26 +291,6 @@ export default function ProjectDetail() {
                 Application Logs
               </button>
               <button
-                onClick={() => setActiveTab('environment')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'environment'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Environment
-              </button>
-              <button
-                onClick={() => setActiveTab('resources')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'resources'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                AWS Resources
-              </button>
-              <button
                 onClick={() => setActiveTab('shell')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'shell'
@@ -317,6 +299,16 @@ export default function ProjectDetail() {
                 }`}
               >
                 Shell Access
+              </button>
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'settings'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Settings
               </button>
             </nav>
           </div>
@@ -443,117 +435,120 @@ export default function ProjectDetail() {
             </div>
           )}
 
-          {activeTab === 'environment' && (
-            <div className="bg-white shadow rounded-lg p-6">
-              <EnvironmentVariables projectId={params.id as string} />
-            </div>
-          )}
-
-          {activeTab === 'resources' && (
-            <>
-              <div className="bg-white shadow rounded-lg p-6">
-                <ResourceConfiguration 
-                  projectId={params.id as string} 
-                  project={project}
-                  onUpdate={fetchProject}
-                />
-              </div>
-              <div className="bg-white shadow rounded-lg p-6">
-                <NetworkConfiguration 
-                  projectId={params.id as string} 
-                  project={project}
-                  onUpdate={fetchProject}
-                />
-              </div>
-              <div className="bg-white shadow rounded-lg p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Current AWS Resources</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {project.ecsClusterArn && (
-                    <div className="border border-gray-200 rounded-lg p-4">
-                      <h3 className="font-medium text-gray-900 mb-2">ECS Cluster</h3>
-                      <p className="text-sm text-gray-600 break-all">{project.ecsClusterArn}</p>
-                      <div className="mt-2">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Active
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {project.ecsServiceArn && (
-                    <div className="border border-gray-200 rounded-lg p-4">
-                      <h3 className="font-medium text-gray-900 mb-2">ECS Service</h3>
-                      <p className="text-sm text-gray-600 break-all">{project.ecsServiceArn}</p>
-                      <div className="mt-2">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Running
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {project.albArn && (
-                    <div className="border border-gray-200 rounded-lg p-4">
-                      <h3 className="font-medium text-gray-900 mb-2">Application Load Balancer</h3>
-                      <p className="text-sm text-gray-600 break-all">{project.albArn}</p>
-                      <div className="mt-2">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Active
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div className="border border-gray-200 rounded-lg p-4">
-                    <h3 className="font-medium text-gray-900 mb-2">CloudWatch Log Group</h3>
-                    <p className="text-sm text-gray-600">/ecs/{project.name}</p>
-                    <div className="mt-2">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        7 Day Retention
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <div className="border border-gray-200 rounded-lg p-4">
-                    <h3 className="font-medium text-gray-900 mb-2">ECR Repository</h3>
-                    <p className="text-sm text-gray-600">{project.name.toLowerCase().replace(/[^a-z0-9-_]/g, '-')}</p>
-                    <div className="mt-2">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                        Container Registry
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="border border-gray-200 rounded-lg p-4">
-                    <h3 className="font-medium text-gray-900 mb-2">Repository</h3>
-                    <a
-                      href={project.gitRepoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-blue-600 hover:text-blue-700 break-all"
+          {activeTab === 'settings' && (
+            <div className="bg-white shadow rounded-lg overflow-hidden">
+              <div className="flex">
+                {/* Vertical sidebar navigation */}
+                <div className="w-64 bg-gray-50 border-r border-gray-200">
+                  <nav className="p-4 space-y-2">
+                    <button
+                      onClick={() => setActiveSettingsTab('repository')}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        activeSettingsTab === 'repository'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
                     >
-                      {project.gitRepoUrl}
-                    </a>
-                    <div className="mt-2">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                        Branch: {project.branch}
-                      </span>
-                    </div>
-                  </div>
+                      Git Repository
+                    </button>
+                    <button
+                      onClick={() => setActiveSettingsTab('environment')}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        activeSettingsTab === 'environment'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      Environment Variables
+                    </button>
+                    <button
+                      onClick={() => setActiveSettingsTab('resources')}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        activeSettingsTab === 'resources'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      AWS Resources
+                    </button>
+                  </nav>
                 </div>
 
-                {!project.ecsClusterArn && !project.ecsServiceArn && !project.albArn && (
-                  <div className="text-center py-8">
-                    <p className="text-gray-500">No AWS resources found. Deploy your project to see resources here.</p>
-                  </div>
-                )}
+                {/* Content area */}
+                <div className="flex-1 p-6">
+                  {activeSettingsTab === 'environment' && (
+                    <EnvironmentVariables projectId={params.id as string} />
+                  )}
+
+                  {activeSettingsTab === 'repository' && (
+                    <RepositoryConfiguration 
+                      projectId={params.id as string} 
+                      project={project}
+                      onUpdate={fetchProject}
+                    />
+                  )}
+
+                  {activeSettingsTab === 'resources' && (
+                    <div className="space-y-6">
+                      <div className="bg-white border border-gray-200 rounded-lg p-6">
+                        <ResourceConfiguration 
+                          projectId={params.id as string} 
+                          project={project}
+                          onUpdate={fetchProject}
+                        />
+                      </div>
+                      
+                      <div className="bg-white border border-gray-200 rounded-lg p-6">
+                        <NetworkConfiguration 
+                          projectId={params.id as string} 
+                          project={project}
+                          onUpdate={fetchProject}
+                        />
+                      </div>
+                      
+                      <div className="bg-white border border-gray-200 rounded-lg p-6">
+                        <h2 className="text-xl font-semibold text-gray-900 mb-4">Other Resources</h2>
+                        <div className="space-y-3">
+                          {project.albArn && (
+                            <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                              <div>
+                                <span className="text-sm font-medium text-gray-900">Load Balancer</span>
+                                <p className="text-xs text-gray-500 truncate max-w-full">{project.albArn}</p>
+                              </div>
+                            </div>
+                          )}
+                          
+                          <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">Logs</span>
+                              <p className="text-xs text-gray-500">/ecs/{project.name}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">Container Registry</span>
+                              <p className="text-xs text-gray-500">{project.name.toLowerCase().replace(/[^a-z0-9-_]/g, '-')}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {!project.albArn && (
+                          <div className="text-center py-4">
+                            <p className="text-sm text-gray-500">Deploy project to see resources</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </>
+            </div>
           )}
 
           {activeTab === 'shell' && (
             <div className="bg-white shadow rounded-lg p-6">
-              <SimpleShell projectId={params.id as string} />
+              <SimpleShell projectId={params.id as string} isActive={activeTab === 'shell'} />
             </div>
           )}
         </div>

@@ -149,6 +149,9 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
       <div>
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-lg font-medium text-gray-900">Network Configuration</h3>
+        </div>
+        <div className="text-sm text-gray-600 mb-4">
+          Configure existing AWS network resources to use instead of creating new ones. Leave fields empty to create new resources automatically. 
           <button
             type="button"
             onClick={() => setShowTips(!showTips)}
@@ -165,9 +168,6 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
             <span>Configuration Tips</span>
           </button>
         </div>
-        <p className="text-sm text-gray-600 mb-4">
-          Configure existing AWS network resources to use instead of creating new ones. Leave fields empty to create new resources automatically.
-        </p>
         
         {showTips && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
@@ -193,7 +193,7 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
               <div className="ml-3">
                 <h4 className="text-sm font-medium text-blue-800">Network Configuration Locked</h4>
                 <div className="mt-1 text-sm text-blue-700">
-                  <p>This project has been deployed and network settings are now read-only to prevent infrastructure conflicts. To use different network settings, create a new project.</p>
+                  <p>This project has been deployed and network settings are now read-only. To use different network settings, create a new project.</p>
                 </div>
               </div>
             </div>
@@ -216,9 +216,6 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
                 </div>
               ) : deployedResources?.vpc ? (
                 <div className="flex items-center space-x-2">
-                  <svg className="h-4 w-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
                   <div>
                     <span className="text-sm font-medium text-gray-900">{deployedResources.vpc.name}</span>
                     <span className="text-xs text-gray-500 block">{deployedResources.vpc.id} ({deployedResources.vpc.cidrBlock})</span>
@@ -278,16 +275,13 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
                 <div className="space-y-2">
                   {deployedResources.subnets.map((subnet: any) => (
                     <div key={subnet.id} className="flex items-center space-x-2">
-                      <svg className="h-4 w-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
                       <div>
                         <span className="text-sm font-medium text-gray-900">{subnet.name}</span>
                         <span className="text-xs text-gray-500 block">{subnet.id} - {subnet.availabilityZone} ({subnet.cidrBlock})</span>
                       </div>
                     </div>
                   ))}
-                  <p className="text-xs text-green-600 mt-1">
+                  <p className="text-xs text-gray-600 mt-1">
                     {deployedResources.subnets.length} subnet(s) assigned
                   </p>
                 </div>
@@ -352,9 +346,6 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
                 </div>
               ) : deployedResources?.cluster ? (
                 <div className="flex items-center space-x-2">
-                  <svg className="h-4 w-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
                   <div>
                     <span className="text-sm font-medium text-gray-900 block">{deployedResources.cluster.name}</span>
                     <span className="text-xs text-gray-500">{deployedResources.cluster.arn}</span>

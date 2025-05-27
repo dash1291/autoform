@@ -436,18 +436,6 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
           </table>
         </div>
       )}
-
-      {envVars.length > 0 && (
-        <div className="text-xs text-gray-500 bg-blue-50 p-3 rounded-lg">
-          <p className="font-medium text-blue-900 mb-1">ℹ️ Important Notes:</p>
-          <ul className="list-disc list-inside space-y-1 text-blue-800">
-            <li>Environment variables will be available to your application after the next deployment</li>
-            <li>Secrets are stored securely in AWS Secrets Manager and are not visible in the UI</li>
-            <li>Variable names are automatically converted to uppercase</li>
-            <li>Changes require a new deployment to take effect</li>
-          </ul>
-        </div>
-      )}
     </div>
   )
 }

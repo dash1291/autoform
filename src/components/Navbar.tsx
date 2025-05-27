@@ -21,12 +21,6 @@ export default function Navbar() {
               <div>Loading...</div>
             ) : session ? (
               <>
-                <Link 
-                  href="/dashboard" 
-                  className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  Dashboard
-                </Link>
                 <div className="flex items-center space-x-3">
                   <img
                     className="h-8 w-8 rounded-full"
