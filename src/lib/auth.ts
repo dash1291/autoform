@@ -31,11 +31,6 @@ export const authOptions: NextAuthOptions = {
           },
         })
         
-        console.log('Access token exists:', !!account?.access_token)
-        console.log('Access token length:', account?.access_token?.length || 0)
-        console.log('Refresh token exists:', !!account?.refresh_token)
-        console.log('Full account object:', JSON.stringify(account, null, 2))
-        
         if (account?.access_token) {
           session.accessToken = account.access_token
         }

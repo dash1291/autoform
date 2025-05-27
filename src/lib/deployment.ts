@@ -358,6 +358,24 @@ phases:
       - echo Pushing the Docker image...
       - docker push ${await this.getECRRegistry()}/${repositoryName}:${commitSha}`;
 
+    const logGroupName = `/aws/codebuild/${buildProjectName}`
+    
+    // Ensure CloudWatch log group exists
+    const cloudwatchLogs = new AWS.CloudWatchLogs({ region: this.region })
+    try {
+      await cloudwatchLogs.createLogGroup({
+        logGroupName: logGroupName
+      }).promise()
+      
+      if (deploymentId) {
+        await this.logToDatabase(deploymentId, `Created CloudWatch log group: ${logGroupName}`)
+      }
+    } catch (error: any) {
+      if (error.code !== 'ResourceAlreadyExistsException') {
+        console.warn('Failed to create log group:', error)
+      }
+    }
+    
     const params = {
       name: buildProjectName,
       source: {
@@ -373,6 +391,12 @@ phases:
         image: 'aws/codebuild/amazonlinux2-x86_64-standard:4.0',
         computeType: 'BUILD_GENERAL1_SMALL',
         privilegedMode: true
+      },
+      logsConfig: {
+        cloudWatchLogs: {
+          status: 'ENABLED',
+          groupName: logGroupName
+        }
       },
       serviceRole: await this.getCodeBuildRole()
     };
@@ -410,6 +434,7 @@ phases:
     let logGroupName: string | undefined;
     let logStreamName: string | undefined;
     let nextToken: string | undefined;
+    let logStreamFound = false;
     
     while (true) {
       const result = await codebuild.batchGetBuilds({
@@ -420,32 +445,91 @@ phases:
       const status = build.buildStatus;
 
       // Get log info if available
-      if (build.logs?.cloudWatchLogs?.groupName && !logGroupName) {
+      if (build.logs?.cloudWatchLogs?.groupName && !logStreamFound) {
         logGroupName = build.logs.cloudWatchLogs.groupName;
         logStreamName = build.logs.cloudWatchLogs.streamName;
         
         if (deploymentId) {
-          await this.logToDatabase(deploymentId, `📋 Streaming CodeBuild logs from CloudWatch...`);
+          await this.logToDatabase(deploymentId, `📋 CodeBuild reports log group: ${logGroupName}, stream: ${logStreamName || 'undefined'}`);
+        }
+        
+        // Only mark as found if we have both group and stream
+        if (logGroupName && logStreamName) {
+          logStreamFound = true;
+          if (deploymentId) {
+            await this.logToDatabase(deploymentId, `✅ Log streaming ready: ${logGroupName}/${logStreamName}`);
+          }
+        }
+      }
+
+      // If we don't have log stream info yet, try to find it by listing streams
+      if (!logStreamFound && logGroupName && deploymentId) {
+        try {
+          if (deploymentId) {
+            await this.logToDatabase(deploymentId, `🔍 Searching for log streams in ${logGroupName}...`);
+          }
+          
+          const streams = await cloudwatchLogs.describeLogStreams({
+            logGroupName: logGroupName,
+            orderBy: 'LastEventTime',
+            descending: true,
+            limit: 10
+          }).promise();
+
+          if (deploymentId) {
+            await this.logToDatabase(deploymentId, `Found ${streams.logStreams?.length || 0} log streams`);
+          }
+
+          if (streams.logStreams && streams.logStreams.length > 0) {
+            // Try multiple strategies to find the right stream
+            let matchingStream = null;
+            
+            // Strategy 1: Find stream that contains the full build ID
+            matchingStream = streams.logStreams.find(stream => 
+              stream.logStreamName?.includes(buildId)
+            );
+            
+            // Strategy 2: Find stream that contains part of the build ID
+            if (!matchingStream) {
+              const buildIdShort = buildId.split(':').pop()?.split('-').slice(0, 2).join('-');
+              matchingStream = streams.logStreams.find(stream => 
+                buildIdShort && stream.logStreamName?.includes(buildIdShort)
+              );
+            }
+            
+            // Strategy 3: Use the most recent stream (fallback)
+            if (!matchingStream) {
+              matchingStream = streams.logStreams[0];
+              if (deploymentId) {
+                await this.logToDatabase(deploymentId, `Using most recent log stream as fallback`);
+              }
+            }
+            
+            if (matchingStream) {
+              logStreamName = matchingStream.logStreamName;
+              logStreamFound = true;
+              
+              if (deploymentId) {
+                await this.logToDatabase(deploymentId, `✅ Found log stream: ${logStreamName}`);
+              }
+            }
+          }
+        } catch (error: any) {
+          if (deploymentId) {
+            await this.logToDatabase(deploymentId, `Error searching log streams: ${error.message}`);
+          }
         }
       }
 
       // Stream logs if available
       if (logGroupName && logStreamName && deploymentId) {
         try {
-          if (deploymentId) {
-            await this.logToDatabase(deploymentId, `Fetching logs from ${logGroupName}/${logStreamName}...`);
-          }
-
           const logsResult = await cloudwatchLogs.getLogEvents({
             logGroupName,
             logStreamName,
             nextToken,
             startFromHead: true
           }).promise();
-
-          if (deploymentId) {
-            await this.logToDatabase(deploymentId, `Retrieved ${logsResult.events?.length || 0} log events`);
-          }
 
           for (const event of logsResult.events || []) {
             if (event.message && event.message.trim()) {
@@ -460,8 +544,8 @@ phases:
           }
           console.warn('Failed to stream logs:', error);
         }
-      } else if (deploymentId && status === 'IN_PROGRESS') {
-        await this.logToDatabase(deploymentId, `Waiting for logs... (group: ${logGroupName || 'unknown'}, stream: ${logStreamName || 'unknown'})`);
+      } else if (deploymentId && status === 'IN_PROGRESS' && !logStreamFound) {
+        await this.logToDatabase(deploymentId, `🔍 Searching for CodeBuild logs...`);
       }
 
       if (deploymentId) {

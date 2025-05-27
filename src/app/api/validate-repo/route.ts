@@ -40,20 +40,6 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    console.log(`User ID: ${session.user.id}`)
-    console.log(`User found: ${!!user}`)
-    console.log(`GitHub accounts: ${user?.accounts?.length || 0}`)
-    if (user?.accounts && user.accounts.length > 0) {
-      console.log(`Account provider: ${user.accounts[0].provider}`)
-      console.log(`Account type: ${user.accounts[0].type}`)
-      console.log(`Account scope: ${user.accounts[0].scope}`)
-      console.log(`Access token exists: ${!!user.accounts[0].access_token}`)
-      console.log(`Access token length: ${user.accounts[0].access_token?.length || 0}`)
-      console.log(`Refresh token exists: ${!!user.accounts[0].refresh_token}`)
-      console.log(`Full account object:`, JSON.stringify(user.accounts[0], null, 2))
-    }
-    console.log(`Access token exists: ${!!user?.accounts?.[0]?.access_token}`)
-
     if (!user?.accounts?.[0]?.access_token) {
       // Try to refresh the token if we have a refresh token
       if (user?.accounts?.[0]?.refresh_token) {
