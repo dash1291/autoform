@@ -3,17 +3,17 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15
-    container_name: autopilot-postgres
+    container_name: autoform-postgres
     environment:
-      POSTGRES_DB: autopilot
-      POSTGRES_USER: autopilot
-      POSTGRES_PASSWORD: autopilot123
+      POSTGRES_DB: autoform
+      POSTGRES_USER: autoform
+      POSTGRES_PASSWORD: autoform123
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U autopilot -d autopilot"]
+      test: ["CMD-SHELL", "pg_isready -U autoform -d autoform"]
       interval: 10s
       timeout: 5s
       retries: 5
