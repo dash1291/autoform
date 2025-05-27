@@ -11,6 +11,9 @@ export default function NewProject() {
     name: '',
     gitRepoUrl: '',
     branch: 'main',
+    cpu: 256,
+    memory: 512,
+    diskSize: 20,
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -234,6 +237,68 @@ export default function NewProject() {
                 </p>
               </div>
             )}
+
+            {/* Resource Configuration Section */}
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Resource Configuration</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label htmlFor="cpu" className="block text-sm font-medium text-gray-700 mb-2">
+                    CPU (units)
+                  </label>
+                  <select
+                    id="cpu"
+                    value={formData.cpu}
+                    onChange={(e) => setFormData({ ...formData, cpu: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value={256}>256 (0.25 vCPU)</option>
+                    <option value={512}>512 (0.5 vCPU)</option>
+                    <option value={1024}>1024 (1 vCPU)</option>
+                    <option value={2048}>2048 (2 vCPU)</option>
+                    <option value={4096}>4096 (4 vCPU)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">AWS Fargate CPU allocation</p>
+                </div>
+
+                <div>
+                  <label htmlFor="memory" className="block text-sm font-medium text-gray-700 mb-2">
+                    Memory (MB)
+                  </label>
+                  <select
+                    id="memory"
+                    value={formData.memory}
+                    onChange={(e) => setFormData({ ...formData, memory: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value={512}>512 MB</option>
+                    <option value={1024}>1 GB</option>
+                    <option value={2048}>2 GB</option>
+                    <option value={4096}>4 GB</option>
+                    <option value={8192}>8 GB</option>
+                    <option value={16384}>16 GB</option>
+                    <option value={30720}>30 GB</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Container memory limit</p>
+                </div>
+
+                <div>
+                  <label htmlFor="diskSize" className="block text-sm font-medium text-gray-700 mb-2">
+                    Disk Size (GB)
+                  </label>
+                  <input
+                    type="number"
+                    id="diskSize"
+                    min="20"
+                    max="200"
+                    value={formData.diskSize}
+                    onChange={(e) => setFormData({ ...formData, diskSize: parseInt(e.target.value) || 20 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Ephemeral storage (20-200 GB)</p>
+                </div>
+              </div>
+            </div>
 
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">

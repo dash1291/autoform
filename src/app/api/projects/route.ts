@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, gitRepoUrl, branch = 'main' } = body
+    const { name, gitRepoUrl, branch = 'main', cpu = 256, memory = 512, diskSize = 20 } = body
 
     if (!name || !gitRepoUrl) {
       return NextResponse.json(
@@ -70,6 +70,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate resource configurations
+    if (cpu < 256 || cpu > 4096) {
+      return NextResponse.json(
+        { error: 'CPU must be between 256 and 4096' },
+        { status: 400 }
+      )
+    }
+    
+    if (memory < 512 || memory > 30720) {
+      return NextResponse.json(
+        { error: 'Memory must be between 512 and 30720 MB' },
+        { status: 400 }
+      )
+    }
+    
+    if (diskSize < 20 || diskSize > 200) {
+      return NextResponse.json(
+        { error: 'Disk size must be between 20 and 200 GB' },
+        { status: 400 }
+      )
+    }
+
     // Create the project
     const project = await prisma.project.create({
       data: {
@@ -78,6 +100,9 @@ export async function POST(request: NextRequest) {
         branch,
         userId: session.user.id,
         status: ProjectStatus.CREATED,
+        cpu,
+        memory,
+        diskSize,
       },
     })
 

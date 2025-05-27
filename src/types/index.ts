@@ -34,6 +34,9 @@ export interface Project {
   existingVpcId?: string
   existingSubnetIds?: string
   existingClusterArn?: string
+  cpu: number
+  memory: number
+  diskSize: number
   createdAt: Date
   updatedAt: Date
 }

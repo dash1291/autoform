@@ -71,6 +71,9 @@ model Project {
   existingVpcId   String?
   existingSubnetIds String?  // JSON array of subnet IDs
   existingClusterArn String?
+  cpu             Int                   @default(256)
+  memory          Int                   @default(512)
+  diskSize        Int                   @default(20)
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
   secretsArn      String?

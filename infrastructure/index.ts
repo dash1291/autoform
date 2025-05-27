@@ -16,6 +16,9 @@ export interface ECSInfrastructureArgs {
   existingSubnetIds?: string[];
   existingClusterArn?: string;
   environmentVariables?: EnvironmentVariable[];
+  cpu?: number;
+  memory?: number;
+  diskSize?: number;
 }
 
 export interface ECSInfrastructureOutput {
@@ -36,6 +39,9 @@ export class ECSInfrastructure {
   private containerPort: number;
   private args: ECSInfrastructureArgs;
   private region: string;
+  private cpu: string;
+  private memory: string;
+  private diskSize: number;
 
   constructor(args: ECSInfrastructureArgs) {
     this.region = args.region || 'us-east-1';
@@ -49,6 +55,9 @@ export class ECSInfrastructure {
     this.projectName = args.projectName;
     this.imageUri = args.imageUri;
     this.containerPort = args.containerPort || 3000;
+    this.cpu = String(args.cpu || 256);
+    this.memory = String(args.memory || 512);
+    this.diskSize = args.diskSize || 20;
     this.args = args;
   }
 
@@ -997,8 +1006,11 @@ export class ECSInfrastructure {
       family: `${this.projectName}-task`,
       networkMode: 'awsvpc',
       requiresCompatibilities: ['FARGATE'],
-      cpu: '256',
-      memory: '512',
+      cpu: this.cpu,
+      memory: this.memory,
+      ephemeralStorage: {
+        sizeInGiB: this.diskSize
+      },
       executionRoleArn: roles.executionRoleArn,
       taskRoleArn: roles.taskRoleArn,
       containerDefinitions: [containerDef],

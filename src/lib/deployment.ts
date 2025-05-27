@@ -643,6 +643,9 @@ phases:
       containerPort: 3000,
       region: this.region,
       environmentVariables,
+      cpu: project.cpu,
+      memory: project.memory,
+      diskSize: project.diskSize,
     };
 
     // Add existing network resources if configured
@@ -675,6 +678,7 @@ phases:
 
     if (deploymentId) {
       await this.logToDatabase(deploymentId, 'Creating/updating AWS infrastructure...');
+      await this.logToDatabase(deploymentId, `- Resource allocation: ${project.cpu} CPU units, ${project.memory} MB memory, ${project.diskSize} GB disk`);
       await this.logToDatabase(deploymentId, '- Setting up VPC and networking');
       await this.logToDatabase(deploymentId, '- Creating security groups');
       await this.logToDatabase(deploymentId, '- Setting up ECS cluster and service');
@@ -722,21 +726,30 @@ phases:
         select: {
           existingVpcId: true,
           existingSubnetIds: true,
-          existingClusterArn: true
+          existingClusterArn: true,
+          cpu: true,
+          memory: true,
+          diskSize: true
         }
       });
 
       return project || {
         existingVpcId: null,
         existingSubnetIds: null,
-        existingClusterArn: null
+        existingClusterArn: null,
+        cpu: 256,
+        memory: 512,
+        diskSize: 20
       };
     } catch (error) {
-      console.error('Error fetching project network configuration:', error);
+      console.error('Error fetching project configuration:', error);
       return {
         existingVpcId: null,
         existingSubnetIds: null,
-        existingClusterArn: null
+        existingClusterArn: null,
+        cpu: 256,
+        memory: 512,
+        diskSize: 20
       };
     }
   }

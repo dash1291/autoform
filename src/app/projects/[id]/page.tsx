@@ -9,6 +9,7 @@ import LogsViewer from '@/components/LogsViewer'
 import EnvironmentVariables from '@/components/EnvironmentVariables'
 import SimpleShell from '@/components/SimpleShell'
 import NetworkConfiguration from '@/components/NetworkConfiguration'
+import ResourceConfiguration from '@/components/ResourceConfiguration'
 
 export default function ProjectDetail() {
   const { data: session } = useSession()
@@ -450,6 +451,13 @@ export default function ProjectDetail() {
 
           {activeTab === 'resources' && (
             <>
+              <div className="bg-white shadow rounded-lg p-6">
+                <ResourceConfiguration 
+                  projectId={params.id as string} 
+                  project={project}
+                  onUpdate={fetchProject}
+                />
+              </div>
               <div className="bg-white shadow rounded-lg p-6">
                 <NetworkConfiguration 
                   projectId={params.id as string} 

@@ -44,7 +44,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { existingVpcId, existingSubnetIds, existingClusterArn } = body
+    const { existingVpcId, existingSubnetIds, existingClusterArn, cpu, memory, diskSize } = body
 
     // Check if project exists and belongs to user
     const project = await prisma.project.findFirst({
@@ -73,14 +73,45 @@ export async function PUT(
       }
     }
 
-    // Update project with network configuration
+    // Validate resource configurations if provided
+    if (cpu !== undefined && (cpu < 256 || cpu > 4096)) {
+      return NextResponse.json(
+        { error: 'CPU must be between 256 and 4096' },
+        { status: 400 }
+      )
+    }
+    
+    if (memory !== undefined && (memory < 512 || memory > 30720)) {
+      return NextResponse.json(
+        { error: 'Memory must be between 512 and 30720 MB' },
+        { status: 400 }
+      )
+    }
+    
+    if (diskSize !== undefined && (diskSize < 20 || diskSize > 200)) {
+      return NextResponse.json(
+        { error: 'Disk size must be between 20 and 200 GB' },
+        { status: 400 }
+      )
+    }
+
+    // Prepare update data
+    const updateData: any = {}
+    
+    // Network configuration
+    if (existingVpcId !== undefined) updateData.existingVpcId = existingVpcId || null
+    if (existingSubnetIds !== undefined) updateData.existingSubnetIds = subnetIdsJson
+    if (existingClusterArn !== undefined) updateData.existingClusterArn = existingClusterArn || null
+    
+    // Resource configuration
+    if (cpu !== undefined) updateData.cpu = cpu
+    if (memory !== undefined) updateData.memory = memory
+    if (diskSize !== undefined) updateData.diskSize = diskSize
+
+    // Update project with network and resource configuration
     const updatedProject = await prisma.project.update({
       where: { id: params.id },
-      data: {
-        existingVpcId: existingVpcId || null,
-        existingSubnetIds: subnetIdsJson,
-        existingClusterArn: existingClusterArn || null,
-      },
+      data: updateData,
     })
 
     return NextResponse.json(updatedProject)
