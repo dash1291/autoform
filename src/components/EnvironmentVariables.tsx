@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { EnvironmentVariable } from '@/types'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 interface EnvironmentVariablesProps {
   projectId: string
@@ -213,12 +216,9 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
             Configure environment variables and secrets for your application. Secrets are stored securely in AWS Secrets Manager.
           </p>
         </div>
-        <button
-          onClick={() => setIsAdding(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-        >
+        <Button onClick={() => setIsAdding(true)}>
           Add Variable
-        </button>
+        </Button>
       </div>
 
       {/* Error Message */}
@@ -280,23 +280,22 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
           </div>
 
           <div className="mt-4 flex gap-2">
-            <button
+            <Button
               onClick={handleAddVariable}
               disabled={!newVar.key || !validateKey(newVar.key) || !newVar.value}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Add Variable
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => {
                 setIsAdding(false)
                 setNewVar({ key: '', value: '', isSecret: false })
                 setError(null)
               }}
-              className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -370,19 +369,20 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex gap-2">
-                          <button
+                          <Button
+                            size="sm"
                             onClick={handleUpdateVariable}
                             disabled={!editVar.value || (Boolean(editVar.key) && !validateKey(editVar.key))}
-                            className="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
                             Save
-                          </button>
-                          <button
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
                             onClick={handleCancelEdit}
-                            className="text-gray-600 hover:text-gray-900 transition-colors"
                           >
                             Cancel
-                          </button>
+                          </Button>
                         </div>
                       </td>
                     </>
@@ -414,18 +414,21 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex gap-2">
-                          <button
+                          <Button
+                            size="sm"
+                            variant="ghost"
                             onClick={() => handleEditVariable(envVar)}
-                            className="text-blue-600 hover:text-blue-900 transition-colors"
                           >
                             Edit
-                          </button>
-                          <button
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
                             onClick={() => handleDeleteVariable(envVar.key)}
-                            className="text-red-600 hover:text-red-900 transition-colors"
+                            className="text-destructive hover:text-destructive"
                           >
                             Delete
-                          </button>
+                          </Button>
                         </div>
                       </td>
                     </>

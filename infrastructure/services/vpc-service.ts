@@ -153,7 +153,35 @@ export class VPCService {
   }
 
   private async setupNetworking(): Promise<void> {
-    // Create and attach internet gateway
+    // Get or create internet gateway
+    const igwId = await this.getOrCreateInternetGateway();
+    
+    // Get or create route table and ensure proper routes
+    await this.getOrCreateRouteTable(igwId);
+
+    console.log('Networking setup complete');
+  }
+
+  private async getOrCreateInternetGateway(): Promise<string> {
+    try {
+      // Check if IGW already exists and is attached to this VPC
+      const igws = await this.ec2.describeInternetGateways({
+        Filters: [
+          { Name: 'attachment.vpc-id', Values: [this.vpcId] }
+        ]
+      }).promise();
+
+      if (igws.InternetGateways && igws.InternetGateways.length > 0) {
+        const igw = igws.InternetGateways[0];
+        console.log(`Found existing internet gateway: ${igw.InternetGatewayId}`);
+        return igw.InternetGatewayId!;
+      }
+    } catch (error) {
+      console.log('No existing internet gateway found');
+    }
+
+    // Create new internet gateway
+    console.log('Creating new internet gateway');
     const igw = await this.ec2.createInternetGateway({
       TagSpecifications: [{
         ResourceType: 'internet-gateway',
@@ -166,7 +194,44 @@ export class VPCService {
       InternetGatewayId: igw.InternetGateway!.InternetGatewayId!
     }).promise();
 
-    // Create route table and routes
+    console.log(`Created and attached new internet gateway: ${igw.InternetGateway!.InternetGatewayId}`);
+    return igw.InternetGateway!.InternetGatewayId!;
+  }
+
+  private async getOrCreateRouteTable(igwId: string): Promise<void> {
+    try {
+      // Check if custom route table already exists for this project
+      const routeTables = await this.ec2.describeRouteTables({
+        Filters: [
+          { Name: 'vpc-id', Values: [this.vpcId] },
+          { Name: 'tag:Name', Values: [`${this.projectName}-public-rt`] }
+        ]
+      }).promise();
+
+      if (routeTables.RouteTables && routeTables.RouteTables.length > 0) {
+        const routeTable = routeTables.RouteTables[0];
+        console.log(`Found existing route table: ${routeTable.RouteTableId}`);
+        
+        // Ensure IGW route exists
+        await this.ensureInternetRoute(routeTable.RouteTableId!, igwId);
+        
+        // Ensure subnet associations
+        await this.ensureSubnetAssociations(routeTable.RouteTableId!);
+        return;
+      }
+    } catch (error) {
+      console.log('No existing custom route table found');
+    }
+
+    // Check if subnets are already associated with a route table that has internet access
+    const hasInternetAccess = await this.checkSubnetsHaveInternetAccess(igwId);
+    if (hasInternetAccess) {
+      console.log('Subnets already have internet access via existing route table');
+      return;
+    }
+
+    // Create new route table
+    console.log('Creating new route table');
     const routeTable = await this.ec2.createRouteTable({
       VpcId: this.vpcId,
       TagSpecifications: [{
@@ -175,21 +240,100 @@ export class VPCService {
       }]
     }).promise();
 
-    await this.ec2.createRoute({
-      RouteTableId: routeTable.RouteTable!.RouteTableId!,
-      DestinationCidrBlock: '0.0.0.0/0',
-      GatewayId: igw.InternetGateway!.InternetGatewayId!
-    }).promise();
+    await this.ensureInternetRoute(routeTable.RouteTable!.RouteTableId!, igwId);
+    await this.ensureSubnetAssociations(routeTable.RouteTable!.RouteTableId!);
+  }
 
-    // Associate subnets with route table
-    for (const subnetId of this.subnetIds) {
-      await this.ec2.associateRouteTable({
-        RouteTableId: routeTable.RouteTable!.RouteTableId!,
-        SubnetId: subnetId
+  private async ensureInternetRoute(routeTableId: string, igwId: string): Promise<void> {
+    try {
+      // Check if internet route already exists
+      const routeTable = await this.ec2.describeRouteTables({
+        RouteTableIds: [routeTableId]
       }).promise();
+
+      const hasInternetRoute = routeTable.RouteTables?.[0]?.Routes?.some(route => 
+        route.DestinationCidrBlock === '0.0.0.0/0' && route.GatewayId === igwId
+      );
+
+      if (hasInternetRoute) {
+        console.log('Internet route already exists');
+        return;
+      }
+
+      // Create internet route
+      await this.ec2.createRoute({
+        RouteTableId: routeTableId,
+        DestinationCidrBlock: '0.0.0.0/0',
+        GatewayId: igwId
+      }).promise();
+
+      console.log('Created internet route');
+    } catch (error: any) {
+      if (error.code === 'RouteAlreadyExists') {
+        console.log('Internet route already exists');
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  private async ensureSubnetAssociations(routeTableId: string): Promise<void> {
+    for (const subnetId of this.subnetIds) {
+      try {
+        // Check if subnet is already associated with this route table
+        const associations = await this.ec2.describeRouteTables({
+          Filters: [
+            { Name: 'association.subnet-id', Values: [subnetId] },
+            { Name: 'route-table-id', Values: [routeTableId] }
+          ]
+        }).promise();
+
+        if (associations.RouteTables && associations.RouteTables.length > 0) {
+          console.log(`Subnet ${subnetId} already associated with route table`);
+          continue;
+        }
+
+        // Associate subnet with route table
+        await this.ec2.associateRouteTable({
+          RouteTableId: routeTableId,
+          SubnetId: subnetId
+        }).promise();
+
+        console.log(`Associated subnet ${subnetId} with route table`);
+      } catch (error: any) {
+        if (error.code === 'Resource.AlreadyAssociated') {
+          console.log(`Subnet ${subnetId} already associated with a route table`);
+        } else {
+          throw error;
+        }
+      }
+    }
+  }
+
+  private async checkSubnetsHaveInternetAccess(igwId: string): Promise<boolean> {
+    for (const subnetId of this.subnetIds) {
+      // Get the route table associated with this subnet
+      const routeTables = await this.ec2.describeRouteTables({
+        Filters: [
+          { Name: 'association.subnet-id', Values: [subnetId] }
+        ]
+      }).promise();
+
+      if (!routeTables.RouteTables || routeTables.RouteTables.length === 0) {
+        return false; // No route table associated
+      }
+
+      const routeTable = routeTables.RouteTables[0];
+      const hasInternetRoute = routeTable.Routes?.some(route => 
+        route.DestinationCidrBlock === '0.0.0.0/0' && route.GatewayId === igwId
+      );
+
+      if (!hasInternetRoute) {
+        return false; // No internet route
+      }
     }
 
-    console.log('Networking setup complete');
+    return true; // All subnets have internet access
   }
 
   private async createOrUpdateSecurityGroups(): Promise<{ albSecurityGroupId: string; ecsSecurityGroupId: string }> {

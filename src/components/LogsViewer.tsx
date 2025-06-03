@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
 
 interface LogEntry {
   timestamp: number
@@ -87,13 +88,12 @@ export default function LogsViewer({ projectId }: LogsViewerProps) {
       {/* Controls */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between bg-gray-50 p-4 rounded-lg">
         <div className="flex flex-wrap gap-4 items-center">
-          <button
+          <Button
             onClick={fetchLogs}
             disabled={loading}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Loading...' : 'Refresh'}
-          </button>
+          </Button>
           
           <label className="flex items-center space-x-2">
             <input

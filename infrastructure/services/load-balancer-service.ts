@@ -79,7 +79,26 @@ export class LoadBalancerService {
   }
 
   private async createTargetGroup(): Promise<string> {
-    // Always create a new target group (they're cheap and ensure fresh health checks)
+    try {
+      // Check if target group already exists
+      const existingTgs = await this.elbv2.describeTargetGroups({
+        Names: [`${this.projectName}-tg`]
+      }).promise();
+
+      if (existingTgs.TargetGroups && existingTgs.TargetGroups.length > 0) {
+        const existingTg = existingTgs.TargetGroups[0];
+        console.log(`Found existing target group: ${existingTg.TargetGroupArn}`);
+        
+        // Update the target group attributes to ensure correct health check settings
+        await this.updateTargetGroupAttributes(existingTg.TargetGroupArn!);
+        
+        return existingTg.TargetGroupArn!;
+      }
+    } catch (error) {
+      console.log('No existing target group found, creating new one');
+    }
+
+    // Create new target group
     const result = await this.elbv2.createTargetGroup({
       Name: `${this.projectName}-tg`,
       Port: this.containerPort,
@@ -101,6 +120,29 @@ export class LoadBalancerService {
     const targetGroup = result.TargetGroups![0];
     console.log(`Created target group: ${targetGroup.TargetGroupArn}`);
     return targetGroup.TargetGroupArn!;
+  }
+
+  private async updateTargetGroupAttributes(targetGroupArn: string): Promise<void> {
+    try {
+      // Update health check settings to ensure they match our requirements
+      await this.elbv2.modifyTargetGroup({
+        TargetGroupArn: targetGroupArn,
+        HealthCheckEnabled: true,
+        HealthCheckIntervalSeconds: 30,
+        HealthCheckPath: '/health',
+        HealthCheckPort: 'traffic-port',
+        HealthCheckProtocol: 'HTTP',
+        HealthCheckTimeoutSeconds: 5,
+        HealthyThresholdCount: 2,
+        UnhealthyThresholdCount: 2,
+        Matcher: { HttpCode: '200' }
+      }).promise();
+
+      console.log('Updated target group health check settings');
+    } catch (error) {
+      console.warn('Failed to update target group attributes:', error);
+      // Don't fail deployment if we can't update attributes
+    }
   }
 
   private async createListener(): Promise<string> {

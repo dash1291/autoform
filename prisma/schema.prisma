@@ -73,7 +73,7 @@ model Project {
   existingClusterArn String?
   cpu             Int                   @default(256)
   memory          Int                   @default(512)
-  diskSize        Int                   @default(20)
+  diskSize        Int                   @default(21)
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
   secretsArn      String?

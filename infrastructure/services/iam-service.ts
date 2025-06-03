@@ -255,13 +255,14 @@ export class IAMService {
         const role = await this.iam.createRole({
           RoleName: roleName,
           AssumeRolePolicyDocument: JSON.stringify(assumeRolePolicy),
-          InlinePolicies: [
-            {
-              PolicyName: `${this.projectName}-codebuild-policy`,
-              PolicyDocument: JSON.stringify(inlinePolicy),
-            },
-          ],
           Tags: [{ Key: 'Name', Value: roleName }]
+        }).promise();
+
+        // Attach inline policy
+        await this.iam.putRolePolicy({
+          RoleName: roleName,
+          PolicyName: `${this.projectName}-codebuild-policy`,
+          PolicyDocument: JSON.stringify(inlinePolicy)
         }).promise();
 
         // Attach managed policy

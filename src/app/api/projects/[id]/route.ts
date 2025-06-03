@@ -88,9 +88,9 @@ export async function PUT(
       )
     }
     
-    if (diskSize !== undefined && (diskSize < 20 || diskSize > 200)) {
+    if (diskSize !== undefined && (diskSize < 21 || diskSize > 200)) {
       return NextResponse.json(
-        { error: 'Disk size must be between 20 and 200 GB' },
+        { error: 'Disk size must be between 21 and 200 GB' },
         { status: 400 }
       )
     }

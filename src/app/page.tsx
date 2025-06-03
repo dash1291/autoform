@@ -4,6 +4,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
 
 export default function Home() {
   const { data: session } = useSession()
@@ -35,18 +36,21 @@ export default function Home() {
             Deploy your applications to AWS ECS with ease
           </p>
           <div className="space-x-4">
-            <button 
+            <Button 
               onClick={handleGetStarted}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
+              size="lg"
             >
               Get Started
-            </button>
-            <Link
-              href="/api/auth/signin"
-              className="border border-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-50 transition-colors inline-block"
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              size="lg"
             >
-              Learn More
-            </Link>
+              <Link href="/api/auth/signin">
+                Learn More
+              </Link>
+            </Button>
           </div>
         </div>
       </div>

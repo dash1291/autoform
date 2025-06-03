@@ -739,7 +739,7 @@ phases:
         existingClusterArn: null,
         cpu: 256,
         memory: 512,
-        diskSize: 20
+        diskSize: 21
       };
     } catch (error) {
       console.error('Error fetching project configuration:', error);
@@ -749,7 +749,7 @@ phases:
         existingClusterArn: null,
         cpu: 256,
         memory: 512,
-        diskSize: 20
+        diskSize: 21
       };
     }
   }

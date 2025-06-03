@@ -31,7 +31,7 @@ export class ECSInfrastructure {
     this.containerPort = args.containerPort || 3000;
     this.cpu = args.cpu || 256;
     this.memory = args.memory || 512;
-    this.diskSize = args.diskSize || 20;
+    this.diskSize = args.diskSize || 21;
     this.args = args;
   }
 

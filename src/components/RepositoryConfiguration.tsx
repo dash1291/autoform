@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Project } from '@/types'
+import { Button } from '@/components/ui/button'
 
 interface RepositoryConfigurationProps {
   projectId: string
@@ -116,13 +117,12 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
         )}
 
         <div className="flex space-x-4">
-          <button
+          <Button
             type="submit"
             disabled={loading || isDeploying || !hasChanges}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? 'Saving...' : 'Save Changes'}
-          </button>
+          </Button>
         </div>
       </form>
 

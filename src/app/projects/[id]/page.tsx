@@ -11,6 +11,9 @@ import SimpleShell from '@/components/SimpleShell'
 import NetworkConfiguration from '@/components/NetworkConfiguration'
 import ResourceConfiguration from '@/components/ResourceConfiguration'
 import RepositoryConfiguration from '@/components/RepositoryConfiguration'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Clock, GitCommit } from 'lucide-react'
 
 export default function ProjectDetail() {
   const { data: session } = useSession()
@@ -219,40 +222,21 @@ export default function ProjectDetail() {
               <h1 className="text-3xl font-bold text-gray-900">{project.name}</h1>
               <p className="text-gray-600">{project.gitRepoUrl}</p>
             </div>
-            <div className="flex space-x-3">
-              {project.status === 'DEPLOYING' || project.status === 'BUILDING' || project.status === 'CLONING' ? (
-                <>
-                  <button
-                    disabled
-                    className="bg-gray-400 text-white px-4 py-2 rounded-lg cursor-not-allowed"
-                  >
-                    {project.status === 'DEPLOYING' ? 'Deploying...' : 
-                     project.status === 'BUILDING' ? 'Building...' : 
-                     'Cloning...'}
-                  </button>
-                  <button
-                    onClick={handleAbortDeployment}
-                    className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-                  >
-                    Abort Deployment
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={handleDeploy}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            {project.status === 'DEPLOYING' || project.status === 'BUILDING' || project.status === 'CLONING' ? (
+              <div className="flex space-x-3">
+                <Button disabled variant="secondary">
+                  {project.status === 'DEPLOYING' ? 'Deploying...' : 
+                   project.status === 'BUILDING' ? 'Building...' : 
+                   'Cloning...'}
+                </Button>
+                <Button
+                  onClick={handleAbortDeployment}
+                  variant="destructive"
                 >
-                  Deploy
-                </button>
-              )}
-              <button
-                onClick={handleDelete}
-                disabled={project.status === 'DEPLOYING' || project.status === 'BUILDING' || project.status === 'CLONING'}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Delete
-              </button>
-            </div>
+                  Abort Deployment
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -260,56 +244,61 @@ export default function ProjectDetail() {
         <div className="mb-6">
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8">
-              <button
+              <Button
+                variant="ghost"
                 onClick={() => setActiveTab('overview')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
                   activeTab === 'overview'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
                 }`}
               >
                 Overview
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={() => setActiveTab('deployments')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
                   activeTab === 'deployments'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
                 }`}
               >
                 Deployments ({deployments.length})
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={() => setActiveTab('logs')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
                   activeTab === 'logs'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
                 }`}
               >
                 Application Logs
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={() => setActiveTab('shell')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
                   activeTab === 'shell'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
                 }`}
               >
                 Shell Access
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={() => setActiveTab('settings')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
                   activeTab === 'settings'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
                 }`}
               >
                 Settings
-              </button>
+              </Button>
             </nav>
           </div>
         </div>
@@ -385,30 +374,49 @@ export default function ProjectDetail() {
 
           {activeTab === 'deployments' && (
             <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Deployment History</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">Deployment History</h2>
+                {project.status !== 'DEPLOYING' && project.status !== 'BUILDING' && project.status !== 'CLONING' && (
+                  <Button onClick={handleDeploy}>
+                    Deploy
+                  </Button>
+                )}
+              </div>
               {deployments.length === 0 ? (
                 <p className="text-gray-500">No deployments yet.</p>
               ) : (
                 <div className="space-y-4">
                   {deployments.map((deployment) => (
                     <div key={deployment.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              deployment.status === 'SUCCESS' ? 'bg-green-100 text-green-800' :
-                              deployment.status === 'FAILED' ? 'bg-red-100 text-red-800' :
-                              'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {deployment.status}
-                            </span>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            deployment.status === 'SUCCESS' ? 'bg-green-100 text-green-800' :
+                            deployment.status === 'FAILED' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {deployment.status}
+                          </span>
+                          <div className="flex items-center space-x-1">
+                            <GitCommit className="h-3 w-3 text-gray-500" />
                             <code className="text-sm bg-gray-100 px-2 py-1 rounded">
                               {deployment.commitSha.substring(0, 8)}
                             </code>
                           </div>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {new Date(deployment.createdAt).toLocaleString()}
-                          </p>
+                          <div className="flex items-center space-x-1">
+                            <Clock className="h-3 w-3 text-gray-500" />
+                            <span className="text-sm text-gray-600">
+                              {new Date(deployment.createdAt).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric'
+                              })} {new Date(deployment.createdAt).toLocaleTimeString('en-US', {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true
+                              })}
+                            </span>
+                          </div>
                         </div>
                       </div>
                       {deployment.logs && (
@@ -441,36 +449,27 @@ export default function ProjectDetail() {
                 {/* Vertical sidebar navigation */}
                 <div className="w-64 bg-gray-50 border-r border-gray-200">
                   <nav className="p-4 space-y-2">
-                    <button
+                    <Button
+                      variant={activeSettingsTab === 'repository' ? 'secondary' : 'ghost'}
                       onClick={() => setActiveSettingsTab('repository')}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        activeSettingsTab === 'repository'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-700 hover:bg-gray-100'
-                      }`}
+                      className="w-full justify-start text-sm font-medium"
                     >
                       Git Repository
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant={activeSettingsTab === 'environment' ? 'secondary' : 'ghost'}
                       onClick={() => setActiveSettingsTab('environment')}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        activeSettingsTab === 'environment'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-700 hover:bg-gray-100'
-                      }`}
+                      className="w-full justify-start text-sm font-medium"
                     >
                       Environment Variables
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant={activeSettingsTab === 'resources' ? 'secondary' : 'ghost'}
                       onClick={() => setActiveSettingsTab('resources')}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        activeSettingsTab === 'resources'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-700 hover:bg-gray-100'
-                      }`}
+                      className="w-full justify-start text-sm font-medium"
                     >
                       AWS Resources
-                    </button>
+                    </Button>
                   </nav>
                 </div>
 

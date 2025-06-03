@@ -3,6 +3,11 @@
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export default function NewProject() {
   const { data: session } = useSession()
@@ -13,7 +18,7 @@ export default function NewProject() {
     branch: 'main',
     cpu: 256,
     memory: 512,
-    diskSize: 20,
+    diskSize: 21,
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -289,13 +294,13 @@ export default function NewProject() {
                   <input
                     type="number"
                     id="diskSize"
-                    min="20"
+                    min="21"
                     max="200"
                     value={formData.diskSize}
-                    onChange={(e) => setFormData({ ...formData, diskSize: parseInt(e.target.value) || 20 })}
+                    onChange={(e) => setFormData({ ...formData, diskSize: parseInt(e.target.value) || 21 })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Ephemeral storage (20-200 GB)</p>
+                  <p className="text-xs text-gray-500 mt-1">Ephemeral storage (21-200 GB)</p>
                 </div>
               </div>
             </div>
@@ -307,20 +312,20 @@ export default function NewProject() {
             )}
 
             <div className="flex space-x-4">
-              <button
+              <Button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                className="flex-1"
               >
                 {loading ? 'Creating...' : 'Create Project'}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => router.push('/dashboard')}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </form>
         </div>

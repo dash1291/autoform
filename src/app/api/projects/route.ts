@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, gitRepoUrl, branch = 'main', cpu = 256, memory = 512, diskSize = 20 } = body
+    const { name, gitRepoUrl, branch = 'main', cpu = 256, memory = 512, diskSize = 21 } = body
 
     if (!name || !gitRepoUrl) {
       return NextResponse.json(
@@ -85,9 +85,9 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    if (diskSize < 20 || diskSize > 200) {
+    if (diskSize < 21 || diskSize > 200) {
       return NextResponse.json(
-        { error: 'Disk size must be between 20 and 200 GB' },
+        { error: 'Disk size must be between 21 and 200 GB' },
         { status: 400 }
       )
     }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { Button } from '@/components/ui/button'
 
 interface SimpleShellProps {
   projectId: string
@@ -153,12 +154,14 @@ export default function SimpleShell({ projectId, isActive = false }: SimpleShell
                 <pre className="whitespace-pre-wrap">{shellCommand.command}</pre>
               </div>
               <div className="mt-2 flex space-x-2">
-                <button
+                <Button
                   onClick={() => navigator.clipboard.writeText(shellCommand.command)}
-                  className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
                 >
                   Copy Command
-                </button>
+                </Button>
                 <span className="text-xs text-gray-500">
                   Run this command in your terminal (requires AWS CLI configured)
                 </span>

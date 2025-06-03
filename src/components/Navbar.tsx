@@ -2,23 +2,26 @@
 
 import { signIn, signOut, useSession } from 'next-auth/react'
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 export default function Navbar() {
   const { data: session, status } = useSession()
 
   return (
-    <nav className="bg-white shadow-sm border-b">
+    <nav className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
-            <Link href="/" className="text-xl font-bold text-gray-900">
+            <Link href="/" className="text-xl font-bold text-foreground">
               Autoform
             </Link>
           </div>
           
           <div className="flex items-center space-x-4">
+            <ThemeToggle />
             {status === 'loading' ? (
-              <div>Loading...</div>
+              <div className="text-muted-foreground">Loading...</div>
             ) : session ? (
               <>
                 <div className="flex items-center space-x-3">
@@ -27,22 +30,23 @@ export default function Navbar() {
                     src={session.user?.image || ''}
                     alt={session.user?.name || ''}
                   />
-                  <span className="text-sm text-gray-700">{session.user?.name}</span>
-                  <button
+                  <span className="text-sm text-foreground">{session.user?.name}</span>
+                  <Button
+                    variant="ghost"
                     onClick={() => signOut()}
-                    className="text-gray-500 hover:text-gray-700 text-sm"
+                    className="text-muted-foreground hover:text-foreground"
                   >
                     Sign out
-                  </button>
+                  </Button>
                 </div>
               </>
             ) : (
-              <button
+              <Button
                 onClick={() => signIn('github')}
-                className="bg-gray-900 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-700"
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 Sign in with GitHub
-              </button>
+              </Button>
             )}
           </div>
         </div>
