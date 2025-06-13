@@ -260,7 +260,8 @@ async def check_exec_availability(
                 "clusterArn": cluster_arn,  # Changed from 'cluster' to 'clusterArn'
                 "containerName": container_name,  # Added containerName
                 "taskCount": len(running_tasks),
-                "containers": containers
+                "containers": containers,
+                "region": region  # Add region info for frontend
             }
         else:
             return {

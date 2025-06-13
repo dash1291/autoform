@@ -32,12 +32,12 @@ export const useAuth = () => {
 
   // Exchange NextAuth session for JWT token when session changes
   useEffect(() => {
-    if (session?.user && !jwtToken) {
+    if (session?.user && !jwtToken && status !== 'loading') {
       exchangeSessionForJwt()
-    } else if (!session && jwtToken) {
+    } else if (!session && jwtToken && status !== 'loading') {
       clearJwtToken()
     }
-  }, [session, jwtToken])
+  }, [session, jwtToken, status])
 
   const exchangeSessionForJwt = async () => {
     try {
@@ -88,8 +88,8 @@ export const useAuth = () => {
 
   return {
     user: session?.user || null,
-    isAuthenticated: !!session,
-    isLoading: status === 'loading',
+    isAuthenticated: !!session && !!jwtToken,
+    isLoading: status === 'loading' || (!!session && !jwtToken),
     jwtToken,
     getAuthHeaders,
     refreshJwtToken: exchangeSessionForJwt,

@@ -13,11 +13,11 @@ import RepositoryConfiguration from '@/components/RepositoryConfiguration'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Clock, GitCommit } from 'lucide-react'
-import { useJwtStore } from '@/lib/auth-client'
+import { useAuth } from '@/lib/auth-client'
 import { apiClient } from '@/lib/api'
 
 export default function ProjectDetail() {
-  const { jwtToken } = useJwtStore()
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
   const params = useParams()
   const router = useRouter()
   const [project, setProject] = useState<Project | null>(null)
@@ -30,11 +30,13 @@ export default function ProjectDetail() {
   const [activeSettingsTab, setActiveSettingsTab] = useState<'environment' | 'repository' | 'resources'>('repository')
 
   useEffect(() => {
-    if (jwtToken && params.id) {
+    if (isAuthenticated && !authLoading && params.id) {
       fetchProject()
       fetchDeployments()
+    } else if (!authLoading && !isAuthenticated) {
+      setLoading(false)
     }
-  }, [jwtToken, params.id])
+  }, [isAuthenticated, authLoading, params.id])
 
   // Poll for live logs when there's an active deployment
   useEffect(() => {
@@ -141,7 +143,7 @@ export default function ProjectDetail() {
     }
   }
 
-  if (!jwtToken) {
+  if (!authLoading && !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -152,7 +154,7 @@ export default function ProjectDetail() {
     )
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>

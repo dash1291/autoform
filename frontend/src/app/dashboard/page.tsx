@@ -4,18 +4,20 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Project } from '@/types'
 import { apiClient } from '@/lib/api'
-import { useJwtStore } from '@/lib/auth-client'
+import { useAuth } from '@/lib/auth-client'
 
 export default function Dashboard() {
-  const { jwtToken } = useJwtStore()
+  const { isAuthenticated, isLoading } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (jwtToken) {
+    if (isAuthenticated && !isLoading) {
       fetchProjects()
+    } else if (!isLoading && !isAuthenticated) {
+      setLoading(false)
     }
-  }, [jwtToken])
+  }, [isAuthenticated, isLoading])
 
   const fetchProjects = async () => {
     try {
