@@ -1,0 +1,302 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Project } from '@/types'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { CheckCircle, GitBranch, Loader2 } from 'lucide-react'
+import { apiClient } from '@/lib/api'
+
+interface RepositoryConfigurationProps {
+  projectId: string
+  project: Project
+  onUpdate: () => void
+}
+
+export default function RepositoryConfiguration({ projectId, project, onUpdate }: RepositoryConfigurationProps) {
+  const [formData, setFormData] = useState({
+    gitRepoUrl: project.gitRepoUrl || '',
+    branch: project.branch || 'main',
+    subdirectory: project.subdirectory || '',
+    port: project.port || 3000,
+    healthCheckPath: project.healthCheckPath || '/health',
+  })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [validating, setValidating] = useState(false)
+  const [repoInfo, setRepoInfo] = useState<any>(null)
+  const [branches, setBranches] = useState<string[]>([])
+  const [validationTimeout, setValidationTimeout] = useState<NodeJS.Timeout | null>(null)
+
+  const validateRepository = async (url: string) => {
+    if (!url || !url.includes('github.com')) return
+
+    setValidating(true)
+    setError('')
+    setRepoInfo(null)
+
+    try {
+      const data = await apiClient.validateRepository(url)
+
+      if (data.valid) {
+        setRepoInfo(data.repository)
+        setBranches(data.repository.branches || [data.repository.defaultBranch])
+      } else {
+        setBranches([])
+        setError(data.error)
+      }
+    } catch (err) {
+      setError('Failed to validate repository')
+      setBranches([])
+    } finally {
+      setValidating(false)
+    }
+  }
+
+  const handleRepoUrlChange = (url: string) => {
+    setFormData({ ...formData, gitRepoUrl: url })
+    setError('')
+    setSuccess('')
+    setRepoInfo(null)
+    setBranches([])
+
+    if (validationTimeout) {
+      clearTimeout(validationTimeout)
+    }
+
+    if (url && url.includes('github.com')) {
+      const timeout = setTimeout(() => {
+        validateRepository(url)
+      }, 1000)
+      setValidationTimeout(timeout)
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (validationTimeout) {
+        clearTimeout(validationTimeout)
+      }
+    }
+  }, [validationTimeout])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      await apiClient.updateProject(projectId, formData)
+      setSuccess('Repository configuration updated successfully!')
+      onUpdate()
+    } catch (err) {
+      setError('Failed to update repository configuration')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Check if form data has changed from original values
+  const hasChanges = 
+    formData.gitRepoUrl !== (project.gitRepoUrl || '') ||
+    formData.branch !== (project.branch || 'main') ||
+    formData.subdirectory !== (project.subdirectory || '') ||
+    formData.port !== (project.port || 3000) ||
+    formData.healthCheckPath !== (project.healthCheckPath || '/health')
+
+  const isDeploying = project.status === 'DEPLOYING' || project.status === 'BUILDING' || project.status === 'CLONING'
+
+  return (
+    <div>
+      <div className="mb-4">
+        <h2 className="text-xl font-semibold text-gray-900">Repository Configuration</h2>
+      </div>
+      
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div>
+          <label htmlFor="gitRepoUrl" className="block text-sm font-medium text-gray-700 mb-2">
+            Repository URL
+          </label>
+          <div className="relative">
+            <input
+              type="url"
+              id="gitRepoUrl"
+              value={formData.gitRepoUrl}
+              onChange={(e) => handleRepoUrlChange(e.target.value)}
+              disabled={isDeploying}
+              className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ${repoInfo ? 'pr-10' : ''}`}
+              placeholder="https://github.com/username/repository"
+              required
+            />
+            {validating && (
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+              </div>
+            )}
+            {repoInfo && !validating && (
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                <CheckCircle className="h-4 w-4 text-green-500" />
+              </div>
+            )}
+          </div>
+          {repoInfo && (
+            <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center space-x-2 text-sm text-green-800">
+                <CheckCircle className="h-4 w-4" />
+                <span className="font-medium">Repository validated</span>
+              </div>
+              <div className="mt-1 text-sm text-green-700">
+                <div className="flex items-center space-x-2">
+                  <GitBranch className="h-3 w-3" />
+                  <span>{repoInfo.fullName}</span>
+                  {repoInfo.private && (
+                    <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">Private</span>
+                  )}
+                </div>
+                {repoInfo.description && (
+                  <p className="mt-1 text-xs">{repoInfo.description}</p>
+                )}
+              </div>
+            </div>
+          )}
+          <p className="text-xs text-gray-500 mt-1">GitHub repository URL for your project</p>
+        </div>
+
+        <div>
+          <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-2">
+            Branch
+          </label>
+          {branches.length > 0 ? (
+            <Select
+              value={formData.branch}
+              onValueChange={(value) => setFormData({ ...formData, branch: value })}
+              disabled={isDeploying}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a branch" />
+              </SelectTrigger>
+              <SelectContent>
+                {branches.map((branch) => (
+                  <SelectItem key={branch} value={branch}>
+                    <div className="flex items-center space-x-2">
+                      <GitBranch className="h-3 w-3" />
+                      <span>{branch}</span>
+                      {repoInfo?.defaultBranch === branch && (
+                        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">Default</span>
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <input
+              type="text"
+              id="branch"
+              value={formData.branch}
+              onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
+              disabled={isDeploying}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              placeholder="main"
+              required
+            />
+          )}
+          <p className="text-xs text-gray-500 mt-1">
+            {branches.length > 0 
+              ? `Choose from ${branches.length} available branches` 
+              : 'Git branch to deploy from'
+            }
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor="subdirectory" className="block text-sm font-medium text-gray-700 mb-2">
+            Subdirectory (Optional)
+          </label>
+          <input
+            type="text"
+            id="subdirectory"
+            value={formData.subdirectory}
+            onChange={(e) => setFormData({ ...formData, subdirectory: e.target.value })}
+            disabled={isDeploying}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            placeholder="e.g., backend or apps/api"
+          />
+          <p className="text-xs text-gray-500 mt-1">Path to the subdirectory containing your Dockerfile (leave empty for root)</p>
+        </div>
+
+        <div>
+          <label htmlFor="port" className="block text-sm font-medium text-gray-700 mb-2">
+            Application Port
+          </label>
+          <input
+            type="number"
+            id="port"
+            value={formData.port}
+            onChange={(e) => setFormData({ ...formData, port: parseInt(e.target.value) || 3000 })}
+            disabled={isDeploying}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            placeholder="3000"
+            required
+          />
+          <p className="text-xs text-gray-500 mt-1">The port your application listens on</p>
+        </div>
+
+        <div>
+          <label htmlFor="healthCheckPath" className="block text-sm font-medium text-gray-700 mb-2">
+            Health Check Path
+          </label>
+          <input
+            type="text"
+            id="healthCheckPath"
+            value={formData.healthCheckPath}
+            onChange={(e) => setFormData({ ...formData, healthCheckPath: e.target.value })}
+            disabled={isDeploying}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            placeholder="/health"
+            required
+          />
+          <p className="text-xs text-gray-500 mt-1">The endpoint used by the load balancer to check application health</p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-800">{error}</p>
+          </div>
+        )}
+
+        {success && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <p className="text-green-800">{success}</p>
+          </div>
+        )}
+
+        {isDeploying && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <p className="text-yellow-800">
+              Cannot modify repository configuration while deployment is in progress.
+            </p>
+          </div>
+        )}
+
+        <div className="flex space-x-4">
+          <Button
+            type="submit"
+            disabled={loading || isDeploying || !hasChanges}
+          >
+            {loading ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
+      </form>
+
+      <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <h4 className="font-medium text-yellow-900 mb-2">⚠️ Important</h4>
+        <p className="text-sm text-yellow-800">
+          Repository changes require a new deployment to take effect. Make sure the new repository URL is accessible with your GitHub authentication.
+        </p>
+      </div>
+    </div>
+  )
+}

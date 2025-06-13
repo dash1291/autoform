@@ -1,5 +1,7 @@
 import * as AWS from 'aws-sdk';
 import { ECSInfrastructureArgs, ECSInfrastructureOutput, EnvironmentVariable } from './types';
+
+export { ECSInfrastructureArgs, ECSInfrastructureOutput, EnvironmentVariable };
 import { VPCService } from './services/vpc-service';
 import { IAMService } from './services/iam-service';
 import { LoadBalancerService } from './services/load-balancer-service';
@@ -16,10 +18,10 @@ export class ECSInfrastructure {
   private memory: number;
   private diskSize: number;
 
-  private vpcService: VPCService;
-  private iamService: IAMService;
-  private loadBalancerService: LoadBalancerService;
-  private ecsService: ECSService;
+  private vpcService!: VPCService;
+  private iamService!: IAMService;
+  private loadBalancerService!: LoadBalancerService;
+  private ecsService!: ECSService;
 
   constructor(args: ECSInfrastructureArgs) {
     this.region = args.region || 'us-east-1';
@@ -66,7 +68,8 @@ export class ECSInfrastructure {
         vpcId: this.vpcService.vpcId,
         subnetIds: this.vpcService.subnetIds,
         securityGroupId: this.vpcService.securityGroupIds.albSecurityGroupId,
-        containerPort: this.containerPort
+        containerPort: this.containerPort,
+        healthCheckPath: this.args.healthCheckPath
       });
       await this.loadBalancerService.initialize();
 

@@ -1,0 +1,63 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+import logging
+
+from core.config import settings
+from app.routers import projects, auth, deployments, environment_variables, github, debug, aws
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("Starting up...")
+    # Initialize database connection
+    from core.database import prisma
+    await prisma.connect()
+    yield
+    # Shutdown
+    logger.info("Shutting down...")
+    await prisma.disconnect()
+
+
+app = FastAPI(
+    title=settings.app_name,
+    debug=settings.debug,
+    lifespan=lifespan
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_url],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include routers
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
+app.include_router(deployments.router, prefix="/api/deployments", tags=["deployments"])
+app.include_router(
+    environment_variables.router,
+    prefix="/api/projects/{project_id}/environment-variables",
+    tags=["environment-variables"]
+)
+app.include_router(github.router, prefix="/api/github", tags=["github"])
+app.include_router(debug.router, prefix="/api/debug", tags=["debug"])
+app.include_router(aws.router, prefix="/api/aws", tags=["aws"])
+
+
+@app.get("/")
+async def root():
+    return {"message": "AutoForm Backend API", "version": "1.0.0"}
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}

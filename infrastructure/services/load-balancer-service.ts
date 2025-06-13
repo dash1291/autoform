@@ -7,6 +7,7 @@ export interface LoadBalancerServiceConfig {
   subnetIds: string[];
   securityGroupId: string;
   containerPort?: number;
+  healthCheckPath?: string;
 }
 
 export class LoadBalancerService {
@@ -14,6 +15,7 @@ export class LoadBalancerService {
   private projectName: string;
   private region: string;
   private containerPort: number;
+  private healthCheckPath: string;
   
   public loadBalancerArn: string;
   public loadBalancerDns: string;
@@ -24,6 +26,7 @@ export class LoadBalancerService {
     this.projectName = config.projectName;
     this.region = config.region || 'us-east-1';
     this.containerPort = config.containerPort || 3000;
+    this.healthCheckPath = config.healthCheckPath || '/health';
     
     AWS.config.update({ region: this.region });
     this.elbv2 = new AWS.ELBv2();
@@ -107,7 +110,7 @@ export class LoadBalancerService {
       TargetType: 'ip',
       HealthCheckEnabled: true,
       HealthCheckIntervalSeconds: 30,
-      HealthCheckPath: '/health',
+      HealthCheckPath: this.healthCheckPath,
       HealthCheckPort: 'traffic-port',
       HealthCheckProtocol: 'HTTP',
       HealthCheckTimeoutSeconds: 5,
@@ -129,7 +132,7 @@ export class LoadBalancerService {
         TargetGroupArn: targetGroupArn,
         HealthCheckEnabled: true,
         HealthCheckIntervalSeconds: 30,
-        HealthCheckPath: '/health',
+        HealthCheckPath: this.healthCheckPath,
         HealthCheckPort: 'traffic-port',
         HealthCheckProtocol: 'HTTP',
         HealthCheckTimeoutSeconds: 5,

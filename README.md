@@ -1,78 +1,134 @@
-# Autoform
+# AutoForm - AWS ECS Deployment Platform
 
-A Heroku-like Platform-as-a-Service (PaaS) system that deploys applications to AWS ECS.
+A platform for easily deploying applications to AWS ECS with automatic infrastructure provisioning.
 
-## Features
+## Project Structure
 
-- GitHub OAuth authentication
-- Automatic Docker image building and pushing to ECR
-- One-click deployment to AWS ECS with Fargate
-- Deployment logs and runtime logs from one place
+```
+autoform/
+├── frontend/              # Next.js frontend application
+│   ├── src/              # Frontend source code
+│   │   ├── app/          # Next.js app directory
+│   │   ├── components/   # React components
+│   │   ├── lib/          # Utility functions
+│   │   └── types/        # TypeScript types
+│   ├── public/           # Static assets
+│   ├── package.json      # Frontend dependencies
+│   └── next.config.js    # Next.js configuration
+│
+├── backend/              # FastAPI backend application
+│   ├── app/              # Application code
+│   │   └── routers/      # API endpoints
+│   ├── core/             # Core utilities (config, database, security)
+│   ├── infrastructure/   # AWS infrastructure code (boto3)
+│   ├── schemas/          # Pydantic models
+│   ├── services/         # Business logic services
+│   ├── main.py           # FastAPI application entry point
+│   └── requirements.txt  # Python dependencies
+│
+├── prisma/               # Database schema (shared)
+│   └── schema.prisma     # Prisma schema definition
+│
+├── infrastructure/       # Legacy TypeScript infrastructure (to be removed)
+└── package.json          # Root package.json for running both frontend and backend
+```
+
+## Tech Stack
+
+### Frontend
+- **Framework**: Next.js 14 with App Router
+- **UI**: React with TypeScript
+- **Styling**: Tailwind CSS
+- **Components**: shadcn/ui
+- **Authentication**: NextAuth.js (migrating to JWT)
+- **State Management**: React hooks
+
+### Backend
+- **Framework**: FastAPI (Python)
+- **Database**: PostgreSQL with Prisma ORM
+- **Authentication**: JWT with GitHub OAuth
+- **AWS SDK**: boto3
+- **Background Tasks**: Celery with Redis
+- **Infrastructure**: 
+  - ECS for container orchestration
+  - ALB for load balancing
+  - ECR for container registry
+  - CodeBuild for building Docker images
 
 ## Getting Started
 
 ### Prerequisites
-
 - Node.js 18+
-- Docker
-- AWS CLI configured with appropriate permissions
-- GitHub OAuth App
+- Python 3.11+
+- PostgreSQL
+- Redis (for background tasks)
+- AWS Account with appropriate permissions
 
-### Setup
+### Installation
 
-1. Clone and install:
+1. Clone the repository:
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/yourusername/autoform.git
 cd autoform
-npm install
 ```
 
-2. Configure environment:
+2. Install dependencies:
 ```bash
-cp .env.example .env
-# Edit .env with your credentials
+# Install all dependencies (frontend + backend)
+npm run install:all
 ```
 
-3. Set up the database:
-
-**For local PostgreSQL:**
+3. Set up environment variables:
 ```bash
-# Start local database
-npm run db:up
+# Frontend
+cp frontend/.env.example frontend/.env
+
+# Backend
+cp backend/.env.example backend/.env
+```
+
+4. Set up the database:
+```bash
+# Generate Prisma client
+npm run prisma:generate
 
 # Run migrations
-npm run db:migrate
+npm run prisma:migrate
 ```
 
-4. Start development server:
+### Development
+
+Run both frontend and backend in development mode:
 ```bash
 npm run dev
 ```
 
-### Required Environment Variables
+Or run them separately:
+```bash
+# Frontend only (runs on http://localhost:3000)
+npm run dev:frontend
 
-- `DATABASE_URL` - PostgreSQL connection string
-- `NEXTAUTH_SECRET` - Random secret for NextAuth.js
-- `GITHUB_ID` & `GITHUB_SECRET` - GitHub OAuth app credentials
-- `AWS_REGION` - AWS region (default: us-east-1)
-- AWS credentials via AWS CLI or environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+# Backend only (runs on http://localhost:8000)
+npm run dev:backend
+```
 
-### GitHub OAuth Setup
+## Features
 
-Create a GitHub OAuth App:
-- Homepage URL: `http://localhost:3000`
-- Callback URL: `http://localhost:3000/api/auth/callback/github`
-- Required scopes: `read:user`, `user:email`, `repo`
+- **GitHub Integration**: Authenticate with GitHub and deploy directly from repositories
+- **Automatic Infrastructure**: Automatically provisions AWS resources (VPC, ECS, ALB)
+- **Environment Variables**: Secure management with AWS Secrets Manager
+- **Real-time Logs**: Stream deployment logs in real-time
+- **Resource Configuration**: Configure CPU, memory, and disk for each project
+- **Branch Selection**: Deploy from any branch with automatic branch detection
+- **Health Checks**: Configurable health check endpoints
+- **Subdirectory Support**: Deploy from monorepo subdirectories
 
-## Usage
+## API Documentation
 
-1. **Sign in** with your GitHub account
-2. **Create a project** by providing:
-   - Project name
-   - GitHub repository URL (must contain a Dockerfile)
-3. **Deploy** your application:
-   - System clones your repository
-   - Builds Docker image for linux/amd64
-   - Pushes to ECR
-   - Provisions AWS infrastructure (VPC, ECS, ALB)
-   - Deploys to ECS Fargate
+When running the backend, API documentation is available at:
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+## License
+
+MIT

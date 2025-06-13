@@ -9,6 +9,7 @@ export interface ECSInfrastructureArgs {
   projectName: string;
   imageUri: string;
   containerPort?: number;
+  healthCheckPath?: string;
   region?: string;
   existingVpcId?: string;
   existingSubnetIds?: string[];
