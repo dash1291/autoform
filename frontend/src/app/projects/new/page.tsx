@@ -7,16 +7,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useJwtStore } from '@/lib/auth-client'
+import { useAuth } from '@/lib/auth-client'
 import { apiClient } from '@/lib/api'
 
 export default function NewProject() {
-  const { jwtToken } = useJwtStore()
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const [formData, setFormData] = useState({
     name: '',
     gitRepoUrl: '',
     branch: 'main',
+    subdirectory: '',
     cpu: 256,
     memory: 512,
     diskSize: 21,
@@ -30,8 +31,7 @@ export default function NewProject() {
     if (!url || !url.includes('github.com')) return
 
     console.log('Starting repository validation for:', url)
-    console.log('Session status:', session ? 'authenticated' : 'not authenticated')
-    console.log('User ID:', session?.user?.id)
+    console.log('Auth status:', isAuthenticated ? 'authenticated' : 'not authenticated')
     
     setValidating(true)
     setError('')
@@ -79,7 +79,7 @@ export default function NewProject() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!jwtToken) return
+    if (!isAuthenticated) return
 
     setLoading(true)
     setError('')
@@ -103,13 +103,21 @@ export default function NewProject() {
     }
   }
 
-  if (!jwtToken) {
+  if (!authLoading && !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Please sign in</h1>
           <p className="text-gray-600">You need to be signed in to create a project.</p>
         </div>
+      </div>
+    )
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     )
   }
@@ -193,35 +201,55 @@ export default function NewProject() {
                     disabled={validating}
                     className="text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50"
                   >
-                    {validating ? 'Validating...' : 'Test Access'}
+                    {validating ? 'Validating...' : 'Save'}
                   </button>
                 )}
               </div>
             </div>
 
-            {repoInfo && repoInfo.branches && (
-              <div>
-                <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-2">
-                  Branch to Deploy
-                </label>
-                <select
-                  id="branch"
-                  value={formData.branch}
-                  onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  {repoInfo.branches.map((branch: string) => (
+            <div>
+              <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-2">
+                Branch to Deploy
+              </label>
+              <select
+                id="branch"
+                value={formData.branch}
+                onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+                disabled={!repoInfo || !repoInfo.branches}
+                required
+              >
+                {repoInfo && repoInfo.branches ? (
+                  repoInfo.branches.map((branch: string) => (
                     <option key={branch} value={branch}>
                       {branch} {branch === repoInfo.defaultBranch ? '(default)' : ''}
                     </option>
-                  ))}
-                </select>
-                <p className="text-sm text-gray-500 mt-1">
-                  Select which branch to deploy from this repository
-                </p>
-              </div>
-            )}
+                  ))
+                ) : (
+                  <option value="">Select a branch</option>
+                )}
+              </select>
+              <p className="text-sm text-gray-500 mt-1">
+                {repoInfo ? 'Select which branch to deploy from this repository' : 'Save repository access first to see available branches'}
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="subdirectory" className="block text-sm font-medium text-gray-700 mb-2">
+                Subdirectory (Optional)
+              </label>
+              <input
+                type="text"
+                id="subdirectory"
+                value={formData.subdirectory}
+                onChange={(e) => setFormData({ ...formData, subdirectory: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                placeholder="e.g., backend or apps/api"
+              />
+              <p className="text-sm text-gray-500 mt-1">
+                Specify a subdirectory if your application code is not in the repository root
+              </p>
+            </div>
 
             {/* Resource Configuration Section */}
             <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
@@ -308,16 +336,6 @@ export default function NewProject() {
               </Button>
             </div>
           </form>
-        </div>
-
-        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h3 className="font-medium text-blue-900 mb-2">What happens next?</h3>
-          <ul className="text-sm text-blue-800 space-y-1">
-            <li>• Your repository will be cloned</li>
-            <li>• A Docker image will be built</li>
-            <li>• AWS infrastructure will be provisioned</li>
-            <li>• Your application will be deployed to ECS</li>
-          </ul>
         </div>
       </div>
     </div>

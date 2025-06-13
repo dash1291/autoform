@@ -57,7 +57,7 @@ export default function Dashboard() {
             <h2 className="text-xl font-semibold text-gray-900">Your Projects</h2>
             <Link
               href="/projects/new"
-              className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
             >
               New Project
             </Link>
@@ -65,7 +65,7 @@ export default function Dashboard() {
 
           {loading ? (
             <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
               <p className="text-gray-600 mt-2">Loading projects...</p>
             </div>
           ) : projects.length === 0 ? (
