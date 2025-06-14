@@ -1,0 +1,449 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { Team, TeamMember, TeamMemberRole } from '@/types'
+import { apiClient } from '@/lib/api'
+import { useAuth } from '@/lib/auth-client'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
+import { Users, Mail, Settings, Trash2, UserMinus, Crown, Shield, User } from 'lucide-react'
+
+export default function TeamDetail() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
+  const params = useParams()
+  const router = useRouter()
+  const teamId = params.id as string
+
+  const [team, setTeam] = useState<Team | null>(null)
+  const [members, setMembers] = useState<TeamMember[]>([])
+  const [loading, setLoading] = useState(true)
+  const [membersLoading, setMembersLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (isAuthenticated && !authLoading && teamId) {
+      fetchTeam()
+      fetchMembers()
+    }
+  }, [isAuthenticated, authLoading, teamId])
+
+  const fetchTeam = async () => {
+    try {
+      const data = await apiClient.getTeam(teamId)
+      setTeam(data)
+    } catch (error: any) {
+      setError(error.message || 'Failed to fetch team')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchMembers = async () => {
+    try {
+      const data = await apiClient.getTeam(teamId)
+      setMembers(data.members || [])
+    } catch (error) {
+      console.error('Failed to fetch team members:', error)
+    } finally {
+      setMembersLoading(false)
+    }
+  }
+
+  const handleAddMember = async (githubUsername: string, role: TeamMemberRole) => {
+    try {
+      await apiClient.addTeamMember(teamId, { githubUsername, role })
+      fetchMembers() // Refresh members list
+    } catch (error: any) {
+      setError(error.message || 'Failed to add member')
+    }
+  }
+
+  const handleRemoveMember = async (memberId: string) => {
+    if (confirm('Are you sure you want to remove this member from the team?')) {
+      try {
+        await apiClient.removeTeamMember(teamId, memberId)
+        fetchMembers() // Refresh members
+      } catch (error: any) {
+        setError(error.message || 'Failed to remove member')
+      }
+    }
+  }
+
+
+  const getRoleIcon = (role: TeamMemberRole) => {
+    switch (role) {
+      case TeamMemberRole.OWNER:
+        return <Crown className="h-4 w-4" />
+      case TeamMemberRole.ADMIN:
+        return <Shield className="h-4 w-4" />
+      case TeamMemberRole.MEMBER:
+        return <User className="h-4 w-4" />
+      default:
+        return <User className="h-4 w-4" />
+    }
+  }
+
+  const getRoleBadgeColor = (role: TeamMemberRole) => {
+    switch (role) {
+      case TeamMemberRole.OWNER:
+        return 'bg-yellow-100 text-yellow-800'
+      case TeamMemberRole.ADMIN:
+        return 'bg-blue-100 text-blue-800'
+      case TeamMemberRole.MEMBER:
+        return 'bg-gray-100 text-gray-800'
+      default:
+        return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Please sign in</h1>
+          <p className="text-gray-600">You need to be signed in to view team details.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Error</h1>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Button onClick={() => router.push('/dashboard')}>
+            Back to Dashboard
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!team) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Team not found</h1>
+          <p className="text-gray-600 mb-4">The team you're looking for doesn't exist or you don't have access to it.</p>
+          <Button onClick={() => router.push('/dashboard')}>
+            Back to Dashboard
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const isOwner = team.userRole === TeamMemberRole.OWNER
+  const canManageMembers = isOwner || team.userRole === TeamMemberRole.ADMIN
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">{team.name}</h1>
+              {team.description && (
+                <p className="text-gray-600 mt-2">{team.description}</p>
+              )}
+            </div>
+            <div className="flex items-center space-x-2">
+              <Badge variant="outline" className={getRoleBadgeColor(team.userRole!)}>
+                {getRoleIcon(team.userRole!)}
+                <span className="ml-1">{team.userRole}</span>
+              </Badge>
+              <Button
+                variant="outline"
+                onClick={() => router.push('/dashboard')}
+              >
+                Back to Dashboard
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <Tabs defaultValue="members" className="space-y-8">
+          <TabsList>
+            <TabsTrigger value="members">Members</TabsTrigger>
+            {isOwner && <TabsTrigger value="settings">Settings</TabsTrigger>}
+          </TabsList>
+
+          <TabsContent value="members">
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Team Members</CardTitle>
+                    <CardDescription>
+                      Manage who has access to this team's projects
+                    </CardDescription>
+                  </div>
+                  {canManageMembers && (
+                    <AddMemberButton onAddMember={handleAddMember} />
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <MembersList 
+                  members={members} 
+                  loading={membersLoading}
+                  canManageMembers={canManageMembers}
+                  onRemoveMember={handleRemoveMember}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+
+          {isOwner && (
+            <TabsContent value="settings">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Team Settings</CardTitle>
+                  <CardDescription>
+                    Manage team configuration and danger zone
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <TeamSettings team={team} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+        </Tabs>
+      </div>
+    </div>
+  )
+}
+
+function MembersList({ 
+  members, 
+  loading, 
+  canManageMembers, 
+  onRemoveMember 
+}: { 
+  members: TeamMember[]
+  loading: boolean
+  canManageMembers: boolean
+  onRemoveMember: (memberId: string) => void
+}) {
+  if (loading) {
+    return (
+      <div className="text-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="text-gray-600 mt-2">Loading members...</p>
+      </div>
+    )
+  }
+
+  if (members.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <Users className="mx-auto h-12 w-12 text-gray-400" />
+        <h3 className="text-lg font-medium text-gray-900 mb-2">No members yet</h3>
+        <p className="text-gray-600">Invite team members to start collaborating.</p>
+      </div>
+    )
+  }
+
+  const getRoleIcon = (role: TeamMemberRole) => {
+    switch (role) {
+      case TeamMemberRole.OWNER:
+        return <Crown className="h-4 w-4 text-yellow-600" />
+      case TeamMemberRole.ADMIN:
+        return <Shield className="h-4 w-4 text-blue-600" />
+      case TeamMemberRole.MEMBER:
+        return <User className="h-4 w-4 text-gray-600" />
+      default:
+        return <User className="h-4 w-4 text-gray-600" />
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {members.map((member) => (
+        <div key={member.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              {member.user?.image ? (
+                <img 
+                  className="h-10 w-10 rounded-full" 
+                  src={member.user.image} 
+                  alt={member.user.name || 'User'} 
+                />
+              ) : (
+                <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
+                  <User className="h-6 w-6 text-gray-600" />
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-900">
+                {member.user?.name || 'Unknown User'}
+              </p>
+              <p className="text-sm text-gray-500">{member.user?.email}</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1">
+              {getRoleIcon(member.role)}
+              <span className="text-sm text-gray-600">{member.role}</span>
+            </div>
+            {canManageMembers && member.role !== TeamMemberRole.OWNER && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onRemoveMember(member.id)}
+                className="text-red-600 hover:text-red-700"
+              >
+                <UserMinus className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function AddMemberButton({ onAddMember }: { onAddMember: (githubUsername: string, role: TeamMemberRole) => void }) {
+  const [showForm, setShowForm] = useState(false)
+  const [githubUsername, setGithubUsername] = useState('')
+  const [role, setRole] = useState<TeamMemberRole>(TeamMemberRole.MEMBER)
+  const [isAdding, setIsAdding] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!githubUsername.trim()) return
+
+    setIsAdding(true)
+    try {
+      await onAddMember(githubUsername.trim(), role)
+      setGithubUsername('')
+      setRole(TeamMemberRole.MEMBER)
+      setShowForm(false)
+    } catch (error) {
+      console.error('Failed to add member:', error)
+    } finally {
+      setIsAdding(false)
+    }
+  }
+
+  if (showForm) {
+    return (
+      <div className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              GitHub Username
+            </label>
+            <input
+              type="text"
+              value={githubUsername}
+              onChange={(e) => setGithubUsername(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="username"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Enter the GitHub username (without @)
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Role
+            </label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as TeamMemberRole)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value={TeamMemberRole.MEMBER}>Member</option>
+              <option value={TeamMemberRole.ADMIN}>Admin</option>
+            </select>
+          </div>
+          <div className="flex space-x-2">
+            <Button type="submit" disabled={isAdding || !githubUsername.trim()}>
+              {isAdding ? 'Adding...' : 'Add Member'}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </div>
+    )
+  }
+
+  return (
+    <Button onClick={() => setShowForm(true)}>
+      <Users className="h-4 w-4 mr-2" />
+      Add Member
+    </Button>
+  )
+}
+
+function TeamSettings({ team }: { team: Team }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Team Information</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Team Name
+            </label>
+            <input
+              type="text"
+              value={team.name}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+              disabled
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <textarea
+              value={team.description || ''}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+              rows={3}
+              disabled
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-medium text-red-900 mb-4">Danger Zone</h3>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-sm font-medium text-red-900">Delete Team</h4>
+              <p className="text-sm text-red-700 mt-1">
+                This action cannot be undone. All team projects will become personal projects.
+              </p>
+            </div>
+            <Button variant="outline" className="text-red-600 border-red-300 hover:bg-red-50">
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Team
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

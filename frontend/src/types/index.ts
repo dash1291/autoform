@@ -25,6 +25,7 @@ export interface Project {
   gitRepoUrl: string
   branch: string
   userId: string
+  teamId?: string
   status: ProjectStatus
   ecsClusterArn?: string
   ecsServiceArn?: string
@@ -43,6 +44,10 @@ export interface Project {
   autoDeployEnabled: boolean
   webhookSecret?: string
   webhookConfigured: boolean
+  team?: {
+    id: string
+    name: string
+  }
   createdAt: Date
   updatedAt: Date
 }
@@ -88,3 +93,37 @@ export interface EnvironmentVariable {
   createdAt: Date
   updatedAt: Date
 }
+
+export enum TeamMemberRole {
+  OWNER = 'OWNER',
+  ADMIN = 'ADMIN',
+  MEMBER = 'MEMBER'
+}
+
+
+export interface TeamMember {
+  id: string
+  teamId: string
+  userId: string
+  role: TeamMemberRole
+  joinedAt: Date
+  user?: {
+    id: string
+    name?: string
+    email?: string
+    image?: string
+  }
+}
+
+export interface Team {
+  id: string
+  name: string
+  description?: string
+  ownerId: string
+  createdAt: Date
+  updatedAt: Date
+  members?: TeamMember[]
+  memberCount?: number
+  userRole?: TeamMemberRole
+}
+

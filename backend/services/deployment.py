@@ -719,8 +719,8 @@ class DeploymentService:
             await self.log_to_database(deployment_id, "Creating/updating AWS infrastructure...")
             await self.log_to_database(
                 deployment_id, 
-                f"- Resource allocation: {project.get('cpu', 256)} CPU units, "
-                f"{project.get('memory', 512)} MB memory, {project.get('disk_size', 21)} GB disk"
+                f"- Resource allocation: {config.cpu} CPU units, "
+                f"{config.memory} MB memory, {config.disk_size} GB disk"
             )
             await self.log_to_database(deployment_id, "- Setting up VPC and networking")
             await self.log_to_database(deployment_id, "- Creating security groups")
@@ -747,10 +747,12 @@ class DeploymentService:
             update_data["ecsClusterArn"] = result.cluster_arn
         if result.load_balancer_arn:  # Use load_balancer_arn instead of alb_arn
             update_data["albArn"] = result.load_balancer_arn
+        if result.load_balancer_dns:  # Set the domain field for the project
+            update_data["domain"] = result.load_balancer_dns
         
         if update_data:
             await prisma.project.update(
-                where={"id": project_id},
+                where={"id": config.project_id},
                 data=update_data
             )
         

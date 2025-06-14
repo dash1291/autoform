@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
     
+    # Email (optional - if not configured, emails will be logged)
+    smtp_server: Optional[str] = None
+    smtp_port: int = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    from_email: str = "noreply@autoform.dev"
+    
     class Config:
         env_file = ".env"
         case_sensitive = False

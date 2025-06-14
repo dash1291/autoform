@@ -257,6 +257,55 @@ class ApiClient {
       headers
     })
   }
+
+  // Team endpoints
+  async getTeams() {
+    return this.request('/teams')
+  }
+
+  async getTeam(teamId: string) {
+    return this.request(`/teams/${teamId}`)
+  }
+
+  async createTeam(teamData: { name: string; description?: string }) {
+    return this.request('/teams', {
+      method: 'POST',
+      body: JSON.stringify(teamData),
+    })
+  }
+
+  async updateTeam(teamId: string, teamData: { name?: string; description?: string }) {
+    return this.request(`/teams/${teamId}`, {
+      method: 'PUT',
+      body: JSON.stringify(teamData),
+    })
+  }
+
+  async deleteTeam(teamId: string) {
+    return this.request(`/teams/${teamId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async addTeamMember(teamId: string, memberData: { githubUsername: string; role: string }) {
+    return this.request(`/teams/${teamId}/members`, {
+      method: 'POST',
+      body: JSON.stringify(memberData),
+    })
+  }
+
+  async removeTeamMember(teamId: string, memberId: string) {
+    return this.request(`/teams/${teamId}/members/${memberId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async updateTeamMemberRole(teamId: string, memberId: string, role: string) {
+    return this.request(`/teams/${teamId}/members/${memberId}/role`, {
+      method: 'PUT',
+      body: JSON.stringify({ role }),
+    })
+  }
 }
 
 export const apiClient = new ApiClient()

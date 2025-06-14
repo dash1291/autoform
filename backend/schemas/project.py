@@ -17,6 +17,7 @@ class ProjectBase(BaseModel):
     name: str
     git_repo_url: str = Field(alias="gitRepoUrl")
     branch: str = "main"
+    team_id: Optional[str] = Field(None, alias="teamId")
     cpu: int = 256
     memory: int = 512
     disk_size: int = Field(21, alias="diskSize")
@@ -74,6 +75,7 @@ class ProjectCreate(ProjectBase):
 class ProjectUpdate(BaseModel):
     git_repo_url: Optional[str] = Field(None, alias="gitRepoUrl")
     branch: Optional[str] = None
+    team_id: Optional[str] = Field(None, alias="teamId")
     existing_vpc_id: Optional[str] = Field(None, alias="existingVpcId")
     existing_subnet_ids: Optional[list[str]] = Field(None, alias="existingSubnetIds")
     existing_cluster_arn: Optional[str] = Field(None, alias="existingClusterArn")
@@ -106,6 +108,7 @@ class Project(ProjectBase):
     webhook_configured: bool = Field(False, alias="webhookConfigured")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
+    team: Optional[dict] = None  # Will include team info if project belongs to a team
 
     class Config:
         from_attributes = True

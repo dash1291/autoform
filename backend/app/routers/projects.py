@@ -16,17 +16,71 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/", response_model=List[Project])
-async def get_projects(current_user: User = Depends(get_current_user)):
-    """Get all projects for the current user"""
-    logger.info(f"Getting projects for user: {current_user.id}")
-    
+async def check_project_access(project_id: str, user_id: str) -> bool:
+    """Check if user has access to project (either owns it or is team member)"""
+    project = await prisma.project.find_first(
+        where={
+            "id": project_id,
+            "OR": [
+                {"userId": user_id},  # User owns the project
+                {
+                    "team": {
+                        "OR": [
+                            {"ownerId": user_id},  # User owns the team
+                            {"members": {"some": {"userId": user_id}}}  # User is team member
+                        ]
+                    }
+                }
+            ]
+        }
+    )
+    return project is not None
+
+
+async def get_user_accessible_projects(user_id: str):
+    """Get all projects accessible to the user (personal + team projects)"""
     projects = await prisma.project.find_many(
-        where={"userId": current_user.id},
+        where={
+            "OR": [
+                {"userId": user_id},  # Personal projects
+                {
+                    "team": {
+                        "OR": [
+                            {"ownerId": user_id},  # Teams owned by user
+                            {"members": {"some": {"userId": user_id}}}  # Teams user is member of
+                        ]
+                    }
+                }
+            ]
+        },
+        include={
+            "team": True
+        },
         order={"createdAt": "desc"}
     )
     
-    logger.info(f"Found {len(projects)} projects for user {current_user.id}")
+    # Convert projects to dict and handle team objects
+    result = []
+    for project in projects:
+        project_dict = project.dict()
+        if project_dict.get("team"):
+            project_dict["team"] = {
+                "id": project_dict["team"]["id"],
+                "name": project_dict["team"]["name"]
+            }
+        result.append(project_dict)
+    
+    return result
+
+
+@router.get("/", response_model=List[Project])
+async def get_projects(current_user: User = Depends(get_current_user)):
+    """Get all projects accessible to the current user (personal + team projects)"""
+    logger.info(f"Getting projects for user: {current_user.id}")
+    
+    projects = await get_user_accessible_projects(current_user.id)
+    
+    logger.info(f"Found {len(projects)} projects accessible to user {current_user.id}")
     return projects
 
 
@@ -36,38 +90,77 @@ async def create_project(
     current_user: User = Depends(get_current_user)
 ):
     """Create a new project"""
-    # Check if project name already exists for this user
-    existing_project = await prisma.project.find_first(
-        where={
-            "userId": current_user.id,
-            "name": project.name
-        }
-    )
+    
+    # If team_id is provided, verify user has access to the team
+    if project.team_id:
+        team_access = await prisma.team.find_first(
+            where={
+                "id": project.team_id,
+                "OR": [
+                    {"ownerId": current_user.id},  # User owns the team
+                    {"members": {"some": {"userId": current_user.id}}}  # User is team member
+                ]
+            }
+        )
+        
+        if not team_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this team"
+            )
+    
+    # Check if project name already exists in scope (personal or team)
+    name_check_where = {"name": project.name}
+    if project.team_id:
+        name_check_where["teamId"] = project.team_id
+    else:
+        name_check_where["userId"] = current_user.id
+        name_check_where["teamId"] = None  # Personal project
+    
+    existing_project = await prisma.project.find_first(where=name_check_where)
     
     if existing_project:
+        scope = "team" if project.team_id else "your personal projects"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A project with this name already exists"
+            detail=f"A project with this name already exists in {scope}"
         )
     
     # Create the project
+    project_data = {
+        "name": project.name,
+        "gitRepoUrl": project.git_repo_url,
+        "branch": project.branch,
+        "userId": current_user.id,
+        "status": ProjectStatus.CREATED,
+        "cpu": project.cpu,
+        "memory": project.memory,
+        "diskSize": project.disk_size,
+        "subdirectory": project.subdirectory,
+        "port": project.port,
+        "healthCheckPath": project.health_check_path,
+    }
+    
+    # Add team_id if provided
+    if project.team_id:
+        project_data["teamId"] = project.team_id
+    
     new_project = await prisma.project.create(
-        data={
-            "name": project.name,
-            "gitRepoUrl": project.git_repo_url,
-            "branch": project.branch,
-            "userId": current_user.id,
-            "status": ProjectStatus.CREATED,
-            "cpu": project.cpu,
-            "memory": project.memory,
-            "diskSize": project.disk_size,
-            "subdirectory": project.subdirectory,
-            "port": project.port,
-            "healthCheckPath": project.health_check_path,
+        data=project_data,
+        include={
+            "team": True
         }
     )
     
-    return new_project
+    # Convert to dict and handle team object
+    project_dict = new_project.dict()
+    if project_dict.get("team"):
+        project_dict["team"] = {
+            "id": project_dict["team"]["id"],
+            "name": project_dict["team"]["name"]
+        }
+    
+    return project_dict
 
 
 @router.get("/{project_id}", response_model=Project)
@@ -76,20 +169,29 @@ async def get_project(
     current_user: User = Depends(get_current_user)
 ):
     """Get a specific project"""
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "userId": current_user.id
-        }
-    )
-    
-    if not project:
+    # Check if user has access to this project
+    if not await check_project_access(project_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found"
         )
     
-    return project
+    project = await prisma.project.find_unique(
+        where={"id": project_id},
+        include={
+            "team": True
+        }
+    )
+    
+    # Convert to dict and handle team object
+    project_dict = project.dict()
+    if project_dict.get("team"):
+        project_dict["team"] = {
+            "id": project_dict["team"]["id"],
+            "name": project_dict["team"]["name"]
+        }
+    
+    return project_dict
 
 
 @router.put("/{project_id}", response_model=Project)
@@ -99,19 +201,14 @@ async def update_project(
     current_user: User = Depends(get_current_user)
 ):
     """Update a project"""
-    # Check if project exists and belongs to user
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "userId": current_user.id
-        }
-    )
-    
-    if not project:
+    # Check if user has access to this project
+    if not await check_project_access(project_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found"
         )
+    
+    project = await prisma.project.find_unique(where={"id": project_id})
     
     # Prepare update data
     update_data = {}

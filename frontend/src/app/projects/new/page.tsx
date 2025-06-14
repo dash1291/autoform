@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -9,15 +9,18 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth } from '@/lib/auth-client'
 import { apiClient } from '@/lib/api'
+import { Team } from '@/types'
 
 export default function NewProject() {
   const { isAuthenticated, isLoading: authLoading } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [formData, setFormData] = useState({
     name: '',
     gitRepoUrl: '',
     branch: 'main',
     subdirectory: '',
+    teamId: '', // empty string means personal project
     cpu: 256,
     memory: 512,
     diskSize: 21,
@@ -26,6 +29,31 @@ export default function NewProject() {
   const [error, setError] = useState('')
   const [validating, setValidating] = useState(false)
   const [repoInfo, setRepoInfo] = useState<any>(null)
+  const [teams, setTeams] = useState<Team[]>([])
+  const [teamsLoading, setTeamsLoading] = useState(true)
+
+  useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      fetchTeams()
+      
+      // Set team from query parameter if provided
+      const teamParam = searchParams.get('team')
+      if (teamParam && teamParam !== 'personal') {
+        setFormData(prev => ({ ...prev, teamId: teamParam }))
+      }
+    }
+  }, [isAuthenticated, authLoading, searchParams])
+
+  const fetchTeams = async () => {
+    try {
+      const data = await apiClient.getTeams()
+      setTeams(data)
+    } catch (error) {
+      console.error('Failed to fetch teams:', error)
+    } finally {
+      setTeamsLoading(false)
+    }
+  }
 
   const validateRepository = async (url: string) => {
     if (!url || !url.includes('github.com')) return
@@ -94,7 +122,10 @@ export default function NewProject() {
         }
       }
 
-      await apiClient.createProject(formData)
+      await apiClient.createProject({
+        ...formData,
+        teamId: formData.teamId || undefined // Convert empty string to undefined
+      })
       router.push('/dashboard')
     } catch (err: any) {
       setError(err.message || 'Failed to create project')
@@ -147,6 +178,34 @@ export default function NewProject() {
               />
               <p className="text-sm text-gray-500 mt-1">
                 This will be used as the container name and resource prefix
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="team" className="block text-sm font-medium text-gray-700 mb-2">
+                Team (Optional)
+              </label>
+              <select
+                id="team"
+                value={formData.teamId}
+                onChange={(e) => setFormData({ ...formData, teamId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+                disabled={teamsLoading}
+              >
+                <option value="">Personal Project</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-gray-500 mt-1">
+                {teamsLoading 
+                  ? 'Loading teams...' 
+                  : teams.length > 0 
+                    ? 'Choose a team to share this project with team members, or leave as personal project'
+                    : 'Create a team to collaborate with others'
+                }
               </p>
             </div>
 

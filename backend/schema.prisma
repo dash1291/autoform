@@ -47,6 +47,8 @@ model User {
   accounts      Account[]
   projects      Project[]
   sessions      Session[]
+  ownedTeams    Team[]    @relation("TeamOwner")
+  teamMemberships TeamMember[]
 }
 
 model VerificationToken {
@@ -63,6 +65,7 @@ model Project {
   gitRepoUrl      String
   branch          String                @default("main")
   userId          String
+  teamId          String?               // Project can belong to a team or be personal
   status          ProjectStatus         @default(CREATED)
   ecsClusterArn   String?
   ecsServiceArn   String?
@@ -86,6 +89,7 @@ model Project {
   deployments     Deployment[]
   environmentVars EnvironmentVariable[]
   user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team            Team?                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
 }
 
 model Deployment {
@@ -133,3 +137,35 @@ enum DeploymentStatus {
   SUCCESS
   FAILED
 }
+
+model Team {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  ownerId     String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  owner       User         @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members     TeamMember[]
+  projects    Project[]
+}
+
+model TeamMember {
+  id        String         @id @default(cuid())
+  teamId    String
+  userId    String
+  role      TeamMemberRole @default(MEMBER)
+  joinedAt  DateTime       @default(now())
+  team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+}
+
+
+enum TeamMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
