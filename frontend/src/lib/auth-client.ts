@@ -5,6 +5,7 @@ import { useEffect } from 'react'
 
 interface AuthTokenStore {
   jwtToken: string | null
+  tokenExpiry: number | null
   setJwtToken: (token: string | null) => void
   clearJwtToken: () => void
 }
@@ -16,8 +17,22 @@ export const useJwtStore = create<AuthTokenStore>()(
   persist(
     (set) => ({
       jwtToken: null,
-      setJwtToken: (token) => set({ jwtToken: token }),
-      clearJwtToken: () => set({ jwtToken: null }),
+      tokenExpiry: null,
+      setJwtToken: (token) => {
+        if (token) {
+          // Decode token to get expiry
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]))
+            const expiry = payload.exp * 1000 // Convert to milliseconds
+            set({ jwtToken: token, tokenExpiry: expiry })
+          } catch {
+            set({ jwtToken: token, tokenExpiry: null })
+          }
+        } else {
+          set({ jwtToken: null, tokenExpiry: null })
+        }
+      },
+      clearJwtToken: () => set({ jwtToken: null, tokenExpiry: null }),
     }),
     {
       name: 'jwt-storage',
@@ -28,16 +43,19 @@ export const useJwtStore = create<AuthTokenStore>()(
 // Helper hook that combines NextAuth session with JWT token
 export const useAuth = () => {
   const { data: session, status } = useSession()
-  const { jwtToken, setJwtToken, clearJwtToken } = useJwtStore()
+  const { jwtToken, tokenExpiry, setJwtToken, clearJwtToken } = useJwtStore()
 
-  // Exchange NextAuth session for JWT token when session changes
+  // Check if token is expired or will expire soon (within 5 minutes)
+  const isTokenExpired = tokenExpiry && tokenExpiry < Date.now() + (5 * 60 * 1000)
+
+  // Exchange NextAuth session for JWT token when session changes or token is expired
   useEffect(() => {
-    if (session?.user && !jwtToken && status !== 'loading') {
+    if (session?.user && (!jwtToken || isTokenExpired) && status !== 'loading') {
       exchangeSessionForJwt()
     } else if (!session && jwtToken && status !== 'loading') {
       clearJwtToken()
     }
-  }, [session, jwtToken, status])
+  }, [session, jwtToken, isTokenExpired, status])
 
   const exchangeSessionForJwt = async () => {
     try {

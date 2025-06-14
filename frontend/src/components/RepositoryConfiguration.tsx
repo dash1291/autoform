@@ -88,8 +88,22 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
     setSuccess('')
 
     try {
-      await apiClient.updateProject(projectId, formData)
-      setSuccess('Repository configuration updated successfully!')
+      const response = await apiClient.updateProject(projectId, formData)
+      
+      let message = 'Repository configuration updated successfully!'
+      
+      // Check if health check was updated
+      if (response.healthCheckUpdateStatus) {
+        if (response.healthCheckUpdateStatus === 'success') {
+          message += ' Health check endpoint updated in load balancer.'
+        } else if (response.healthCheckUpdateStatus.startsWith('failed:')) {
+          message += ` Note: Health check update failed - ${response.healthCheckUpdateStatus.substring(8)}`
+        } else if (response.healthCheckUpdateStatus.startsWith('skipped:')) {
+          message += ` Health check update skipped - ${response.healthCheckUpdateStatus.substring(9)}`
+        }
+      }
+      
+      setSuccess(message)
       onUpdate()
     } catch (err) {
       setError('Failed to update repository configuration')
@@ -107,6 +121,10 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
     formData.healthCheckPath !== (project.healthCheckPath || '/health')
 
   const isDeploying = project.status === 'DEPLOYING' || project.status === 'BUILDING' || project.status === 'CLONING'
+  
+  // Some fields should be locked during deployment, others can be modified
+  const shouldLockRepoFields = isDeploying // Repository URL, branch, subdirectory - affect build
+  const shouldLockRuntimeFields = false // Health check, port - can be updated live
 
   return (
     <div>
@@ -125,7 +143,7 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
               id="gitRepoUrl"
               value={formData.gitRepoUrl}
               onChange={(e) => handleRepoUrlChange(e.target.value)}
-              disabled={isDeploying}
+              disabled={shouldLockRepoFields}
               className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ${repoInfo ? 'pr-10' : ''}`}
               placeholder="https://github.com/username/repository"
               required
@@ -172,7 +190,7 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
             <Select
               value={formData.branch}
               onValueChange={(value) => setFormData({ ...formData, branch: value })}
-              disabled={isDeploying}
+              disabled={shouldLockRepoFields}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a branch" />
@@ -197,7 +215,7 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
               id="branch"
               value={formData.branch}
               onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
-              disabled={isDeploying}
+              disabled={shouldLockRepoFields}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               placeholder="main"
               required
@@ -220,7 +238,7 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
             id="subdirectory"
             value={formData.subdirectory}
             onChange={(e) => setFormData({ ...formData, subdirectory: e.target.value })}
-            disabled={isDeploying}
+            disabled={shouldLockRepoFields}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             placeholder="e.g., backend or apps/api"
           />
@@ -236,7 +254,7 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
             id="port"
             value={formData.port}
             onChange={(e) => setFormData({ ...formData, port: parseInt(e.target.value) || 3000 })}
-            disabled={isDeploying}
+            disabled={shouldLockRuntimeFields}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             placeholder="3000"
             required
@@ -253,7 +271,7 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
             id="healthCheckPath"
             value={formData.healthCheckPath}
             onChange={(e) => setFormData({ ...formData, healthCheckPath: e.target.value })}
-            disabled={isDeploying}
+            disabled={shouldLockRuntimeFields}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             placeholder="/health"
             required
@@ -273,10 +291,11 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
           </div>
         )}
 
-        {isDeploying && (
+        {shouldLockRepoFields && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
             <p className="text-yellow-800">
-              Cannot modify repository configuration while deployment is in progress.
+              Repository URL, branch, and subdirectory are locked during deployment. 
+              Health check path and port can still be modified.
             </p>
           </div>
         )}
@@ -284,18 +303,19 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
         <div className="flex space-x-4">
           <Button
             type="submit"
-            disabled={loading || isDeploying || !hasChanges}
+            disabled={loading || !hasChanges}
           >
             {loading ? 'Saving...' : 'Save Changes'}
           </Button>
         </div>
       </form>
 
-      <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-        <h4 className="font-medium text-yellow-900 mb-2">⚠️ Important</h4>
-        <p className="text-sm text-yellow-800">
-          Repository changes require a new deployment to take effect. Make sure the new repository URL is accessible with your GitHub authentication.
-        </p>
+      <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <h4 className="font-medium text-blue-900 mb-2">ℹ️ Configuration Updates</h4>
+        <div className="text-sm text-blue-800 space-y-1">
+          <p><strong>Health check path & port:</strong> Updates take effect immediately on deployed services.</p>
+          <p><strong>Repository changes:</strong> Require a new deployment to take effect.</p>
+        </div>
       </div>
     </div>
   )

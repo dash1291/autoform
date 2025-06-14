@@ -186,25 +186,51 @@ class DeploymentService:
                 deployment_id
             )
             
-            # Mark deployment as completed
+            # Wait for service to become healthy before marking as completed
             if deployment_id:
-                await self.log_to_database(deployment_id, "✅ Deployment completed successfully!")
+                await self.log_to_database(deployment_id, "🔄 Waiting for service to become healthy...")
                 
-                # Update deployment status in database
-                await prisma.deployment.update(
-                    where={"id": deployment_id},
-                    data={
-                        "status": "SUCCESS"  # Use SUCCESS instead of DEPLOYED
-                    }
+                # Wait for service to be ready
+                success = await self.wait_for_service_healthy(
+                    config.project_id, 
+                    deployment_id,
+                    max_wait_minutes=15
                 )
                 
-                # Update project status to deployed
-                await prisma.project.update(
-                    where={"id": config.project_id},
-                    data={
-                        "status": "DEPLOYED"
-                    }
-                )
+                if success:
+                    await self.log_to_database(deployment_id, "✅ Deployment completed successfully!")
+                    
+                    # Update deployment status in database
+                    await prisma.deployment.update(
+                        where={"id": deployment_id},
+                        data={
+                            "status": "SUCCESS"
+                        }
+                    )
+                    
+                    # Update project status to deployed
+                    await prisma.project.update(
+                        where={"id": config.project_id},
+                        data={
+                            "status": "DEPLOYED"
+                        }
+                    )
+                else:
+                    await self.log_to_database(deployment_id, "❌ Service failed to become healthy within timeout")
+                    
+                    # Update deployment status to failed
+                    await prisma.deployment.update(
+                        where={"id": deployment_id},
+                        data={
+                            "status": "FAILED"
+                        }
+                    )
+                    
+                    # Update project status to failed
+                    await prisma.project.update(
+                        where={"id": config.project_id},
+                        data={"status": "FAILED"}
+                    )
             
             return result
             
@@ -721,6 +747,121 @@ class DeploymentService:
             )
         
         return result
+    
+    async def wait_for_service_healthy(self, project_id: str, deployment_id: str, max_wait_minutes: int = 15) -> bool:
+        """Wait for ECS service to become healthy"""
+        import boto3
+        import asyncio
+        from botocore.exceptions import ClientError
+        
+        try:
+            # Get project details
+            project = await prisma.project.find_unique(where={"id": project_id})
+            if not project or not project.ecsServiceArn or not project.ecsClusterArn:
+                await self.log_to_database(deployment_id, "❌ Missing ECS service or cluster information")
+                return False
+            
+            region = os.getenv('AWS_REGION', 'us-east-1')
+            ecs_client = boto3.client('ecs', region_name=region)
+            
+            cluster_arn = project.ecsClusterArn
+            service_arn = project.ecsServiceArn
+            
+            start_time = asyncio.get_event_loop().time()
+            max_wait_seconds = max_wait_minutes * 60
+            check_interval = 30  # Check every 30 seconds
+            
+            await self.log_to_database(deployment_id, f"Monitoring service health for up to {max_wait_minutes} minutes...")
+            
+            while True:
+                elapsed = asyncio.get_event_loop().time() - start_time
+                
+                if elapsed > max_wait_seconds:
+                    await self.log_to_database(deployment_id, f"⏰ Timeout after {max_wait_minutes} minutes")
+                    return False
+                
+                try:
+                    # Check service status
+                    response = ecs_client.describe_services(
+                        cluster=cluster_arn,
+                        services=[service_arn]
+                    )
+                    
+                    if not response['services']:
+                        await self.log_to_database(deployment_id, "❌ Service not found")
+                        return False
+                    
+                    service = response['services'][0]
+                    
+                    # Get service metrics
+                    service_status = service['status']
+                    running_count = service.get('runningCount', 0)
+                    desired_count = service.get('desiredCount', 0)
+                    pending_count = service.get('pendingCount', 0)
+                    
+                    # Check deployment status
+                    deployments = service.get('deployments', [])
+                    primary_deployment = None
+                    for deployment in deployments:
+                        if deployment['status'] == 'PRIMARY':
+                            primary_deployment = deployment
+                            break
+                    
+                    deployment_stable = False
+                    if primary_deployment:
+                        rollout_state = primary_deployment.get('rolloutState', '')
+                        deployment_running = primary_deployment.get('runningCount', 0)
+                        deployment_desired = primary_deployment.get('desiredCount', 0)
+                        deployment_stable = (
+                            rollout_state == 'COMPLETED' and 
+                            deployment_running == deployment_desired
+                        )
+                    
+                    # Check if service is healthy
+                    service_healthy = (
+                        service_status == 'ACTIVE' and
+                        running_count == desired_count and
+                        running_count > 0 and
+                        pending_count == 0 and
+                        deployment_stable
+                    )
+                    
+                    if service_healthy:
+                        await self.log_to_database(
+                            deployment_id, 
+                            f"✅ Service is healthy! {running_count}/{desired_count} tasks running"
+                        )
+                        return True
+                    else:
+                        # Log current status
+                        status_msg = f"Service status: {running_count}/{desired_count} running"
+                        if pending_count > 0:
+                            status_msg += f", {pending_count} pending"
+                        if primary_deployment:
+                            status_msg += f", rollout: {primary_deployment.get('rolloutState', 'unknown')}"
+                        
+                        await self.log_to_database(deployment_id, f"🔄 {status_msg}")
+                        
+                        # Check for failures in recent events
+                        events = service.get('events', [])[:5]
+                        for event in events:
+                            message = event.get('message', '').lower()
+                            if any(keyword in message for keyword in ['failed', 'stopped', 'unhealthy']):
+                                await self.log_to_database(
+                                    deployment_id, 
+                                    f"⚠️ Service event: {event.get('message', '')}"
+                                )
+                
+                except ClientError as e:
+                    await self.log_to_database(deployment_id, f"❌ Error checking service: {e}")
+                    return False
+                
+                # Wait before next check
+                await asyncio.sleep(check_interval)
+                
+        except Exception as e:
+            await self.log_to_database(deployment_id, f"❌ Error monitoring service health: {e}")
+            return False
     
     async def get_environment_variables(self, project_id: str) -> List[EnvironmentVariable]:
         """Get environment variables for project"""

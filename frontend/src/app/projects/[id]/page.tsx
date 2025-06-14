@@ -28,6 +28,7 @@ export default function ProjectDetail() {
   const [activeDeploymentId, setActiveDeploymentId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'deployments' | 'logs' | 'settings' | 'shell'>('overview')
   const [activeSettingsTab, setActiveSettingsTab] = useState<'environment' | 'repository' | 'resources'>('repository')
+  const [serviceStatus, setServiceStatus] = useState<any>(null)
 
   useEffect(() => {
     if (isAuthenticated && !authLoading && params.id) {
@@ -37,6 +38,17 @@ export default function ProjectDetail() {
       setLoading(false)
     }
   }, [isAuthenticated, authLoading, params.id])
+
+  // Fetch service status when project loads and periodically
+  useEffect(() => {
+    if (project?.ecsServiceArn) {
+      fetchServiceStatus()
+      
+      // Refresh service status every 30 seconds
+      const interval = setInterval(fetchServiceStatus, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [project?.ecsServiceArn])
 
   // Poll for live logs when there's an active deployment
   useEffect(() => {
@@ -94,6 +106,17 @@ export default function ProjectDetail() {
       }
     } catch (err) {
       console.error('Failed to fetch deployments:', err)
+    }
+  }
+
+  const fetchServiceStatus = async () => {
+    if (!project?.ecsServiceArn) return
+    
+    try {
+      const status = await apiClient.getServiceStatus(params.id as string)
+      setServiceStatus(status)
+    } catch (err) {
+      console.error('Failed to fetch service status:', err)
     }
   }
 
@@ -285,15 +308,59 @@ export default function ProjectDetail() {
                 <div className="space-y-4">
                   <div>
                     <span className="text-sm font-medium text-gray-500">Current Status</span>
-                    <div className="mt-1">
+                    <div className="mt-1 flex items-center space-x-3">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        project.status === 'DEPLOYED' ? 'bg-green-100 text-green-800' :
+                        serviceStatus?.status === 'HEALTHY' ? 'bg-green-100 text-green-800' :
+                        serviceStatus?.status === 'CRASH_LOOP' ? 'bg-red-100 text-red-800' :
+                        serviceStatus?.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' :
+                        serviceStatus?.status === 'DEGRADED' ? 'bg-orange-100 text-orange-800' :
+                        serviceStatus?.status === 'NO_RUNNING_TASKS' ? 'bg-gray-100 text-gray-800' :
+                        project.status === 'DEPLOYED' ? 'bg-yellow-100 text-yellow-800' :
                         project.status === 'FAILED' ? 'bg-red-100 text-red-800' :
-                        'bg-yellow-100 text-yellow-800'
+                        'bg-gray-100 text-gray-800'
                       }`}>
-                        {project.status}
+                        {serviceStatus?.status || project.status}
                       </span>
+                      {serviceStatus && (
+                        <span className="text-sm text-gray-600">
+                          {serviceStatus.message}
+                        </span>
+                      )}
                     </div>
+                    {serviceStatus?.service && (
+                      <div className="mt-2 text-sm text-gray-600">
+                        Tasks: {serviceStatus.service.runningCount}/{serviceStatus.service.desiredCount} running
+                        {serviceStatus.service.pendingCount > 0 && ` (${serviceStatus.service.pendingCount} pending)`}
+                      </div>
+                    )}
+                    {serviceStatus?.crashLoopDetected && (
+                      <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
+                        <p className="text-sm text-red-800">
+                          ⚠️ Container crash loop detected. Check the logs for errors.
+                        </p>
+                      </div>
+                    )}
+                    {serviceStatus?.failureReasons && serviceStatus.failureReasons.length > 0 && (
+                      <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                        <div className="flex items-start">
+                          <div className="flex-shrink-0">
+                            <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div className="ml-3">
+                            <h4 className="text-sm font-medium text-yellow-800">AWS Messages</h4>
+                            <div className="mt-1 text-sm text-yellow-700">
+                              <ul className="list-disc list-inside space-y-1">
+                                {serviceStatus.failureReasons.map((reason: string, index: number) => (
+                                  <li key={index}>{reason}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   {project.domain && (
@@ -334,8 +401,8 @@ export default function ProjectDetail() {
                   <h2 className="text-xl font-semibold text-gray-900 mb-4">
                     🔴 Live Deployment Logs
                   </h2>
-                  <div className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto max-h-96 font-mono text-sm">
-                    <pre className="whitespace-pre-wrap">{liveLogs}</pre>
+                  <div className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-y-auto max-h-96 font-mono text-sm">
+                    <pre className="whitespace-pre-wrap break-words">{liveLogs}</pre>
                   </div>
                   <p className="text-sm text-gray-500 mt-2">
                     Logs update automatically every 2 seconds
@@ -396,7 +463,7 @@ export default function ProjectDetail() {
                         <div className="mt-3">
                           <details className="text-sm">
                             <summary className="cursor-pointer text-gray-600">View Deployment Logs</summary>
-                            <pre className="mt-2 bg-gray-50 p-3 rounded text-xs overflow-auto max-h-48">
+                            <pre className="mt-2 bg-gray-50 p-3 rounded text-xs overflow-y-auto max-h-48 whitespace-pre-wrap break-words">
                               {deployment.logs}
                             </pre>
                           </details>

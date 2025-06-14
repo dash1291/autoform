@@ -149,7 +149,86 @@ async def update_project(
         data=update_data
     )
     
-    return updated_project
+    # Track health check update status
+    health_check_update_status = None
+    
+    # If health check path was updated, try to update the load balancer immediately
+    logger.info(f"Checking health check update: health_check_path={project_update.health_check_path}, status={project.status}, albArn={project.albArn}")
+    
+    if (project_update.health_check_path is not None and 
+        project.albArn):  # Remove the DEPLOYED requirement - allow during deployment
+        
+        logger.info(f"Updating health check path to {project_update.health_check_path} for project {project.name}")
+        try:
+            import boto3
+            import os
+            from botocore.exceptions import ClientError
+            
+            region = os.getenv('AWS_REGION', 'us-east-1')
+            elbv2_client = boto3.client('elbv2', region_name=region)
+            
+            # Try to find target group by name first (more reliable during deployment)
+            target_group_name = f"{project.name}-tg"
+            target_groups_response = None
+            
+            try:
+                # First try to find by name
+                target_groups_response = elbv2_client.describe_target_groups(
+                    Names=[target_group_name]
+                )
+                logger.info(f"Found target group by name: {target_group_name}")
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'TargetGroupNotFound':
+                    logger.info(f"Target group {target_group_name} not found by name, trying by load balancer")
+                    # Fallback to finding by load balancer
+                    target_groups_response = elbv2_client.describe_target_groups(
+                        LoadBalancerArn=project.albArn
+                    )
+                else:
+                    raise e
+            
+            if not target_groups_response or not target_groups_response['TargetGroups']:
+                health_check_update_status = "failed: no target groups found"
+                logger.error("No target groups found for health check update")
+            else:
+                # Update health check path for each target group
+                for target_group in target_groups_response['TargetGroups']:
+                    target_group_arn = target_group['TargetGroupArn']
+                
+                    elbv2_client.modify_target_group(
+                        TargetGroupArn=target_group_arn,
+                        HealthCheckEnabled=True,
+                        HealthCheckPath=project_update.health_check_path,
+                        HealthCheckPort="traffic-port",
+                        HealthCheckProtocol="HTTP",
+                        HealthCheckTimeoutSeconds=5,
+                        HealthyThresholdCount=2,
+                        UnhealthyThresholdCount=2,
+                        Matcher={"HttpCode": "200"}
+                    )
+                    
+                    logger.info(f"Updated health check path to {project_update.health_check_path} for target group {target_group_arn}")
+                
+                health_check_update_status = "success"
+        
+        except ClientError as e:
+            logger.error(f"Failed to update health check path in load balancer: {e}")
+            health_check_update_status = f"failed: {e.response['Error']['Message']}"
+        except Exception as e:
+            logger.error(f"Unexpected error updating health check path: {e}")
+            health_check_update_status = f"failed: {str(e)}"
+    elif project_update.health_check_path is not None:
+        if project.status != "DEPLOYED":
+            health_check_update_status = "skipped: project not deployed"
+        elif not project.albArn:
+            health_check_update_status = "skipped: no load balancer found"
+    
+    # Add health check update status to response
+    response = updated_project.dict()
+    if health_check_update_status:
+        response["healthCheckUpdateStatus"] = health_check_update_status
+    
+    return response
 
 
 @router.delete("/{project_id}")
@@ -182,6 +261,229 @@ async def delete_project(
     return {"message": "Project deleted successfully"}
 
 
+@router.get("/{project_id}/service-status")
+async def get_service_status(
+    project_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Get the actual ECS service status and health"""
+    project = await prisma.project.find_first(
+        where={
+            "id": project_id,
+            "userId": current_user.id
+        }
+    )
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    # If not deployed, return appropriate status
+    if not project.ecsServiceArn:
+        return {
+            "status": "NOT_DEPLOYED",
+            "message": "Service not deployed",
+            "healthy": False
+        }
+    
+    import boto3
+    import os
+    from botocore.exceptions import ClientError
+    
+    region = os.getenv('AWS_REGION', 'us-east-1')
+    
+    try:
+        ecs_client = boto3.client('ecs', region_name=region)
+        
+        # Get cluster and service identifiers
+        cluster_identifier = project.ecsClusterArn or "default"
+        service_identifier = project.ecsServiceArn
+        
+        # Describe the service
+        service_response = ecs_client.describe_services(
+            cluster=cluster_identifier,
+            services=[service_identifier]
+        )
+        
+        if not service_response['services']:
+            return {
+                "status": "SERVICE_NOT_FOUND",
+                "message": "ECS service not found",
+                "healthy": False
+            }
+        
+        service = service_response['services'][0]
+        
+        # Get service status
+        service_status = service['status']
+        running_count = service.get('runningCount', 0)
+        desired_count = service.get('desiredCount', 0)
+        pending_count = service.get('pendingCount', 0)
+        
+        # Get deployments info
+        deployments = service.get('deployments', [])
+        active_deployment = None
+        for deployment in deployments:
+            if deployment['status'] == 'PRIMARY':
+                active_deployment = deployment
+                break
+        
+        # Check for recent events (last 10)
+        events = service.get('events', [])[:10]
+        recent_events = []
+        for event in events:
+            recent_events.append({
+                "message": event.get('message', ''),
+                "createdAt": event.get('createdAt').isoformat() if event.get('createdAt') else None
+            })
+        
+        # Determine health status
+        healthy = (
+            service_status == 'ACTIVE' and 
+            running_count == desired_count and 
+            running_count > 0 and
+            pending_count == 0
+        )
+        
+        # Check for deployment issues
+        deployment_status = "STABLE"
+        deployment_in_progress = False
+        
+        if active_deployment:
+            rollout_state = active_deployment.get('rolloutState', '')
+            deployment_running_count = active_deployment.get('runningCount', 0)
+            deployment_desired_count = active_deployment.get('desiredCount', 0)
+            
+            # Check if deployment is actually complete
+            if rollout_state == 'IN_PROGRESS':
+                deployment_status = "IN_PROGRESS"
+                deployment_in_progress = True
+            elif deployment_running_count < deployment_desired_count:
+                deployment_status = "IN_PROGRESS"
+                deployment_in_progress = True
+            elif rollout_state == 'COMPLETED':
+                deployment_status = "STABLE"
+            else:
+                # If rollout state is not explicitly COMPLETED, consider it in progress
+                if rollout_state in ['PENDING', 'IN_PROGRESS']:
+                    deployment_status = "IN_PROGRESS"
+                    deployment_in_progress = True
+        
+        # Check for crash loops and failure reasons by examining events
+        crash_loop_detected = False
+        failure_reasons = []
+        
+        if events:
+            # Look for repeated task stopped messages
+            stopped_events = [e for e in events[:5] if 'has stopped' in e.get('message', '')]
+            if len(stopped_events) >= 3:
+                crash_loop_detected = True
+            
+            # Only extract failure reasons if service is not healthy
+            if not healthy or deployment_in_progress:
+                # Extract failure reasons from recent events
+                for event in events[:10]:  # Check last 10 events
+                    message = event.get('message', '').lower()
+                    
+                    # Health check failures
+                    if 'health check' in message and ('failed' in message or 'failing' in message):
+                        failure_reasons.append("Health check is failing - check your health check endpoint")
+                    
+                    # Task stopped due to health check
+                    elif 'task stopped' in message and 'health check' in message:
+                        failure_reasons.append("Tasks are being stopped due to failed health checks")
+                    
+                    # Port binding issues
+                    elif 'port' in message and ('bind' in message or 'already in use' in message):
+                        failure_reasons.append("Port binding issue - check if the port is already in use")
+                    
+                    # Memory issues
+                    elif 'memory' in message and ('limit' in message or 'oom' in message or 'killed' in message):
+                        failure_reasons.append("Container running out of memory - consider increasing memory allocation")
+                    
+                    # Exit code issues
+                    elif 'exit code' in message and 'non-zero' in message:
+                        failure_reasons.append("Application exiting with errors - check application logs")
+                    
+                    # Image pull issues
+                    elif 'image' in message and ('pull' in message or 'not found' in message):
+                        failure_reasons.append("Container image pull failed - check if image exists")
+                    
+                    # Resource issues
+                    elif 'resource' in message and ('insufficient' in message or 'unavailable' in message):
+                        failure_reasons.append("Insufficient resources available - check CPU/memory limits")
+                
+                # Remove duplicates while preserving order
+                failure_reasons = list(dict.fromkeys(failure_reasons))
+        
+        # Determine overall status
+        if not healthy or deployment_in_progress:
+            if crash_loop_detected:
+                overall_status = "CRASH_LOOP"
+            elif deployment_status != "STABLE":
+                overall_status = deployment_status
+            elif running_count == 0:
+                overall_status = "NO_RUNNING_TASKS"
+            elif running_count < desired_count:
+                overall_status = "DEGRADED"
+            else:
+                overall_status = "UNHEALTHY"
+        else:
+            overall_status = "HEALTHY"
+        
+        return {
+            "status": overall_status,
+            "healthy": healthy,
+            "service": {
+                "status": service_status,
+                "runningCount": running_count,
+                "desiredCount": desired_count,
+                "pendingCount": pending_count
+            },
+            "deployment": {
+                "status": deployment_status,
+                "rolloutState": active_deployment.get('rolloutState') if active_deployment else None
+            },
+            "crashLoopDetected": crash_loop_detected,
+            "failureReasons": failure_reasons[:3],  # Show up to 3 most recent failure reasons
+            "recentEvents": recent_events[:5],  # Only return last 5 events
+            "message": _get_status_message(overall_status, running_count, desired_count)
+        }
+        
+    except ClientError as e:
+        logger.error(f"Error checking service status: {e}")
+        return {
+            "status": "ERROR",
+            "message": f"Error checking service status: {e.response['Error']['Message']}",
+            "healthy": False
+        }
+    except Exception as e:
+        logger.error(f"Unexpected error checking service status: {e}")
+        return {
+            "status": "ERROR",
+            "message": f"Unexpected error: {str(e)}",
+            "healthy": False
+        }
+
+
+def _get_status_message(status: str, running: int, desired: int) -> str:
+    """Get a human-readable status message"""
+    messages = {
+        "HEALTHY": "Service is running normally",
+        "CRASH_LOOP": "Container is repeatedly crashing. Check logs for errors.",
+        "NO_RUNNING_TASKS": "No containers are running",
+        "DEGRADED": f"Only {running} of {desired} containers are running",
+        "IN_PROGRESS": "Service is being deployed",
+        "UNHEALTHY": "Service is unhealthy",
+        "NOT_DEPLOYED": "Service not deployed",
+        "SERVICE_NOT_FOUND": "ECS service not found",
+        "ERROR": "Error checking service status"
+    }
+    return messages.get(status, status)
+
+
 @router.get("/{project_id}/exec")
 async def check_exec_availability(
     project_id: str,
@@ -202,8 +504,8 @@ async def check_exec_availability(
             detail="Project not found"
         )
     
-    # Check if project is deployed and has ECS service
-    if project.status != "DEPLOYED" or not project.ecsServiceArn:
+    # Check if project has ECS service (has been deployed at least once)
+    if not project.ecsServiceArn:
         return {
             "available": False,
             "status": "not_deployed",
@@ -323,8 +625,8 @@ async def execute_command(
             detail="Project not found"
         )
     
-    # Check if project is deployed and has ECS service
-    if project.status != "DEPLOYED" or not project.ecsServiceArn:
+    # Check if project has ECS service (has been deployed at least once)
+    if not project.ecsServiceArn:
         return {
             "success": False,
             "message": "Project must be deployed to execute commands"
@@ -453,8 +755,8 @@ async def get_project_logs(
             detail="Project not found"
         )
     
-    # For non-deployed projects, show appropriate message
-    if project.status != "DEPLOYED":
+    # Check if project has ever been deployed (has ECS service), not just current status
+    if not project.ecsServiceArn:
         return {
             "logs": [],
             "message": "Project must be deployed to view application logs",
