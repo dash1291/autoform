@@ -220,29 +220,44 @@ async def check_exec_availability(
     try:
         ecs_client = boto3.client('ecs', region_name=region)
         
-        # Extract cluster ARN or use default
-        cluster_arn = project.ecsClusterArn or "default"
+        # Extract cluster name from ARN or use default
+        cluster_name = project.ecsClusterArn or "default"
+        if cluster_name and cluster_name.startswith('arn:aws:ecs:'):
+            cluster_name = cluster_name.split('/')[-1]
+        
+        # Extract service name from ARN
+        service_name = project.ecsServiceArn
+        if service_name and service_name.startswith('arn:aws:ecs:'):
+            service_name = service_name.split('/')[-1]
+        
+        logger.info(f"Checking shell access for service: {service_name} in cluster: {cluster_name}")
         
         # List tasks for the service
         response = ecs_client.list_tasks(
-            cluster=cluster_arn,
-            serviceName=project.ecsServiceArn,
+            cluster=cluster_name,
+            serviceName=service_name,
             desiredStatus='RUNNING'
         )
         
         running_tasks = response.get('taskArns', [])
         
         if not running_tasks:
+            logger.warning(f"No running tasks found for service {service_name} in cluster {cluster_name}")
             return {
                 "available": False,
                 "status": "no_tasks",
                 "reason": "No running containers found",
-                "taskCount": 0
+                "taskCount": 0,
+                "debug": {
+                    "serviceName": service_name,
+                    "clusterName": cluster_name,
+                    "region": region
+                }
             }
         
         # Get task details to find container names
         tasks_response = ecs_client.describe_tasks(
-            cluster=cluster_arn,
+            cluster=cluster_name,
             tasks=running_tasks[:1]  # Just check the first task
         )
         
@@ -257,7 +272,7 @@ async def check_exec_availability(
                 "available": True,
                 "status": "ready",
                 "taskArn": task['taskArn'],
-                "clusterArn": cluster_arn,  # Changed from 'cluster' to 'clusterArn'
+                "clusterArn": project.ecsClusterArn,  # Return the full cluster ARN
                 "containerName": container_name,  # Added containerName
                 "taskCount": len(running_tasks),
                 "containers": containers,

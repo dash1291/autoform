@@ -28,18 +28,26 @@ export default function SimpleShell({ projectId, isActive = false }: SimpleShell
   const [error, setError] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [shellCommand, setShellCommand] = useState<ShellCommand | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
-    checkExecAvailability()
-    // Refresh status every 30 seconds
-    const interval = setInterval(checkExecAvailability, 30000)
-    return () => clearInterval(interval)
-  }, [projectId])
+    // Only check when tab is active
+    if (isActive) {
+      checkExecAvailability()
+      // Refresh status every 15 seconds when active
+      const interval = setInterval(checkExecAvailability, 15000)
+      return () => clearInterval(interval)
+    }
+  }, [projectId, isActive])
 
   // Auto-generate shell command when tab becomes active and exec is available
   useEffect(() => {
     if (isActive && execStatus?.available && !shellCommand && !isGenerating) {
-      generateShellCommand()
+      // Add a small delay to ensure container is fully ready
+      const timer = setTimeout(() => {
+        generateShellCommand()
+      }, 1000)
+      return () => clearTimeout(timer)
     }
   }, [isActive, execStatus?.available])
 
@@ -47,8 +55,19 @@ export default function SimpleShell({ projectId, isActive = false }: SimpleShell
     try {
       const data = await apiClient.checkExecAvailability(projectId)
       setExecStatus(data)
+      setError('') // Clear any previous errors
+      
+      // Reset retry count on successful check
+      if (data.available) {
+        setRetryCount(0)
+      }
     } catch (err) {
-      setError('Failed to check exec availability')
+      console.error('Failed to check exec availability:', err)
+      // Don't show error immediately, as it might be temporary
+      if (retryCount > 2) {
+        setError('Failed to check exec availability')
+      }
+      setRetryCount(prev => prev + 1)
     } finally {
       setLoading(false)
     }
@@ -61,7 +80,15 @@ export default function SimpleShell({ projectId, isActive = false }: SimpleShell
     setError('')
 
     try {
-      const data = await apiClient.checkExecAvailability(projectId)
+      // Use the already fetched execStatus data if it has all required fields
+      let data = execStatus
+      
+      // If missing required fields, fetch fresh data
+      if (!data.clusterArn || !data.taskArn || !data.containerName) {
+        console.log('Fetching fresh exec data due to missing fields')
+        data = await apiClient.checkExecAvailability(projectId)
+        setExecStatus(data)
+      }
       
       if (!data.available) {
         setError('Shell access is not available - no running containers found')
@@ -69,7 +96,8 @@ export default function SimpleShell({ projectId, isActive = false }: SimpleShell
       }
 
       if (!data.clusterArn || !data.taskArn || !data.containerName) {
-        setError('Unable to get container information - missing cluster, task, or container details')
+        console.error('Missing required data:', data)
+        setError('Container information is incomplete. Please try again in a few seconds.')
         return
       }
       
@@ -88,7 +116,8 @@ export default function SimpleShell({ projectId, isActive = false }: SimpleShell
         timestamp: new Date()
       })
     } catch (err) {
-      setError('Failed to generate shell command')
+      console.error('Failed to generate shell command:', err)
+      setError('Failed to generate shell command. Please refresh and try again.')
     } finally {
       setIsGenerating(false)
     }

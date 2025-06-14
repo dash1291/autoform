@@ -462,22 +462,18 @@ export default function ProjectDetail() {
 
                   {activeSettingsTab === 'resources' && (
                     <div className="space-y-6">
-                      <div className="bg-white border border-gray-200 rounded-lg p-6">
-                        <ResourceConfiguration 
-                          projectId={params.id as string} 
-                          project={project}
-                          onUpdate={fetchProject}
-                        />
-                      </div>
-                      
-                      <div className="bg-white border border-gray-200 rounded-lg p-6">
-                        <NetworkConfiguration 
-                          projectId={params.id as string} 
-                          project={project}
-                          onUpdate={fetchProject}
-                        />
-                      </div>
-                      
+                      <ResourceConfiguration 
+                        projectId={params.id as string} 
+                        project={project}
+                        onUpdate={fetchProject}
+                      />
+ 
+                      <NetworkConfiguration 
+                        projectId={params.id as string} 
+                        project={project}
+                        onUpdate={fetchProject}
+                      />
+
                       <div className="bg-white border border-gray-200 rounded-lg p-6">
                         <h2 className="text-xl font-semibold text-gray-900 mb-4">Other Resources</h2>
                         <div className="space-y-3">
