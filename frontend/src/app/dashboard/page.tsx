@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Project } from '@/types'
 import { apiClient } from '@/lib/api'
 import { useAuth } from '@/lib/auth-client'
+import { Button } from '@/components/ui/button'
 
 export default function Dashboard() {
   const { isAuthenticated, isLoading } = useAuth()
@@ -104,21 +105,21 @@ export default function Dashboard() {
                     </div>
                     <div className="flex space-x-2">
                       {project.domain && (
-                        <a
-                          href={`http://${project.domain}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary-600 hover:text-primary-700 text-sm"
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(`http://${project.domain}`, '_blank')}
                         >
                           View App
-                        </a>
+                        </Button>
                       )}
-                      <Link
-                        href={`/projects/${project.id}`}
-                        className="text-gray-600 hover:text-gray-700 text-sm"
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => window.location.href = `/projects/${project.id}`}
                       >
                         Settings
-                      </Link>
+                      </Button>
                     </div>
                   </div>
                 </div>
