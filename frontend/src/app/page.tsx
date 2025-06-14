@@ -2,27 +2,26 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { useJwtStore } from '@/lib/auth-client'
+import { useAuth } from '@/lib/auth-client'
+import { signIn } from 'next-auth/react'
 
 export default function Home() {
-  const { jwtToken } = useJwtStore()
+  const { isAuthenticated, isLoading } = useAuth()
   const router = useRouter()
 
   // Redirect to dashboard if user is logged in
   useEffect(() => {
-    if (jwtToken) {
+    if (isAuthenticated && !isLoading) {
       router.push('/dashboard')
     }
-  }, [jwtToken, router])
+  }, [isAuthenticated, isLoading, router])
 
   const handleGetStarted = () => {
-    if (jwtToken) {
+    if (isAuthenticated) {
       router.push('/dashboard')
     } else {
-      // Redirect to login page or show login form
-      window.location.href = '/auth/login'
+      signIn('github')
     }
   }
 
@@ -44,13 +43,11 @@ export default function Home() {
               Get Started
             </Button>
             <Button
-              asChild
+              onClick={() => signIn('github')}
               variant="outline"
               size="lg"
             >
-              <Link href="/auth/login">
-                Login
-              </Link>
+              Login
             </Button>
           </div>
         </div>
