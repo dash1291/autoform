@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     debug: bool = False
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
+    webhook_base_url: Optional[str] = None
     
     # Database
     database_url: str

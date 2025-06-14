@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import logging
 
 from core.config import settings
-from app.routers import projects, auth, deployments, environment_variables, github, debug, aws
+from app.routers import projects, auth, deployments, environment_variables, github, debug, aws, webhook
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -51,6 +51,7 @@ app.include_router(
 app.include_router(github.router, prefix="/api/github", tags=["github"])
 app.include_router(debug.router, prefix="/api/debug", tags=["debug"])
 app.include_router(aws.router, prefix="/api/aws", tags=["aws"])
+app.include_router(webhook.router, prefix="/api/webhook", tags=["webhook"])
 
 
 @app.get("/")

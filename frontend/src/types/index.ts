@@ -40,6 +40,9 @@ export interface Project {
   subdirectory?: string
   port: number
   healthCheckPath: string
+  autoDeployEnabled: boolean
+  webhookSecret?: string
+  webhookConfigured: boolean
   createdAt: Date
   updatedAt: Date
 }

@@ -232,6 +232,31 @@ class ApiClient {
   async getProjectDeployedResources(projectId: string) {
     return this.request(`/projects/${projectId}/deployed-resources`)
   }
+
+  // Webhook endpoints
+  async configureWebhook(projectId: string, githubAccessToken?: string) {
+    const headers: HeadersInit = {}
+    if (githubAccessToken) {
+      headers['X-GitHub-Token'] = githubAccessToken
+    }
+    
+    return this.request(`/projects/${projectId}/webhook/configure`, {
+      method: 'POST',
+      headers
+    })
+  }
+
+  async deleteWebhookConfig(projectId: string, githubAccessToken?: string) {
+    const headers: HeadersInit = {}
+    if (githubAccessToken) {
+      headers['X-GitHub-Token'] = githubAccessToken
+    }
+    
+    return this.request(`/projects/${projectId}/webhook`, {
+      method: 'DELETE',
+      headers
+    })
+  }
 }
 
 export const apiClient = new ApiClient()

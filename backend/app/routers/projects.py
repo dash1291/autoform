@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from typing import List, Optional
 import json
 import logging
+import os
 
 from core.database import prisma
 from core.security import get_current_user
+from core.config import settings
 from schemas import Project, ProjectCreate, ProjectUpdate, ProjectStatus, User
 from services import cloudwatch_service
+from services.github_webhook import GitHubWebhookService
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +127,8 @@ async def update_project(
         update_data["port"] = project_update.port
     if project_update.health_check_path is not None:
         update_data["healthCheckPath"] = project_update.health_check_path
+    if project_update.auto_deploy_enabled is not None:
+        update_data["autoDeployEnabled"] = project_update.auto_deploy_enabled
     
     # Network configuration
     if project_update.existing_vpc_id is not None:
@@ -973,6 +978,139 @@ async def debug_project_logs(
             "expected_log_group": f"/ecs/{project.name}",
             "error": str(e)
         }
+
+
+@router.post("/{project_id}/webhook/configure")
+async def configure_webhook(
+    project_id: str,
+    github_access_token: Optional[str] = Header(None, alias="X-GitHub-Token"),
+    current_user: User = Depends(get_current_user)
+):
+    """Configure webhook for automatic deployments"""
+    # Check if project exists and belongs to user
+    project = await prisma.project.find_first(
+        where={
+            "id": project_id,
+            "userId": current_user.id
+        }
+    )
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    # Generate webhook secret if not exists
+    if not project.webhookSecret:
+        import secrets
+        webhook_secret = secrets.token_urlsafe(32)
+        
+        await prisma.project.update(
+            where={"id": project_id},
+            data={"webhookSecret": webhook_secret}
+        )
+    else:
+        webhook_secret = project.webhookSecret
+    
+    # Webhook URL
+    base_url = settings.webhook_base_url or settings.backend_url
+    webhook_url = f"{base_url}/api/webhook/github"
+    
+    # If GitHub access token provided, try to create webhook automatically
+    if github_access_token:
+        try:
+            webhook_service = GitHubWebhookService()
+            webhook_result = await webhook_service.create_webhook(
+                git_repo_url=project.gitRepoUrl,
+                webhook_url=webhook_url,
+                webhook_secret=webhook_secret,
+                access_token=github_access_token
+            )
+            
+            # Mark webhook as configured
+            await prisma.project.update(
+                where={"id": project_id},
+                data={"webhookConfigured": True}
+            )
+            
+            return {
+                "webhookUrl": webhook_url,
+                "webhookSecret": webhook_secret,
+                "automatic": True,
+                "webhookId": webhook_result.get("id"),
+                "status": "created" if webhook_result.get("created") else "updated" if webhook_result.get("updated") else "exists"
+            }
+        except Exception as e:
+            logger.error(f"Failed to automatically create webhook: {str(e)}")
+            # Fall back to manual instructions
+    
+    # Return manual instructions
+    return {
+        "webhookUrl": webhook_url,
+        "webhookSecret": webhook_secret,
+        "automatic": False,
+        "instructions": {
+            "1": "Go to your GitHub repository settings",
+            "2": "Click on 'Webhooks' in the left sidebar",
+            "3": "Click 'Add webhook'",
+            "4": f"Set Payload URL to: {webhook_url}",
+            "5": "Set Content type to: application/json",
+            "6": f"Set Secret to: {webhook_secret}",
+            "7": "Select 'Just the push event'",
+            "8": "Make sure 'Active' is checked",
+            "9": "Click 'Add webhook'"
+        }
+    }
+
+
+@router.delete("/{project_id}/webhook")
+async def delete_webhook_config(
+    project_id: str,
+    github_access_token: Optional[str] = Header(None, alias="X-GitHub-Token"),
+    current_user: User = Depends(get_current_user)
+):
+    """Delete webhook configuration"""
+    # Check if project exists and belongs to user
+    project = await prisma.project.find_first(
+        where={
+            "id": project_id,
+            "userId": current_user.id
+        }
+    )
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    # If GitHub access token provided, try to delete webhook from GitHub
+    if github_access_token and project.webhookSecret:
+        try:
+            base_url = settings.webhook_base_url or settings.backend_url
+            webhook_url = f"{base_url}/api/webhook/github"
+            webhook_service = GitHubWebhookService()
+            await webhook_service.delete_webhook(
+                git_repo_url=project.gitRepoUrl,
+                webhook_url=webhook_url,
+                access_token=github_access_token
+            )
+        except Exception as e:
+            logger.error(f"Failed to delete webhook from GitHub: {str(e)}")
+            # Continue with local deletion even if GitHub deletion fails
+    
+    # Remove webhook secret and disable auto-deploy
+    await prisma.project.update(
+        where={"id": project_id},
+        data={
+            "webhookSecret": None,
+            "autoDeployEnabled": False,
+            "webhookConfigured": False
+        }
+    )
+    
+    return {"message": "Webhook configuration deleted successfully"}
 
 
 @router.get("/{project_id}/codebuild-logs")

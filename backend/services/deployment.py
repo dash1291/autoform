@@ -24,7 +24,12 @@ class DeploymentConfig:
         git_repo_url: str,
         branch: str,
         commit_sha: str,
-        subdirectory: Optional[str] = None
+        subdirectory: Optional[str] = None,
+        health_check_path: str = "/health",
+        port: int = 3000,
+        cpu: int = 256,
+        memory: int = 512,
+        disk_size: int = 21
     ):
         self.project_id = project_id
         self.project_name = project_name
@@ -32,6 +37,11 @@ class DeploymentConfig:
         self.branch = branch
         self.commit_sha = commit_sha
         self.subdirectory = subdirectory
+        self.health_check_path = health_check_path
+        self.port = port
+        self.cpu = cpu
+        self.memory = memory
+        self.disk_size = disk_size
 
 
 class DeploymentService:
@@ -180,8 +190,7 @@ class DeploymentService:
             if deployment_id:
                 await self.log_to_database(deployment_id, "☁️ Provisioning AWS infrastructure...")
             result = await self.deploy_infrastructure(
-                config.project_id,
-                config.project_name,
+                config,
                 image_uri,
                 deployment_id
             )
@@ -661,49 +670,48 @@ class DeploymentService:
     
     async def deploy_infrastructure(
         self,
-        project_id: str,
-        project_name: str,
+        config: DeploymentConfig,
         image_uri: str,
         deployment_id: Optional[str] = None
     ) -> ECSInfrastructureOutput:
         """Deploy AWS infrastructure"""
         # Fetch environment variables for the project
-        environment_variables = await self.get_environment_variables(project_id)
+        environment_variables = await self.get_environment_variables(config.project_id)
         
         if deployment_id and environment_variables:
             await self.log_to_database(deployment_id, f"📋 Found {len(environment_variables)} environment variables")
         
-        # Fetch project to get network configuration
-        project = await self.get_project_network_config(project_id)
+        # Fetch project to get network configuration (for existing VPC/subnets/cluster only)
+        project_network = await self.get_project_network_config(config.project_id)
         
         infrastructure_args = ECSInfrastructureArgs(
-            project_name=project_name,
+            project_name=config.project_name,
             image_uri=image_uri,
-            container_port=project.get("port", 3000),
-            health_check_path=project.get("health_check_path", "/health"),
+            container_port=config.port,
+            health_check_path=config.health_check_path,
             region=self.region,
             environment_variables=environment_variables,
-            cpu=project.get("cpu", 256),
-            memory=project.get("memory", 512),
-            disk_size=project.get("disk_size", 21),
-            existing_vpc_id=project.get("existing_vpc_id"),
-            existing_subnet_ids=project.get("existing_subnet_ids"),
-            existing_cluster_arn=project.get("existing_cluster_arn")
+            cpu=config.cpu,
+            memory=config.memory,
+            disk_size=config.disk_size,
+            existing_vpc_id=project_network.get("existing_vpc_id"),
+            existing_subnet_ids=project_network.get("existing_subnet_ids"),
+            existing_cluster_arn=project_network.get("existing_cluster_arn")
         )
         
         # Add existing network resources if configured
-        if project.get("existing_vpc_id"):
+        if project_network.get("existing_vpc_id"):
             if deployment_id:
-                await self.log_to_database(deployment_id, f"🌐 Using existing VPC: {project['existing_vpc_id']}")
+                await self.log_to_database(deployment_id, f"🌐 Using existing VPC: {project_network['existing_vpc_id']}")
         
-        if project.get("existing_subnet_ids"):
+        if project_network.get("existing_subnet_ids"):
             if deployment_id:
-                subnet_list = ", ".join(project["existing_subnet_ids"])
+                subnet_list = ", ".join(project_network["existing_subnet_ids"])
                 await self.log_to_database(deployment_id, f"🌐 Using existing subnets: {subnet_list}")
         
-        if project.get("existing_cluster_arn"):
+        if project_network.get("existing_cluster_arn"):
             if deployment_id:
-                await self.log_to_database(deployment_id, f"🚀 Using existing ECS cluster: {project['existing_cluster_arn']}")
+                await self.log_to_database(deployment_id, f"🚀 Using existing ECS cluster: {project_network['existing_cluster_arn']}")
         
         infrastructure = ECSInfrastructure(infrastructure_args)
         

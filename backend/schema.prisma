@@ -77,6 +77,9 @@ model Project {
   subdirectory    String?
   port            Int                   @default(3000)
   healthCheckPath String                @default("/health")
+  autoDeployEnabled Boolean             @default(false)
+  webhookSecret   String?
+  webhookConfigured Boolean             @default(false)
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
   secretsArn      String?

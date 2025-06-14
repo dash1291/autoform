@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import { Project } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { CheckCircle, GitBranch, Loader2 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { CheckCircle, GitBranch, Loader2, Webhook, Copy, Trash2, ExternalLink, AlertCircle } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 
 interface RepositoryConfigurationProps {
@@ -13,7 +15,17 @@ interface RepositoryConfigurationProps {
   onUpdate: () => void
 }
 
+interface WebhookConfig {
+  webhookUrl: string
+  webhookSecret: string
+  instructions?: Record<string, string>
+  automatic?: boolean
+  status?: string
+  webhookId?: string
+}
+
 export default function RepositoryConfiguration({ projectId, project, onUpdate }: RepositoryConfigurationProps) {
+  const { data: session } = useSession()
   const [formData, setFormData] = useState({
     gitRepoUrl: project.gitRepoUrl || '',
     branch: project.branch || 'main',
@@ -28,6 +40,13 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
   const [repoInfo, setRepoInfo] = useState<any>(null)
   const [branches, setBranches] = useState<string[]>([])
   const [validationTimeout, setValidationTimeout] = useState<NodeJS.Timeout | null>(null)
+  
+  // Webhook state
+  const [autoDeployEnabled, setAutoDeployEnabled] = useState(project.autoDeployEnabled || false)
+  const [webhookConfig, setWebhookConfig] = useState<WebhookConfig | null>(null)
+  const [webhookConfigured, setWebhookConfigured] = useState(project.webhookConfigured || false)
+  const [webhookLoading, setWebhookLoading] = useState(false)
+  const [showWebhookInstructions, setShowWebhookInstructions] = useState(false)
 
   const validateRepository = async (url: string) => {
     if (!url || !url.includes('github.com')) return
@@ -80,6 +99,106 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
       }
     }
   }, [validationTimeout])
+
+  // Webhook methods
+  const handleAutoDeployToggle = async (enabled: boolean) => {
+    setWebhookLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      await apiClient.updateProject(projectId, { autoDeployEnabled: enabled })
+      setAutoDeployEnabled(enabled)
+      
+      if (enabled && !webhookConfig) {
+        // Configure webhook when enabling auto-deploy
+        await configureWebhook()
+      }
+      
+      setSuccess(enabled ? 'Auto-deploy enabled!' : 'Auto-deploy disabled!')
+      onUpdate()
+    } catch (err) {
+      setError('Failed to update auto-deploy setting')
+      setAutoDeployEnabled(!enabled) // Revert toggle
+    } finally {
+      setWebhookLoading(false)
+    }
+  }
+
+  const configureWebhook = async () => {
+    setWebhookLoading(true)
+    setError('')
+
+    try {
+      // Pass GitHub access token if available
+      const config = await apiClient.configureWebhook(
+        projectId, 
+        session?.accessToken
+      )
+      
+      setWebhookConfig(config)
+      
+      if (config.automatic) {
+        // Webhook was created automatically
+        setWebhookConfigured(true)
+        setSuccess(
+          config.status === 'created' ? 'Webhook created automatically!' :
+          config.status === 'updated' ? 'Webhook updated automatically!' :
+          'Webhook already exists!'
+        )
+        onUpdate()
+      } else {
+        // Manual setup required
+        setShowWebhookInstructions(true)
+        setSuccess('Webhook configuration generated! Please follow the instructions to complete setup.')
+      }
+    } catch (err) {
+      setError('Failed to configure webhook')
+    } finally {
+      setWebhookLoading(false)
+    }
+  }
+
+  const deleteWebhookConfig = async () => {
+    if (!confirm('Are you sure you want to delete the webhook configuration? This will disable auto-deploy.')) {
+      return
+    }
+
+    setWebhookLoading(true)
+    setError('')
+
+    try {
+      // Pass GitHub access token to delete from GitHub too
+      await apiClient.deleteWebhookConfig(projectId, session?.accessToken)
+      setWebhookConfig(null)
+      setAutoDeployEnabled(false)
+      setWebhookConfigured(false)
+      setShowWebhookInstructions(false)
+      setSuccess('Webhook configuration deleted!')
+      onUpdate()
+    } catch (err) {
+      setError('Failed to delete webhook configuration')
+    } finally {
+      setWebhookLoading(false)
+    }
+  }
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setSuccess('Copied to clipboard!')
+      setTimeout(() => setSuccess(''), 2000)
+    } catch (err) {
+      setError('Failed to copy to clipboard')
+    }
+  }
+
+  const openGitHubSettings = () => {
+    if (formData.gitRepoUrl) {
+      const settingsUrl = `${formData.gitRepoUrl}/settings/hooks`
+      window.open(settingsUrl, '_blank')
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -315,6 +434,182 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
         <div className="text-sm text-blue-800 space-y-1">
           <p><strong>Health check path & port:</strong> Updates take effect immediately on deployed services.</p>
           <p><strong>Repository changes:</strong> Require a new deployment to take effect.</p>
+        </div>
+      </div>
+
+      {/* Auto-deploy section */}
+      <div className="mt-8 border-t pt-8">
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Automatic Deployments</h3>
+          <p className="text-sm text-gray-600 mt-1">
+            Enable automatic deployments when commits are pushed to the <strong>{formData.branch}</strong> branch.
+          </p>
+        </div>
+
+        {/* Auto-deploy toggle */}
+        <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+          <div>
+            <h4 className="font-medium text-gray-900">Auto-deploy on push</h4>
+            <p className="text-sm text-gray-600">
+              Automatically deploy when commits are pushed to {formData.branch}
+            </p>
+          </div>
+          <Switch
+            checked={autoDeployEnabled}
+            onCheckedChange={handleAutoDeployToggle}
+            disabled={webhookLoading}
+          />
+        </div>
+
+        {/* Webhook configuration */}
+        {autoDeployEnabled && (
+          <div className="mt-4 border border-gray-200 rounded-lg p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Webhook className="h-5 w-5 text-gray-500" />
+                <h4 className="font-medium text-gray-900">GitHub Webhook</h4>
+                {webhookConfigured && (
+                  <span className="flex items-center text-sm text-green-600">
+                    <CheckCircle className="h-4 w-4 mr-1" />
+                    Configured
+                  </span>
+                )}
+              </div>
+              <div className="flex space-x-2">
+                {!webhookConfig && !webhookConfigured && (
+                  <Button
+                    onClick={configureWebhook}
+                    disabled={webhookLoading}
+                    size="sm"
+                  >
+                    Configure Webhook
+                  </Button>
+                )}
+                {webhookConfigured && !webhookConfig && (
+                  <Button
+                    onClick={configureWebhook}
+                    disabled={webhookLoading}
+                    variant="outline"
+                    size="sm"
+                  >
+                    Re-configure
+                  </Button>
+                )}
+                {(webhookConfig || webhookConfigured) && (
+                  <>
+                    {webhookConfig && !webhookConfig.automatic && (
+                      <Button
+                        onClick={() => setShowWebhookInstructions(!showWebhookInstructions)}
+                        variant="outline"
+                        size="sm"
+                      >
+                        {showWebhookInstructions ? 'Hide' : 'Show'} Instructions
+                      </Button>
+                    )}
+                    <Button
+                      onClick={openGitHubSettings}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <ExternalLink className="h-4 w-4 mr-1" />
+                      GitHub Settings
+                    </Button>
+                    <Button
+                      onClick={deleteWebhookConfig}
+                      variant="destructive"
+                      size="sm"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {webhookConfig && (
+              <div className="space-y-4">
+                {/* Webhook URL */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Webhook URL
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      value={webhookConfig.webhookUrl}
+                      readOnly
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm font-mono"
+                    />
+                    <Button
+                      onClick={() => copyToClipboard(webhookConfig.webhookUrl)}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Webhook Secret */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Webhook Secret
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="password"
+                      value={webhookConfig.webhookSecret}
+                      readOnly
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm font-mono"
+                    />
+                    <Button
+                      onClick={() => copyToClipboard(webhookConfig.webhookSecret)}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Setup Instructions */}
+                {showWebhookInstructions && webhookConfig.instructions && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h5 className="font-medium text-blue-900 mb-2">Setup Instructions</h5>
+                    <ol className="text-sm text-blue-800 space-y-1">
+                      {Object.entries(webhookConfig.instructions).map(([step, instruction]) => (
+                        <li key={step} className="flex">
+                          <span className="font-medium mr-2">{step}.</span>
+                          <span>{instruction}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!webhookConfig && !webhookConfigured && (
+              <div className="flex items-start space-x-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                <div className="text-sm text-yellow-800">
+                  <p className="font-medium">Webhook not configured</p>
+                  <p>Click "Configure Webhook" to set up automatic deployments.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Info box */}
+        <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <h5 className="font-medium text-gray-900 mb-2">How it works</h5>
+          <ul className="text-sm text-gray-600 space-y-1">
+            <li>• Webhook listens for push events to the <strong>{formData.branch}</strong> branch</li>
+            <li>• Only commits to this specific branch trigger deployments</li>
+            <li>• Deployments are queued if one is already in progress</li>
+            <li>• You can still manually deploy from any branch</li>
+          </ul>
         </div>
       </div>
     </div>

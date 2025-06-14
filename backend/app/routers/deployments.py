@@ -123,7 +123,12 @@ async def deploy_project(
         git_repo_url=project.gitRepoUrl,
         branch=project.branch or "main",
         commit_sha=commit_sha,
-        subdirectory=project.subdirectory
+        subdirectory=project.subdirectory,
+        health_check_path=project.healthCheckPath or "/health",
+        port=project.port or 3000,
+        cpu=project.cpu or 256,
+        memory=project.memory or 512,
+        disk_size=project.diskSize or 21
     )
     
     background_tasks.add_task(
