@@ -15,6 +15,10 @@ interface ExecStatus {
   desiredCount?: number
   status?: string
   reason?: string
+  clusterArn?: string
+  taskArn?: string
+  containerName?: string
+  region?: string
 }
 
 interface ShellCommand {

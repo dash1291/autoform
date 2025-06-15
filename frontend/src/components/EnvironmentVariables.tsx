@@ -69,7 +69,7 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
       const data = await apiClient.getEnvironmentVariables(projectId)
       
       // Transform the API response
-      const transformedVars = data.map((envVar: EnvVarResponse) => ({
+      const transformedVars = data.map((envVar) => ({
         ...envVar,
         createdAt: new Date(envVar.createdAt),
         updatedAt: new Date(envVar.updatedAt)

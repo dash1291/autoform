@@ -1,4 +1,5 @@
 import { useJwtStore } from './auth-client'
+import { Project, Team, TeamMember, EnvironmentVariable, Deployment } from '../types'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -31,7 +32,6 @@ class ApiClient {
     const headers = this.getAuthHeaders()
 
     const config: RequestInit = {
-      headers,
       ...options,
       headers: {
         ...headers,
@@ -109,138 +109,176 @@ class ApiClient {
   }
 
   // Project endpoints
-  async getProjects() {
-    return this.request('/projects')
+  async getProjects(): Promise<Project[]> {
+    return this.request<Project[]>('/projects')
   }
 
-  async getProject(id: string) {
-    return this.request(`/projects/${id}`)
+  async getProject(id: string): Promise<Project> {
+    return this.request<Project>(`/projects/${id}`)
   }
 
-  async createProject(projectData: any) {
-    return this.request('/projects', {
+  async createProject(projectData: any): Promise<Project> {
+    return this.request<Project>('/projects', {
       method: 'POST',
       body: JSON.stringify(projectData),
     })
   }
 
-  async updateProject(id: string, projectData: any) {
-    return this.request(`/projects/${id}`, {
+  async updateProject(id: string, projectData: any): Promise<Project & { healthCheckUpdateStatus?: string }> {
+    return this.request<Project & { healthCheckUpdateStatus?: string }>(`/projects/${id}`, {
       method: 'PUT',
       body: JSON.stringify(projectData),
     })
   }
 
-  async deleteProject(id: string) {
-    return this.request(`/projects/${id}`, {
+  async deleteProject(id: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/projects/${id}`, {
       method: 'DELETE',
     })
   }
 
   // Deployment endpoints
-  async getDeployments(projectId: string) {
-    return this.request(`/deployments/projects/${projectId}/deployments`)
+  async getDeployments(projectId: string): Promise<Deployment[]> {
+    return this.request<Deployment[]>(`/deployments/projects/${projectId}/deployments`)
   }
 
-  async deployProject(projectId: string) {
-    return this.request(`/deployments/projects/${projectId}/deploy`, {
+  async deployProject(projectId: string): Promise<{ message: string; deploymentId?: string }> {
+    return this.request<{ message: string; deploymentId?: string }>(`/deployments/projects/${projectId}/deploy`, {
       method: 'POST',
     })
   }
 
-  async abortDeployment(projectId: string) {
-    return this.request(`/deployments/projects/${projectId}/abort`, {
+  async abortDeployment(projectId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/deployments/projects/${projectId}/abort`, {
       method: 'POST',
     })
   }
 
-  async getDeploymentLogs(deploymentId: string) {
-    return this.request(`/deployments/${deploymentId}/logs`)
+  async getDeploymentLogs(deploymentId: string): Promise<{ logs: string }> {
+    return this.request<{ logs: string }>(`/deployments/${deploymentId}/logs`)
   }
 
   // Environment variables endpoints
-  async getEnvironmentVariables(projectId: string) {
-    return this.request(`/projects/${projectId}/environment-variables`)
+  async getEnvironmentVariables(projectId: string): Promise<Array<Omit<EnvironmentVariable, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }>> {
+    return this.request<Array<Omit<EnvironmentVariable, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }>>(`/projects/${projectId}/environment-variables`)
   }
 
-  async createEnvironmentVariable(projectId: string, envVar: any) {
-    return this.request(`/projects/${projectId}/environment-variables`, {
+  async createEnvironmentVariable(projectId: string, envVar: any): Promise<EnvironmentVariable> {
+    return this.request<EnvironmentVariable>(`/projects/${projectId}/environment-variables`, {
       method: 'POST',
       body: JSON.stringify(envVar),
     })
   }
 
-  async updateEnvironmentVariable(projectId: string, envVarId: string, envVar: any) {
-    return this.request(`/projects/${projectId}/environment-variables/${envVarId}`, {
+  async updateEnvironmentVariable(projectId: string, envVarId: string, envVar: any): Promise<EnvironmentVariable> {
+    return this.request<EnvironmentVariable>(`/projects/${projectId}/environment-variables/${envVarId}`, {
       method: 'PUT',
       body: JSON.stringify(envVar),
     })
   }
 
-  async deleteEnvironmentVariable(projectId: string, envVarId: string) {
-    return this.request(`/projects/${projectId}/environment-variables/${envVarId}`, {
+  async deleteEnvironmentVariable(projectId: string, envVarId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/projects/${projectId}/environment-variables/${envVarId}`, {
       method: 'DELETE',
     })
   }
 
   // GitHub endpoints
-  async validateRepository(repoUrl: string) {
-    return this.request('/github/validate-repo', {
+  async validateRepository(repoUrl: string): Promise<{
+    valid: boolean
+    repository?: {
+      name: string
+      fullName: string
+      private: boolean
+      defaultBranch: string
+      description?: string
+      branches: string[]
+    }
+    error?: string
+    needsReauth?: boolean
+  }> {
+    return this.request<{
+      valid: boolean
+      repository?: {
+        name: string
+        fullName: string
+        private: boolean
+        defaultBranch: string
+        description?: string
+        branches: string[]
+      }
+      error?: string
+      needsReauth?: boolean
+    }>('/github/validate-repo', {
       method: 'POST',
       body: JSON.stringify({ gitRepoUrl: repoUrl }),
     })
   }
 
-  async getBranches(repoUrl: string) {
-    return this.request('/github/branches', {
+  async getBranches(repoUrl: string): Promise<string[]> {
+    return this.request<string[]>('/github/branches', {
       method: 'POST',
       body: JSON.stringify({ repoUrl }),
     })
   }
 
   // Service status endpoints  
-  async getServiceStatus(projectId: string) {
-    return this.request(`/projects/${projectId}/service-status`)
+  async getServiceStatus(projectId: string): Promise<any> {
+    return this.request<any>(`/projects/${projectId}/service-status`)
   }
 
   // Shell execution endpoints
-  async checkExecAvailability(projectId: string) {
-    return this.request(`/projects/${projectId}/exec`)
+  async checkExecAvailability(projectId: string): Promise<{ available: boolean; status: string; reason?: string; clusterArn?: string; taskArn?: string; containerName?: string; region?: string }> {
+    return this.request<{ available: boolean; status: string; reason?: string; clusterArn?: string; taskArn?: string; containerName?: string; region?: string }>(`/projects/${projectId}/exec`)
   }
 
-  async executeCommand(projectId: string, command: string) {
-    return this.request(`/projects/${projectId}/exec/command`, {
+  async executeCommand(projectId: string, command: string): Promise<{ success: boolean; sessionId?: string; streamUrl?: string; tokenValue?: string; message?: string }> {
+    return this.request<{ success: boolean; sessionId?: string; streamUrl?: string; tokenValue?: string; message?: string }>(`/projects/${projectId}/exec/command`, {
       method: 'POST',
       body: JSON.stringify({ command }),
     })
   }
 
   // Logs endpoints
-  async getProjectLogs(projectId: string, limit: number = 100) {
-    return this.request(`/projects/${projectId}/logs?limit=${limit}`)
+  async getProjectLogs(projectId: string, limit: number = 100): Promise<{ logs: any[]; logGroupName: string; totalStreams: number; message?: string }> {
+    return this.request<{ logs: any[]; logGroupName: string; totalStreams: number; message?: string }>(`/projects/${projectId}/logs?limit=${limit}`)
   }
 
-  async getCodeBuildLogs(projectId: string, limit: number = 100) {
-    return this.request(`/projects/${projectId}/codebuild-logs?limit=${limit}`)
+  async getCodeBuildLogs(projectId: string, limit: number = 100): Promise<{ logs: any[]; logGroupName: string; totalStreams: number; message?: string }> {
+    return this.request<{ logs: any[]; logGroupName: string; totalStreams: number; message?: string }>(`/projects/${projectId}/codebuild-logs?limit=${limit}`)
   }
 
   // AWS resources endpoints
-  async getAwsResources() {
-    return this.request('/aws/resources')
+  async getAwsResources(): Promise<{ vpcs: any[]; subnetsByVpc: any; clusters: any[]; message?: string }> {
+    return this.request<{ vpcs: any[]; subnetsByVpc: any; clusters: any[]; message?: string }>('/aws/resources')
   }
 
-  async getProjectDeployedResources(projectId: string) {
-    return this.request(`/projects/${projectId}/deployed-resources`)
+  async getProjectDeployedResources(projectId: string): Promise<any> {
+    return this.request<any>(`/projects/${projectId}/deployed-resources`)
   }
 
   // Webhook endpoints
-  async configureWebhook(projectId: string, githubAccessToken?: string) {
+  async configureWebhook(projectId: string, githubAccessToken?: string): Promise<{
+    webhookUrl: string
+    webhookSecret: string
+    instructions?: Record<string, string>
+    automatic?: boolean
+    status?: string
+    webhookId?: string
+  }> {
     const headers: HeadersInit = {}
     if (githubAccessToken) {
       headers['X-GitHub-Token'] = githubAccessToken
     }
     
-    return this.request(`/projects/${projectId}/webhook/configure`, {
+    return this.request<{
+      webhookUrl: string
+      webhookSecret: string
+      instructions?: Record<string, string>
+      automatic?: boolean
+      status?: string
+      webhookId?: string
+    }>(`/projects/${projectId}/webhook/configure`, {
       method: 'POST',
       headers
     })
@@ -259,12 +297,12 @@ class ApiClient {
   }
 
   // Team endpoints
-  async getTeams() {
-    return this.request('/teams')
+  async getTeams(): Promise<Team[]> {
+    return this.request<Team[]>('/teams')
   }
 
-  async getTeam(teamId: string) {
-    return this.request(`/teams/${teamId}`)
+  async getTeam(teamId: string): Promise<Team> {
+    return this.request<Team>(`/teams/${teamId}`)
   }
 
   async createTeam(teamData: { name: string; description?: string }) {
@@ -308,8 +346,22 @@ class ApiClient {
   }
 
   // Team AWS Configuration endpoints
-  async getTeamAwsConfig(teamId: string) {
-    return this.request(`/teams/${teamId}/aws-config`)
+  async getTeamAwsConfig(teamId: string): Promise<{
+    awsAccessKeyId: string
+    awsSecretAccessKey: string
+    awsRegion: string
+    isActive: boolean
+    createdAt: string
+    updatedAt: string
+  }> {
+    return this.request<{
+      awsAccessKeyId: string
+      awsSecretAccessKey: string
+      awsRegion: string
+      isActive: boolean
+      createdAt: string
+      updatedAt: string
+    }>(`/teams/${teamId}/aws-config`)
   }
 
   async createTeamAwsConfig(teamId: string, awsConfig: { 

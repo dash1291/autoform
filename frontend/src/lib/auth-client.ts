@@ -50,9 +50,9 @@ export const useAuth = () => {
 
   // Exchange NextAuth session for JWT token when session changes or token is expired
   useEffect(() => {
-    if (session?.user && (!jwtToken || isTokenExpired) && status !== 'loading') {
+    if (session?.user && (!jwtToken || isTokenExpired) && status === 'authenticated') {
       exchangeSessionForJwt()
-    } else if (!session && jwtToken && status !== 'loading') {
+    } else if (!session && jwtToken && status === 'unauthenticated') {
       clearJwtToken()
     }
   }, [session, jwtToken, isTokenExpired, status])

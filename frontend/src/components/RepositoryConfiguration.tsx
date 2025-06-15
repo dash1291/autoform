@@ -58,12 +58,12 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
     try {
       const data = await apiClient.validateRepository(url)
 
-      if (data.valid) {
+      if (data.valid && data.repository) {
         setRepoInfo(data.repository)
         setBranches(data.repository.branches || [data.repository.defaultBranch])
       } else {
         setBranches([])
-        setError(data.error)
+        setError(data.error || 'Failed to validate repository')
       }
     } catch (err) {
       setError('Failed to validate repository')

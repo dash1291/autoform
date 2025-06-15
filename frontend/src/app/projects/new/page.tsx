@@ -70,32 +70,28 @@ export default function NewProject() {
       const data = await apiClient.validateRepository(url)
       console.log('Response data:', data)
 
-      if (data.valid) {
-        setRepoInfo(data.repository)
+      if (data.valid && data.repository) {
+        const repository = data.repository
+        setRepoInfo(repository)
         // Auto-fill project name and branch if empty
-        if (!formData.name && data.repository.name) {
+        if (!formData.name && repository.name) {
           setFormData(prev => ({ 
             ...prev, 
-            name: data.repository.name,
-            branch: data.repository.defaultBranch 
+            name: repository.name,
+            branch: repository.defaultBranch 
           }))
-        } else if (data.repository.defaultBranch) {
+        } else if (repository.defaultBranch) {
           setFormData(prev => ({ 
             ...prev, 
-            branch: data.repository.defaultBranch 
+            branch: repository.defaultBranch 
           }))
         }
       } else {
-        setError(data.error)
+        setError(data.error || 'Unknown error occurred')
         
         // If re-authentication is needed, show special message
         if (data.needsReauth) {
-          setError(data.error + ' Click here to refresh your GitHub connection.')
-        }
-        
-        // Log debug info for troubleshooting
-        if (data.debug) {
-          console.error('Repository validation failed:', data.debug)
+          setError((data.error || 'Authentication needed') + ' Click here to refresh your GitHub connection.')
         }
       }
     } catch (err) {
