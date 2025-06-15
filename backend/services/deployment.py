@@ -781,7 +781,16 @@ class DeploymentService:
                 return False
             
             region = os.getenv('AWS_REGION', 'us-east-1')
-            ecs_client = boto3.client('ecs', region_name=region)
+            
+            # Use the same credentials as the deployment service
+            client_config = {"region_name": region}
+            if self.aws_credentials:
+                client_config.update({
+                    "aws_access_key_id": self.aws_credentials["access_key"],
+                    "aws_secret_access_key": self.aws_credentials["secret_key"]
+                })
+            
+            ecs_client = boto3.client('ecs', **client_config)
             
             cluster_arn = project.ecsClusterArn
             service_arn = project.ecsServiceArn

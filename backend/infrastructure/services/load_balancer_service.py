@@ -14,7 +14,8 @@ class LoadBalancerService:
         subnet_ids: List[str] = None,
         security_group_id: str = "",
         container_port: int = 3000,
-        health_check_path: str = "/health"
+        health_check_path: str = "/health",
+        aws_credentials=None
     ):
         self.project_name = project_name
         self.region = region
@@ -23,8 +24,17 @@ class LoadBalancerService:
         self.security_group_id = security_group_id
         self.container_port = container_port
         self.health_check_path = health_check_path
+        self.aws_credentials = aws_credentials
         
-        self.elbv2 = boto3.client("elbv2", region_name=region)
+        # Initialize ELBv2 client with custom credentials if provided
+        client_config = {"region_name": region}
+        if aws_credentials:
+            client_config.update({
+                "aws_access_key_id": aws_credentials["access_key"],
+                "aws_secret_access_key": aws_credentials["secret_key"]
+            })
+        
+        self.elbv2 = boto3.client("elbv2", **client_config)
         
         self.load_balancer_arn: str = ""
         self.load_balancer_dns: str = ""

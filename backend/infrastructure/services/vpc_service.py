@@ -14,15 +14,25 @@ class VPCService:
         environment_variables: List[EnvironmentVariable],
         region: str = "us-east-1",
         existing_vpc_id: Optional[str] = None,
-        existing_subnet_ids: Optional[List[str]] = None
+        existing_subnet_ids: Optional[List[str]] = None,
+        aws_credentials: Optional[dict] = None
     ):
         self.project_name = project_name
         self.environment_variables = environment_variables
         self.region = region
         self.existing_vpc_id = existing_vpc_id
         self.existing_subnet_ids = existing_subnet_ids
+        self.aws_credentials = aws_credentials
         
-        self.ec2 = boto3.client("ec2", region_name=region)
+        # Initialize EC2 client with custom credentials if provided
+        client_config = {"region_name": region}
+        if aws_credentials:
+            client_config.update({
+                "aws_access_key_id": aws_credentials["access_key"],
+                "aws_secret_access_key": aws_credentials["secret_key"]
+            })
+        
+        self.ec2 = boto3.client("ec2", **client_config)
         
         self.vpc_id: str = ""
         self.subnet_ids: List[str] = []

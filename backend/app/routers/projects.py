@@ -8,12 +8,79 @@ from core.database import prisma
 from core.security import get_current_user
 from core.config import settings
 from schemas import Project, ProjectCreate, ProjectUpdate, ProjectStatus, User
-from services import cloudwatch_service
+from services.cloudwatch_service import CloudWatchLogsService
+from services.encryption_service import encryption_service
 from services.github_webhook import GitHubWebhookService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def get_team_aws_credentials(project) -> dict:
+    """Get team AWS credentials if project belongs to a team"""
+    if not project.teamId:
+        return None
+    
+    try:
+        team_aws_config = await prisma.teamawsconfig.find_first(
+            where={"teamId": project.teamId, "isActive": True}
+        )
+        
+        if not team_aws_config:
+            return None
+        
+        # Decrypt credentials
+        access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
+        secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
+        
+        if not access_key or not secret_key:
+            return None
+        
+        return {
+            "access_key": access_key,
+            "secret_key": secret_key,
+            "region": team_aws_config.awsRegion
+        }
+    except Exception as e:
+        logger.warning(f"Failed to get team AWS credentials: {e}")
+        return None
+
+
+async def create_cloudwatch_service(project) -> CloudWatchLogsService:
+    """Create CloudWatch service with appropriate credentials"""
+    team_credentials = await get_team_aws_credentials(project)
+    
+    if team_credentials:
+        return CloudWatchLogsService(
+            region_name=team_credentials["region"],
+            aws_credentials=team_credentials
+        )
+    else:
+        return CloudWatchLogsService()
+
+
+async def create_aws_client(project, service: str, region: str = None):
+    """Create AWS client with team credentials if available"""
+    import boto3
+    import os
+    
+    if region is None:
+        region = os.getenv('AWS_REGION', 'us-east-1')
+    
+    team_credentials = await get_team_aws_credentials(project)
+    
+    client_config = {"region_name": region}
+    if team_credentials:
+        client_config.update({
+            "aws_access_key_id": team_credentials["access_key"],
+            "aws_secret_access_key": team_credentials["secret_key"]
+        })
+        # Use team's preferred region if different
+        if team_credentials["region"] != region:
+            client_config["region_name"] = team_credentials["region"]
+    
+    return boto3.client(service, **client_config)
 
 
 async def check_project_access(project_id: str, user_id: str) -> bool:
@@ -262,12 +329,11 @@ async def update_project(
         
         logger.info(f"Updating health check path to {project_update.health_check_path} for project {project.name}")
         try:
-            import boto3
             import os
             from botocore.exceptions import ClientError
             
             region = os.getenv('AWS_REGION', 'us-east-1')
-            elbv2_client = boto3.client('elbv2', region_name=region)
+            elbv2_client = await create_aws_client(project, 'elbv2', region)
             
             # Try to find target group by name first (more reliable during deployment)
             target_group_name = f"{project.name}-tg"
@@ -390,14 +456,13 @@ async def get_service_status(
             "healthy": False
         }
     
-    import boto3
     import os
     from botocore.exceptions import ClientError
     
     region = os.getenv('AWS_REGION', 'us-east-1')
     
     try:
-        ecs_client = boto3.client('ecs', region_name=region)
+        ecs_client = await create_aws_client(project, 'ecs', region)
         
         # Get cluster and service identifiers
         cluster_identifier = project.ecsClusterArn or "default"
@@ -615,14 +680,13 @@ async def check_exec_availability(
         }
     
     # Check if there are running tasks
-    import boto3
     import os
     from botocore.exceptions import ClientError
     
     region = os.getenv('AWS_REGION', 'us-east-1')
     
     try:
-        ecs_client = boto3.client('ecs', region_name=region)
+        ecs_client = await create_aws_client(project, 'ecs', region)
         
         # Extract cluster name from ARN or use default
         cluster_name = project.ecsClusterArn or "default"
@@ -741,14 +805,13 @@ async def execute_command(
             "message": "No command provided"
         }
     
-    import boto3
     import os
     from botocore.exceptions import ClientError
     
     region = os.getenv('AWS_REGION', 'us-east-1')
     
     try:
-        ecs_client = boto3.client('ecs', region_name=region)
+        ecs_client = await create_aws_client(project, 'ecs', region)
         
         # Extract cluster ARN or use default
         cluster_arn = project.ecsClusterArn or "default"
@@ -868,7 +931,8 @@ async def get_project_logs(
     
     # Fetch logs from CloudWatch
     try:
-        logs_data = await cloudwatch_service.get_project_logs(
+        cloudwatch_svc = await create_cloudwatch_service(project)
+        logs_data = await cloudwatch_svc.get_project_logs(
             project_name=project.name,
             limit=limit
         )
@@ -904,7 +968,6 @@ async def get_project_deployed_resources(
         )
     
     # Implement AWS resource information fetching for deployed projects
-    import boto3
     import os
     from botocore.exceptions import ClientError, NoCredentialsError
     
@@ -912,9 +975,9 @@ async def get_project_deployed_resources(
     
     try:
         # Initialize AWS clients
-        ecs_client = boto3.client('ecs', region_name=region)
-        ec2_client = boto3.client('ec2', region_name=region)
-        elbv2_client = boto3.client('elbv2', region_name=region)
+        ecs_client = await create_aws_client(project, 'ecs', region)
+        ec2_client = await create_aws_client(project, 'ec2', region)
+        elbv2_client = await create_aws_client(project, 'elbv2', region)
         
         result = {
             "vpc": None,
@@ -1063,7 +1126,8 @@ async def debug_project_logs(
         )
     
     try:
-        log_group_info = await cloudwatch_service.get_log_group_info(project.name)
+        cloudwatch_svc = await create_cloudwatch_service(project)
+        log_group_info = await cloudwatch_svc.get_log_group_info(project.name)
         return {
             "project_name": project.name,
             "expected_log_group": f"/ecs/{project.name}",
@@ -1233,7 +1297,8 @@ async def get_project_codebuild_logs(
     
     # Fetch CodeBuild logs
     try:
-        logs_data = await cloudwatch_service.get_codebuild_logs(
+        cloudwatch_svc = await create_cloudwatch_service(project)
+        logs_data = await cloudwatch_svc.get_codebuild_logs(
             project_name=project.name,
             limit=limit
         )

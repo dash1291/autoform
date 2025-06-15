@@ -12,7 +12,7 @@ router = APIRouter()
 
 @router.get("/credentials-check")
 async def check_aws_credentials(current_user: User = Depends(get_current_user)):
-    """Check AWS credentials and permissions"""
+    """Check AWS credentials and permissions (uses default credentials)"""
     import boto3
     import os
     from botocore.exceptions import ClientError, NoCredentialsError
@@ -63,7 +63,7 @@ async def check_aws_credentials(current_user: User = Depends(get_current_user)):
 
 @router.get("/resources")
 async def get_aws_resources(current_user: User = Depends(get_current_user)):
-    """Get available AWS resources (VPCs, subnets, clusters, etc.)"""
+    """Get available AWS resources (VPCs, subnets, clusters, etc.) - uses default credentials"""
     import boto3
     import os
     from botocore.exceptions import ClientError, NoCredentialsError

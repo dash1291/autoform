@@ -25,7 +25,8 @@ class ECSService:
         security_group_id: str = "",
         execution_role_arn: str = "",
         task_role_arn: str = "",
-        target_group_arn: str = ""
+        target_group_arn: str = "",
+        aws_credentials=None
     ):
         self.project_name = project_name
         self.environment_variables = environment_variables
@@ -42,10 +43,19 @@ class ECSService:
         self.execution_role_arn = execution_role_arn
         self.task_role_arn = task_role_arn
         self.target_group_arn = target_group_arn
+        self.aws_credentials = aws_credentials
         
-        self.ecs = boto3.client("ecs", region_name=region)
-        self.secretsmanager = boto3.client("secretsmanager", region_name=region)
-        self.sts = boto3.client("sts", region_name=region)
+        # Initialize AWS clients with custom credentials if provided
+        client_config = {"region_name": region}
+        if aws_credentials:
+            client_config.update({
+                "aws_access_key_id": aws_credentials["access_key"],
+                "aws_secret_access_key": aws_credentials["secret_key"]
+            })
+        
+        self.ecs = boto3.client("ecs", **client_config)
+        self.secretsmanager = boto3.client("secretsmanager", **client_config)
+        self.sts = boto3.client("sts", **client_config)
         
         self.cluster_arn: str = ""
         self.service_arn: str = ""

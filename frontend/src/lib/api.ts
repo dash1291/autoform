@@ -306,6 +306,34 @@ class ApiClient {
       body: JSON.stringify({ role }),
     })
   }
+
+  // Team AWS Configuration endpoints
+  async getTeamAwsConfig(teamId: string) {
+    return this.request(`/teams/${teamId}/aws-config`)
+  }
+
+  async createTeamAwsConfig(teamId: string, awsConfig: { 
+    awsAccessKeyId: string
+    awsSecretAccessKey: string
+    awsRegion: string 
+  }) {
+    return this.request(`/teams/${teamId}/aws-config`, {
+      method: 'POST',
+      body: JSON.stringify(awsConfig),
+    })
+  }
+
+  async deleteTeamAwsConfig(teamId: string) {
+    return this.request(`/teams/${teamId}/aws-config`, {
+      method: 'DELETE',
+    })
+  }
+
+  async testTeamAwsConfig(teamId: string) {
+    return this.request(`/teams/${teamId}/aws-config/test`, {
+      method: 'POST',
+    })
+  }
 }
 
 export const apiClient = new ApiClient()

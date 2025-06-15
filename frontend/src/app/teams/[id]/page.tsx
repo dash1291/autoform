@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Users, Mail, Settings, Trash2, UserMinus, Crown, Shield, User } from 'lucide-react'
+import TeamAwsConfiguration from '@/components/TeamAwsConfiguration'
 
 export default function TeamDetail() {
   const { isAuthenticated, isLoading: authLoading } = useAuth()
@@ -398,7 +399,7 @@ function AddMemberButton({ onAddMember }: { onAddMember: (githubUsername: string
 
 function TeamSettings({ team }: { team: Team }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
         <h3 className="text-lg font-medium text-gray-900 mb-4">Team Information</h3>
         <div className="space-y-4">
@@ -425,6 +426,10 @@ function TeamSettings({ team }: { team: Team }) {
             />
           </div>
         </div>
+      </div>
+
+      <div className="border-t pt-6">
+        <TeamAwsConfiguration teamId={team.id} />
       </div>
 
       <div className="border-t pt-6">

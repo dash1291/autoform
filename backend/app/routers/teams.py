@@ -559,12 +559,26 @@ async def get_team_aws_config(
             "isActive": False
         }
     
+    # Decrypt and mask the access key ID for display
+    masked_access_key = None
+    if aws_config.awsAccessKeyId:
+        try:
+            decrypted_access_key = encryption_service.decrypt(aws_config.awsAccessKeyId)
+            if decrypted_access_key and len(decrypted_access_key) >= 4:
+                # Mask the access key ID properly (AKIA... -> AKIA************)
+                masked_access_key = f"{decrypted_access_key[:4]}{'*' * (len(decrypted_access_key) - 4)}"
+            else:
+                masked_access_key = "****"
+        except Exception:
+            masked_access_key = "****"
+    
     # Don't expose the actual credentials, just show masked version
     return {
         "configured": True,
         "isActive": aws_config.isActive,
         "awsRegion": aws_config.awsRegion,
-        "awsAccessKeyId": f"{aws_config.awsAccessKeyId[:4]}{'*' * 12}" if aws_config.awsAccessKeyId else None,
+        "awsAccessKeyId": masked_access_key,
+        "awsSecretAccessKey": "****************************" if aws_config.awsSecretAccessKey else None,
         "createdAt": aws_config.createdAt,
         "updatedAt": aws_config.updatedAt
     }
@@ -767,20 +781,41 @@ async def test_team_aws_config(
         
     except ClientError as e:
         error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        
         if error_code == 'InvalidClientTokenId':
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid AWS Access Key ID"
+                detail="Invalid AWS Access Key ID. Please check your credentials."
             )
         elif error_code == 'SignatureDoesNotMatch':
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid AWS Secret Access Key"
+                detail="Invalid AWS Secret Access Key. Please check your credentials."
             )
+        elif error_code in ['UnauthorizedOperation', 'AccessDenied', 'Forbidden']:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="AWS credentials are valid but lack sufficient permissions. Your AWS user needs permissions for S3 and STS services."
+            )
+        elif 'not authorized to perform' in error_message.lower():
+            # Handle specific authorization errors
+            if 's3:ListBuckets' in error_message:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="AWS credentials are valid but your user doesn't have permission to list S3 buckets. This is used for testing only - deployments may still work."
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="AWS credentials are valid but lack some required permissions. Please ensure your AWS user has appropriate permissions."
+                )
         else:
+            # Log the actual AWS error for debugging
+            logger.error(f"AWS test error for team {team_id}: {error_code} - {error_message}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"AWS Error: {e.response['Error']['Message']}"
+                detail=f"AWS credentials test failed: {error_message}"
             )
     except Exception as e:
         raise HTTPException(

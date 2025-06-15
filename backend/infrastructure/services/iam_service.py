@@ -7,11 +7,21 @@ logger = logging.getLogger(__name__)
 
 
 class IAMService:
-    def __init__(self, project_name: str, region: str = "us-east-1"):
+    def __init__(self, project_name: str, region: str = "us-east-1", aws_credentials=None):
         self.project_name = project_name
         self.region = region
-        self.iam = boto3.client("iam", region_name=region)
-        self.sts = boto3.client("sts", region_name=region)
+        self.aws_credentials = aws_credentials
+        
+        # Initialize AWS clients with custom credentials if provided
+        client_config = {"region_name": region}
+        if aws_credentials:
+            client_config.update({
+                "aws_access_key_id": aws_credentials["access_key"],
+                "aws_secret_access_key": aws_credentials["secret_key"]
+            })
+        
+        self.iam = boto3.client("iam", **client_config)
+        self.sts = boto3.client("sts", **client_config)
         
         self.execution_role_arn: str = ""
         self.task_role_arn: str = ""

@@ -11,15 +11,34 @@ logger = logging.getLogger(__name__)
 class CloudWatchLogsService:
     """Service for fetching logs from AWS CloudWatch"""
     
-    def __init__(self, region_name: str = None):
+    def __init__(self, region_name: str = None, aws_credentials: dict = None):
         if region_name is None:
             region_name = os.getenv('AWS_REGION', 'us-east-1')
+        
+        self.region_name = region_name
+        self.aws_credentials = aws_credentials
         
         try:
             logger.info(f"Initializing AWS clients for region: {region_name}")
             
+            # Initialize AWS clients with custom credentials if provided
+            client_config = {"region_name": region_name}
+            if aws_credentials:
+                client_config.update({
+                    "aws_access_key_id": aws_credentials["access_key"],
+                    "aws_secret_access_key": aws_credentials["secret_key"]
+                })
+                logger.info("Using custom AWS credentials for CloudWatch service")
+            
             # Create session to check credentials
-            session = boto3.Session()
+            if aws_credentials:
+                session = boto3.Session(
+                    aws_access_key_id=aws_credentials["access_key"],
+                    aws_secret_access_key=aws_credentials["secret_key"],
+                    region_name=region_name
+                )
+            else:
+                session = boto3.Session()
             
             # Get credentials info for debugging (without exposing secrets)
             credentials = session.get_credentials()
@@ -29,12 +48,12 @@ class CloudWatchLogsService:
             else:
                 logger.warning("No AWS credentials found!")
             
-            self.logs_client = boto3.client('logs', region_name=region_name)
-            self.ecs_client = boto3.client('ecs', region_name=region_name)
+            self.logs_client = boto3.client('logs', **client_config)
+            self.ecs_client = boto3.client('ecs', **client_config)
             
             # Test credentials by making a simple API call
             try:
-                sts_client = boto3.client('sts', region_name=region_name)
+                sts_client = boto3.client('sts', **client_config)
                 identity = sts_client.get_caller_identity()
                 logger.info(f"AWS identity confirmed - Account: {identity.get('Account')}, User/Role: {identity.get('Arn', 'unknown')}")
             except Exception as e:
@@ -407,5 +426,6 @@ class CloudWatchLogsService:
             }
 
 
-# Create a singleton instance
+# Note: The singleton instance is created without credentials.
+# For team projects with custom AWS credentials, create a new instance in the router.
 cloudwatch_service = CloudWatchLogsService()
