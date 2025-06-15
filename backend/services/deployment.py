@@ -12,6 +12,7 @@ from datetime import datetime
 from infrastructure.types import ECSInfrastructureArgs, ECSInfrastructureOutput, EnvironmentVariable
 from infrastructure import ECSInfrastructure
 from core.database import prisma
+from services.encryption_service import encryption_service
 
 logger = logging.getLogger(__name__)
 
@@ -45,19 +46,27 @@ class DeploymentConfig:
 
 
 class DeploymentService:
-    def __init__(self, region: str = None):
+    def __init__(self, region: str = None, aws_credentials: Optional[dict] = None):
         if region is None:
             region = os.getenv('AWS_REGION', 'us-east-1')
         self.region = region
         self.deployment_logs: Dict[str, List[str]] = {}
+        self.aws_credentials = aws_credentials
         
-        # Initialize AWS clients
-        self.sts = boto3.client("sts", region_name=region)
-        self.ecr = boto3.client("ecr", region_name=region)
-        self.s3 = boto3.client("s3", region_name=region)
-        self.codebuild = boto3.client("codebuild", region_name=region)
-        self.cloudwatch_logs = boto3.client("logs", region_name=region)
-        self.secretsmanager = boto3.client("secretsmanager", region_name=region)
+        # Initialize AWS clients with custom credentials if provided
+        client_config = {"region_name": region}
+        if aws_credentials:
+            client_config.update({
+                "aws_access_key_id": aws_credentials["access_key"],
+                "aws_secret_access_key": aws_credentials["secret_key"]
+            })
+        
+        self.sts = boto3.client("sts", **client_config)
+        self.ecr = boto3.client("ecr", **client_config)
+        self.s3 = boto3.client("s3", **client_config)
+        self.codebuild = boto3.client("codebuild", **client_config)
+        self.cloudwatch_logs = boto3.client("logs", **client_config)
+        self.secretsmanager = boto3.client("secretsmanager", **client_config)
     
     async def log_to_database(self, deployment_id: str, message: str):
         """Log message to database and local storage"""
@@ -713,7 +722,7 @@ class DeploymentService:
             if deployment_id:
                 await self.log_to_database(deployment_id, f"🚀 Using existing ECS cluster: {project_network['existing_cluster_arn']}")
         
-        infrastructure = ECSInfrastructure(infrastructure_args)
+        infrastructure = ECSInfrastructure(infrastructure_args, aws_credentials=self.aws_credentials)
         
         if deployment_id:
             await self.log_to_database(deployment_id, "Creating/updating AWS infrastructure...")

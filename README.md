@@ -87,7 +87,24 @@ cp frontend/.env.example frontend/.env
 cp backend/.env.example backend/.env
 ```
 
-4. Set up the database:
+4. Generate encryption key for team AWS credentials:
+```bash
+# Generate a new encryption key
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Copy the output and replace the ENCRYPTION_KEY value in backend/.env
+```
+
+Alternative methods to generate encryption key:
+```bash
+# Using OpenSSL
+openssl rand -base64 32
+
+# Using Python secrets module
+python -c "import secrets, base64; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
+```
+
+5. Set up the database:
 ```bash
 # Generate Prisma client
 npm run prisma:generate
@@ -115,6 +132,8 @@ npm run dev:backend
 ## Features
 
 - **GitHub Integration**: Authenticate with GitHub and deploy directly from repositories
+- **Team Collaboration**: Create teams, manage members, and share projects
+- **Team AWS Configuration**: Each team can configure their own AWS credentials for deployments
 - **Automatic Infrastructure**: Automatically provisions AWS resources (VPC, ECS, ALB)
 - **Environment Variables**: Secure management with AWS Secrets Manager
 - **Real-time Logs**: Stream deployment logs in real-time
@@ -122,6 +141,21 @@ npm run dev:backend
 - **Branch Selection**: Deploy from any branch with automatic branch detection
 - **Health Checks**: Configurable health check endpoints
 - **Subdirectory Support**: Deploy from monorepo subdirectories
+- **Secure Credential Storage**: Team AWS credentials are encrypted before storage
+
+## Security
+
+### Team AWS Credentials
+- Team AWS credentials are encrypted using Fernet (AES 128-bit) before storage
+- Encryption key should be generated using cryptographically secure methods
+- Only team owners can configure AWS credentials
+- Credentials are never returned in API responses (only masked versions)
+
+### Important Security Notes
+- **Never commit `.env` files to version control**
+- **Use different encryption keys for different environments**
+- **Store production encryption keys securely** (e.g., AWS Secrets Manager)
+- **Rotate encryption keys periodically** (requires re-encrypting existing data)
 
 ## API Documentation
 

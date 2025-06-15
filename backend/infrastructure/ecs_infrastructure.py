@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class ECSInfrastructure:
-    def __init__(self, args: ECSInfrastructureArgs):
+    def __init__(self, args: ECSInfrastructureArgs, aws_credentials=None):
         import os
         self.region = args.region or os.getenv('AWS_REGION', 'us-east-1')
         self.project_name = args.project_name
@@ -23,9 +23,17 @@ class ECSInfrastructure:
         self.memory = args.memory or 512
         self.disk_size = args.disk_size or 21
         self.args = args
+        self.aws_credentials = aws_credentials
         
-        # Initialize AWS clients
-        self.logs = boto3.client("logs", region_name=self.region)
+        # Initialize AWS clients with custom credentials if provided
+        client_config = {"region_name": self.region}
+        if aws_credentials:
+            client_config.update({
+                "aws_access_key_id": aws_credentials["access_key"],
+                "aws_secret_access_key": aws_credentials["secret_key"]
+            })
+        
+        self.logs = boto3.client("logs", **client_config)
         
         # Service instances will be initialized during setup
         self.vpc_service: VPCService = None
@@ -44,14 +52,16 @@ class ECSInfrastructure:
                 environment_variables=self.args.environment_variables or [],
                 region=self.region,
                 existing_vpc_id=self.args.existing_vpc_id,
-                existing_subnet_ids=self.args.existing_subnet_ids
+                existing_subnet_ids=self.args.existing_subnet_ids,
+                aws_credentials=self.aws_credentials
             )
             await self.vpc_service.initialize()
             
             # Initialize IAM service
             self.iam_service = IAMService(
                 project_name=self.project_name,
-                region=self.region
+                region=self.region,
+                aws_credentials=self.aws_credentials
             )
             await self.iam_service.initialize()
             
@@ -66,7 +76,8 @@ class ECSInfrastructure:
                 subnet_ids=self.vpc_service.subnet_ids,
                 security_group_id=self.vpc_service.security_group_ids.alb_security_group_id,
                 container_port=self.container_port,
-                health_check_path=self.health_check_path
+                health_check_path=self.health_check_path,
+                aws_credentials=self.aws_credentials
             )
             await self.load_balancer_service.initialize()
             
@@ -86,7 +97,8 @@ class ECSInfrastructure:
                 security_group_id=self.vpc_service.security_group_ids.ecs_security_group_id,
                 execution_role_arn=self.iam_service.execution_role_arn,
                 task_role_arn=self.iam_service.task_role_arn,
-                target_group_arn=self.load_balancer_service.target_group_arn
+                target_group_arn=self.load_balancer_service.target_group_arn,
+                aws_credentials=self.aws_credentials
             )
             await self.ecs_service.initialize()
             

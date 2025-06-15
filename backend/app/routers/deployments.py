@@ -7,7 +7,7 @@ import logging
 from core.database import prisma
 from core.security import get_current_user
 from schemas import Deployment, DeploymentStatus, User, ProjectStatus
-from services import DeploymentService, DeploymentConfig, deployment_manager
+from services import DeploymentService, DeploymentConfig, deployment_manager, encryption_service
 from .github import get_branch_commit_sha
 
 logger = logging.getLogger(__name__)
@@ -50,11 +50,24 @@ async def deploy_project(
     current_user: User = Depends(get_current_user)
 ):
     """Start a new deployment for a project"""
-    # Get project
+    # Get project with team info
     project = await prisma.project.find_first(
         where={
             "id": project_id,
-            "userId": current_user.id
+            "OR": [
+                {"userId": current_user.id},  # User owns the project
+                {
+                    "team": {
+                        "OR": [
+                            {"ownerId": current_user.id},  # User owns the team
+                            {"members": {"some": {"userId": current_user.id}}}  # User is team member
+                        ]
+                    }
+                }
+            ]
+        },
+        include={
+            "team": True
         }
     )
     
@@ -113,8 +126,31 @@ async def deploy_project(
         data={"status": ProjectStatus.DEPLOYING}
     )
     
+    # Check for team AWS credentials if this is a team project
+    aws_credentials = None
+    aws_region = None
+    
+    if project.teamId:
+        # Get team AWS config
+        team_aws_config = await prisma.teamawsconfig.find_first(
+            where={"teamId": project.teamId, "isActive": True}
+        )
+        
+        if team_aws_config:
+            # Decrypt credentials
+            access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
+            secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
+            
+            if access_key and secret_key:
+                aws_credentials = {
+                    "access_key": access_key,
+                    "secret_key": secret_key
+                }
+                aws_region = team_aws_config.awsRegion
+                logger.info(f"Using team AWS credentials for project {project_id}")
+    
     # Start deployment in background
-    deployment_service = DeploymentService()
+    deployment_service = DeploymentService(region=aws_region, aws_credentials=aws_credentials)
     
     # Create deployment configuration
     config = DeploymentConfig(

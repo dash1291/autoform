@@ -148,6 +148,7 @@ model Team {
   owner       User         @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members     TeamMember[]
   projects    Project[]
+  awsConfig   TeamAWSConfig?
 }
 
 model TeamMember {
@@ -167,5 +168,17 @@ enum TeamMemberRole {
   OWNER
   ADMIN
   MEMBER
+}
+
+model TeamAWSConfig {
+  id                String   @id @default(cuid())
+  teamId            String   @unique
+  awsAccessKeyId    String   // Will be encrypted
+  awsSecretAccessKey String  // Will be encrypted
+  awsRegion         String   @default("us-east-1")
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  team              Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 }
 
