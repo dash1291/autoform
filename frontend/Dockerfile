@@ -29,9 +29,6 @@ RUN npm run build
 FROM base AS runner
 WORKDIR /app
 
-# Copy the public folder
-COPY --from=builder /app/public ./public
-
 RUN mkdir .next
 
 # Automatically leverage output traces to reduce image size
