@@ -92,20 +92,7 @@ class ApiClient {
     }
   }
 
-  // Auth endpoints
-  async login(credentials: { username: string; password: string }) {
-    return this.request('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(credentials),
-    })
-  }
-
-  async register(userData: { username: string; email: string; password: string }) {
-    return this.request('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(userData),
-    })
-  }
+  // Auth endpoints - Note: login/register are handled via GitHub OAuth
 
   // Project endpoints
   async getProjects(): Promise<Project[]> {
@@ -159,11 +146,11 @@ class ApiClient {
 
   // Environment variables endpoints
   async getEnvironmentVariables(projectId: string): Promise<Array<Omit<EnvironmentVariable, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }>> {
-    return this.request<Array<Omit<EnvironmentVariable, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }>>(`/projects/${projectId}/environment-variables`)
+    return this.request<Array<Omit<EnvironmentVariable, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }>>(`/projects/${projectId}/environment-variables/`)
   }
 
   async createEnvironmentVariable(projectId: string, envVar: any): Promise<EnvironmentVariable> {
-    return this.request<EnvironmentVariable>(`/projects/${projectId}/environment-variables`, {
+    return this.request<EnvironmentVariable>(`/projects/${projectId}/environment-variables/`, {
       method: 'POST',
       body: JSON.stringify(envVar),
     })
@@ -214,12 +201,7 @@ class ApiClient {
     })
   }
 
-  async getBranches(repoUrl: string): Promise<string[]> {
-    return this.request<string[]>('/github/branches', {
-      method: 'POST',
-      body: JSON.stringify({ repoUrl }),
-    })
-  }
+  // Note: Branch information is included in validateRepository response
 
   // Service status endpoints  
   async getServiceStatus(projectId: string): Promise<any> {
