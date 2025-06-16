@@ -51,7 +51,10 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
   const fetchAwsResources = async () => {
     setLoadingResources(true)
     try {
-      const data = await apiClient.getAwsResources()
+      // Use appropriate credentials based on project type
+      const credentialType = project?.teamId ? 'team' : 'personal'
+      const teamId = project?.teamId || undefined
+      const data = await apiClient.getAwsResources(credentialType, teamId)
       setAwsResources(data)
     } catch (err) {
       console.error('Failed to fetch AWS resources:', err)

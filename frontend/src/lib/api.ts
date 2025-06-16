@@ -234,8 +234,12 @@ class ApiClient {
   }
 
   // AWS resources endpoints
-  async getAwsResources(): Promise<{ vpcs: any[]; subnetsByVpc: any; clusters: any[]; message?: string }> {
-    return this.request<{ vpcs: any[]; subnetsByVpc: any; clusters: any[]; message?: string }>('/aws/resources')
+  async getAwsResources(credentialType: string = 'auto', teamId?: string): Promise<{ vpcs: any[]; subnetsByVpc: any; clusters: any[]; message?: string }> {
+    let url = `/aws/resources?credential_type=${credentialType}`
+    if (teamId) {
+      url += `&team_id=${teamId}`
+    }
+    return this.request<{ vpcs: any[]; subnetsByVpc: any; clusters: any[]; message?: string }>(url)
   }
 
   async getProjectDeployedResources(projectId: string): Promise<any> {
@@ -370,6 +374,45 @@ class ApiClient {
     return this.request(`/teams/${teamId}/aws-config/test`, {
       method: 'POST',
     })
+  }
+
+  // User AWS Configuration endpoints
+  async getUserAwsConfig(): Promise<{
+    configured: boolean
+    region: string | null
+    accessKeyId?: string
+    createdAt?: string
+    updatedAt?: string
+  }> {
+    return this.request<{
+      configured: boolean
+      region: string | null
+      accessKeyId?: string
+      createdAt?: string
+      updatedAt?: string
+    }>('/aws/user-credentials')
+  }
+
+  async saveUserAwsConfig(awsConfig: { 
+    accessKeyId: string
+    secretAccessKey: string
+    region: string 
+  }) {
+    return this.request('/aws/user-credentials', {
+      method: 'POST',
+      body: JSON.stringify(awsConfig),
+    })
+  }
+
+  async deleteUserAwsConfig() {
+    return this.request('/aws/user-credentials', {
+      method: 'DELETE',
+    })
+  }
+
+  // Test AWS credentials (works for both team and personal)
+  async testAwsCredentials(credentialType: string = 'auto') {
+    return this.request(`/aws/credentials-check?credential_type=${credentialType}`)
   }
 }
 

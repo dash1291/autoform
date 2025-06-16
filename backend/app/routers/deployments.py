@@ -126,18 +126,18 @@ async def deploy_project(
         data={"status": ProjectStatus.DEPLOYING}
     )
     
-    # Check for team AWS credentials if this is a team project
+    # Get appropriate AWS credentials based on project type
     aws_credentials = None
     aws_region = None
     
     if project.teamId:
-        # Get team AWS config
+        # Team project - use ONLY team credentials
         team_aws_config = await prisma.teamawsconfig.find_first(
             where={"teamId": project.teamId, "isActive": True}
         )
         
         if team_aws_config:
-            # Decrypt credentials
+            # Decrypt team credentials
             access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
             secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
             
@@ -147,7 +147,49 @@ async def deploy_project(
                     "secret_key": secret_key
                 }
                 aws_region = team_aws_config.awsRegion
-                logger.info(f"Using team AWS credentials for project {project_id}")
+                logger.info(f"Using team AWS credentials for team project {project_id}")
+            else:
+                logger.error(f"Team project {project_id} has invalid team AWS credentials")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Team AWS credentials are not properly configured"
+                )
+        else:
+            logger.error(f"Team project {project_id} has no team AWS credentials configured")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No AWS credentials configured for this team"
+            )
+    else:
+        # Personal project - use ONLY personal credentials
+        user_aws_config = await prisma.userawsconfig.find_first(
+            where={"userId": project.userId, "isActive": True}
+        )
+        
+        if user_aws_config:
+            # Decrypt personal credentials
+            access_key = encryption_service.decrypt(user_aws_config.awsAccessKeyId)
+            secret_key = encryption_service.decrypt(user_aws_config.awsSecretAccessKey)
+            
+            if access_key and secret_key:
+                aws_credentials = {
+                    "access_key": access_key,
+                    "secret_key": secret_key
+                }
+                aws_region = user_aws_config.awsRegion
+                logger.info(f"Using personal AWS credentials for personal project {project_id}")
+            else:
+                logger.error(f"Personal project {project_id} has invalid personal AWS credentials")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Personal AWS credentials are not properly configured"
+                )
+        else:
+            logger.error(f"Personal project {project_id} has no personal AWS credentials configured")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No personal AWS credentials configured. Please configure your AWS credentials in Settings."
+            )
     
     # Start deployment in background
     deployment_service = DeploymentService(region=aws_region, aws_credentials=aws_credentials)

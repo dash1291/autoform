@@ -14,52 +14,82 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-async def get_team_aws_credentials(project) -> dict:
-    """Get team AWS credentials if project belongs to a team"""
-    if not project.teamId:
-        return None
+async def get_project_aws_credentials(project) -> dict:
+    """Get AWS credentials for a project - team credentials for team projects, personal for personal projects"""
     
-    try:
-        team_aws_config = await prisma.teamawsconfig.find_first(
-            where={"teamId": project.teamId, "isActive": True}
-        )
-        
-        if not team_aws_config:
+    # Team project - use ONLY team credentials
+    if project.teamId:
+        try:
+            team_aws_config = await prisma.teamawsconfig.find_first(
+                where={"teamId": project.teamId, "isActive": True}
+            )
+            
+            if team_aws_config:
+                # Decrypt team credentials
+                access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
+                secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
+                
+                if access_key and secret_key:
+                    return {
+                        "access_key": access_key,
+                        "secret_key": secret_key,
+                        "region": team_aws_config.awsRegion,
+                        "source": "team"
+                    }
+            
+            # Team project but no team credentials configured
+            logger.error(f"Team project {project.id} has no team AWS credentials configured")
             return None
-        
-        # Decrypt credentials
-        access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
-        secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
-        
-        if not access_key or not secret_key:
+            
+        except Exception as e:
+            logger.error(f"Failed to get team AWS credentials for project {project.id}: {e}")
             return None
-        
-        return {
-            "access_key": access_key,
-            "secret_key": secret_key,
-            "region": team_aws_config.awsRegion
-        }
-    except Exception as e:
-        logger.warning(f"Failed to get team AWS credentials: {e}")
-        return None
+    
+    # Personal project - use ONLY personal credentials
+    else:
+        try:
+            user_aws_config = await prisma.userawsconfig.find_first(
+                where={"userId": project.userId, "isActive": True}
+            )
+            
+            if user_aws_config:
+                # Decrypt personal credentials
+                access_key = encryption_service.decrypt(user_aws_config.awsAccessKeyId)
+                secret_key = encryption_service.decrypt(user_aws_config.awsSecretAccessKey)
+                
+                if access_key and secret_key:
+                    return {
+                        "access_key": access_key,
+                        "secret_key": secret_key,
+                        "region": user_aws_config.awsRegion,
+                        "source": "personal"
+                    }
+            
+            # Personal project but no personal credentials configured
+            logger.error(f"Personal project {project.id} has no personal AWS credentials configured")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Failed to get personal AWS credentials for project {project.id}: {e}")
+            return None
 
 
 async def create_aws_client(project, service: str, region: str = None):
-    """Create AWS client with team credentials if available"""
+    """Create AWS client with appropriate project credentials"""
     if region is None:
         region = settings.aws_region
     
-    team_credentials = await get_team_aws_credentials(project)
+    project_credentials = await get_project_aws_credentials(project)
     
     client_config = {"region_name": region}
-    if team_credentials:
+    if project_credentials:
         client_config.update({
-            "aws_access_key_id": team_credentials["access_key"],
-            "aws_secret_access_key": team_credentials["secret_key"]
+            "aws_access_key_id": project_credentials["access_key"],
+            "aws_secret_access_key": project_credentials["secret_key"]
         })
-        # Use team's preferred region if different
-        if team_credentials["region"] != region:
-            client_config["region_name"] = team_credentials["region"]
+        # Use project's preferred region if different
+        if project_credentials["region"] != region:
+            client_config["region_name"] = project_credentials["region"]
     
     return boto3.client(service, **client_config)
 

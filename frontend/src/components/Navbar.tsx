@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth-client'
 import { signIn, signOut } from 'next-auth/react'
+import { Settings } from 'lucide-react'
 
 export default function Navbar() {
   const { user, isAuthenticated, isLoading } = useAuth()
@@ -24,19 +25,32 @@ export default function Navbar() {
             ) : isAuthenticated && user ? (
               <>
                 <div className="flex items-center space-x-3">
-                  <img
-                    className="h-8 w-8 rounded-full"
-                    src={user.image || ''}
-                    alt={user.name || ''}
-                  />
-                  <span className="text-sm text-foreground">{user.name}</span>
-                  <Button
-                    variant="ghost"
-                    onClick={() => signOut()}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    Sign out
-                  </Button>
+                  <Link href="/dashboard">
+                    <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
+                      Dashboard
+                    </Button>
+                  </Link>
+                  <Link href="/settings">
+                    <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
+                      <Settings className="h-4 w-4 mr-2" />
+                      Settings
+                    </Button>
+                  </Link>
+                  <div className="flex items-center space-x-2 border-l pl-3 ml-3">
+                    <img
+                      className="h-8 w-8 rounded-full"
+                      src={user.image || ''}
+                      alt={user.name || ''}
+                    />
+                    <span className="text-sm text-foreground">{user.name}</span>
+                    <Button
+                      variant="ghost"
+                      onClick={() => signOut()}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      Sign out
+                    </Button>
+                  </div>
                 </div>
               </>
             ) : (

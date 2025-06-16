@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-py"
+  provider  = "prisma-client-py"
   interface = "asyncio"
 }
 
@@ -36,19 +36,20 @@ model Session {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  githubId      String?   @unique
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  accounts      Account[]
-  projects      Project[]
-  sessions      Session[]
-  ownedTeams    Team[]    @relation("TeamOwner")
+  id              String         @id @default(cuid())
+  name            String?
+  email           String?        @unique
+  emailVerified   DateTime?
+  image           String?
+  githubId        String?        @unique
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  accounts        Account[]
+  projects        Project[]
+  sessions        Session[]
+  ownedTeams      Team[]         @relation("TeamOwner")
   teamMemberships TeamMember[]
+  awsConfig       UserAWSConfig?
 }
 
 model VerificationToken {
@@ -60,36 +61,36 @@ model VerificationToken {
 }
 
 model Project {
-  id              String                @id @default(cuid())
-  name            String
-  gitRepoUrl      String
-  branch          String                @default("main")
-  userId          String
-  teamId          String?               // Project can belong to a team or be personal
-  status          ProjectStatus         @default(CREATED)
-  ecsClusterArn   String?
-  ecsServiceArn   String?
-  albArn          String?
-  domain          String?
-  existingVpcId   String?
-  existingSubnetIds String?  // JSON array of subnet IDs
+  id                 String                @id @default(cuid())
+  name               String
+  gitRepoUrl         String
+  branch             String                @default("main")
+  userId             String
+  teamId             String?
+  status             ProjectStatus         @default(CREATED)
+  ecsClusterArn      String?
+  ecsServiceArn      String?
+  albArn             String?
+  domain             String?
+  existingVpcId      String?
+  existingSubnetIds  String?
   existingClusterArn String?
-  cpu             Int                   @default(256)
-  memory          Int                   @default(512)
-  diskSize        Int                   @default(21)
-  subdirectory    String?
-  port            Int                   @default(3000)
-  healthCheckPath String                @default("/health")
-  autoDeployEnabled Boolean             @default(false)
-  webhookSecret   String?
-  webhookConfigured Boolean             @default(false)
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
-  secretsArn      String?
-  deployments     Deployment[]
-  environmentVars EnvironmentVariable[]
-  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  team            Team?                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  cpu                Int                   @default(256)
+  memory             Int                   @default(512)
+  diskSize           Int                   @default(21)
+  subdirectory       String?
+  port               Int                   @default(3000)
+  healthCheckPath    String                @default("/health")
+  autoDeployEnabled  Boolean               @default(false)
+  webhookSecret      String?
+  webhookConfigured  Boolean               @default(false)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  secretsArn         String?
+  deployments        Deployment[]
+  environmentVars    EnvironmentVariable[]
+  team               Team?                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Deployment {
@@ -119,6 +120,55 @@ model EnvironmentVariable {
   @@unique([projectId, key])
 }
 
+model Team {
+  id          String         @id @default(cuid())
+  name        String
+  description String?
+  ownerId     String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  projects    Project[]
+  owner       User           @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  awsConfig   TeamAWSConfig?
+  members     TeamMember[]
+}
+
+model TeamMember {
+  id       String         @id @default(cuid())
+  teamId   String
+  userId   String
+  role     TeamMemberRole @default(MEMBER)
+  joinedAt DateTime       @default(now())
+  team     Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+}
+
+model TeamAWSConfig {
+  id                 String   @id @default(cuid())
+  teamId             String   @unique
+  awsAccessKeyId     String
+  awsSecretAccessKey String
+  awsRegion          String   @default("us-east-1")
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  team               Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+}
+
+model UserAWSConfig {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  awsAccessKeyId     String
+  awsSecretAccessKey String
+  awsRegion          String   @default("us-east-1")
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 enum ProjectStatus {
   CREATED
   CLONING
@@ -138,47 +188,8 @@ enum DeploymentStatus {
   FAILED
 }
 
-model Team {
-  id          String       @id @default(cuid())
-  name        String
-  description String?
-  ownerId     String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  owner       User         @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  members     TeamMember[]
-  projects    Project[]
-  awsConfig   TeamAWSConfig?
-}
-
-model TeamMember {
-  id        String         @id @default(cuid())
-  teamId    String
-  userId    String
-  role      TeamMemberRole @default(MEMBER)
-  joinedAt  DateTime       @default(now())
-  team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([teamId, userId])
-}
-
-
 enum TeamMemberRole {
   OWNER
   ADMIN
   MEMBER
 }
-
-model TeamAWSConfig {
-  id                String   @id @default(cuid())
-  teamId            String   @unique
-  awsAccessKeyId    String   // Will be encrypted
-  awsSecretAccessKey String  // Will be encrypted
-  awsRegion         String   @default("us-east-1")
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  team              Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-}
-
