@@ -407,6 +407,7 @@ class DeploymentService:
                 repository_name,
                 commit_sha,
                 clone_dir,
+                project_id,
                 deployment_id,
                 subdirectory
             )
@@ -430,6 +431,7 @@ class DeploymentService:
         repository_name: str,
         commit_sha: str,
         clone_dir: str,
+        project_id: str,
         deployment_id: Optional[str] = None,
         subdirectory: Optional[str] = None
     ) -> str:
@@ -440,39 +442,60 @@ class DeploymentService:
         import re
         build_project_name = f"{re.sub(r'[^a-z0-9-]', '-', project_name.lower())}-build"
         
+        # Get environment variables for the project to use as build args
+        environment_variables = await self.get_environment_variables(project_id)
+        
+        # Build docker build args from environment variables
+        build_args = ""
+        if environment_variables:
+            for env_var in environment_variables:
+                if env_var.value:  # Only non-secret vars with values
+                    # Escape single quotes in the value
+                    escaped_value = env_var.value.replace("'", "'\"'\"'")
+                    build_args += f" --build-arg {env_var.key}='{escaped_value}'"
+        
+        # Add leading space if build_args is not empty
+        if build_args:
+            build_args = " " + build_args.strip()
+            
+        # Debug: Log the build args
+        print(f"Build args: '{build_args}'")
+        
         # Create buildspec content
         ecr_registry = await self.get_ecr_registry()
         
-        buildspec_phases = [
-            "version: 0.2",
-            "phases:",
-            "  pre_build:",
-            "    commands:",
-            "      - echo Logging in to Amazon ECR...",
-            f"      - aws ecr get-login-password --region {self.region} | docker login --username AWS --password-stdin {ecr_registry}"
-        ]
+        # Build the buildspec as a proper YAML structure
+        buildspec_content = f"""version: 0.2
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region {self.region} | docker login --username AWS --password-stdin {ecr_registry}"""
         
         if subdirectory:
-            buildspec_phases.extend([
-                f"      - echo Changing to subdirectory: {subdirectory}",
-                f"      - cd {subdirectory}"
-            ])
+            buildspec_content += f"""
+      - echo Changing to subdirectory {subdirectory}
+      - cd {subdirectory}"""
         
-        buildspec_phases.extend([
-            "  build:",
-            "    commands:",
-            "      - echo Build started on `date`",
-            "      - echo Building the Docker image...",
-            f"      - docker build -t {repository_name}:{commit_sha} .",
-            f"      - docker tag {repository_name}:{commit_sha} {ecr_registry}/{repository_name}:{commit_sha}",
-            "  post_build:",
-            "    commands:",
-            "      - echo Build completed on `date`",
-            "      - echo Pushing the Docker image...",
-            f"      - docker push {ecr_registry}/{repository_name}:{commit_sha}"
-        ])
+        buildspec_content += f"""
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - docker build{build_args} -t {repository_name}:{commit_sha} .
+      - docker tag {repository_name}:{commit_sha} {ecr_registry}/{repository_name}:{commit_sha}
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker image...
+      - docker push {ecr_registry}/{repository_name}:{commit_sha}"""
         
-        buildspec = "\n".join(buildspec_phases)
+        buildspec = buildspec_content
+        
+        # Debug: Log the generated buildspec
+        print("Generated buildspec.yml:")
+        print(buildspec)
+        print("=" * 50)
         
         log_group_name = f"/aws/codebuild/{build_project_name}"
         
@@ -654,13 +677,24 @@ class DeploymentService:
         except self.s3.exceptions.BucketAlreadyExists:
             pass  # Bucket already exists
         
-        # Create zip of source code
+        # Create zip of source code using Python
+        import zipfile
+        import os
+        
         zip_path = f"/tmp/{commit_sha}.zip"
-        await self.execute_with_logging(
-            f"cd {clone_dir} && zip -r {zip_path} . -x '*.git*'",
-            "",
-            None
-        )
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(clone_dir):
+                # Skip .git directories
+                dirs[:] = [d for d in dirs if not d.startswith('.git')]
+                
+                for file in files:
+                    # Skip .git files
+                    if '.git' in file:
+                        continue
+                        
+                    file_path = os.path.join(root, file)
+                    arc_name = os.path.relpath(file_path, clone_dir)
+                    zipf.write(file_path, arc_name)
         
         # Upload to S3
         with open(zip_path, "rb") as f:
@@ -915,17 +949,7 @@ class DeploymentService:
         """Get project network configuration"""
         try:
             project = await prisma.project.find_unique(
-                where={"id": project_id},
-                select={
-                    "existingVpcId": True,
-                    "existingSubnetIds": True,
-                    "existingClusterArn": True,
-                    "cpu": True,
-                    "memory": True,
-                    "diskSize": True,
-                    "port": True,
-                    "healthCheckPath": True
-                }
+                where={"id": project_id}
             )
 
             if not project:

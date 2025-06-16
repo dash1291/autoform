@@ -66,11 +66,43 @@ class ECSService:
         # Set up or find ECS cluster
         self.cluster_arn = await self._create_or_find_cluster()
         
-        # Create task definition
+        # Check for existing service configuration BEFORE creating task definition
+        await self._check_existing_service_config()
+        
+        # Create task definition (will use detected container name/port if found)
         self.task_definition_arn = await self._create_task_definition()
         
         # Create or update ECS service
         self.service_arn = await self._create_or_update_service()
+    
+    async def _check_existing_service_config(self):
+        """Check if service exists and get its container name"""
+        service_name = f"{self.project_name}-service"
+        
+        try:
+            response = self.ecs.describe_services(
+                cluster=self.cluster_arn,
+                services=[service_name]
+            )
+            
+            services = response.get("services", [])
+            if services and len(services) > 0:
+                existing_service = services[0]
+                if existing_service.get("status") in ["ACTIVE", "DRAINING", "PENDING"]:
+                    task_def_arn = existing_service.get("taskDefinition")
+                    if task_def_arn:
+                        task_def_response = self.ecs.describe_task_definition(
+                            taskDefinition=task_def_arn
+                        )
+                        
+                        containers = task_def_response.get("taskDefinition", {}).get("containerDefinitions", [])
+                        if containers:
+                            container_name = containers[0].get("name")
+                            if container_name:
+                                self._existing_container_name = container_name
+        except Exception as e:
+            # Continue with defaults if service doesn't exist
+            pass
     
     async def _create_or_find_cluster(self) -> str:
         """Create or find ECS cluster"""
@@ -125,8 +157,11 @@ class ECSService:
                     "value": env_var.value
                 })
         
+        # Use the detected container name if we found an existing service
+        container_name = getattr(self, '_existing_container_name', None) or self.project_name
+            
         container_def = {
-            "name": self.project_name,
+            "name": container_name,
             "image": self.image_uri,
             "portMappings": [{
                 "containerPort": self.container_port,
@@ -173,6 +208,7 @@ class ECSService:
     async def _create_or_update_service(self) -> str:
         """Create or update ECS service"""
         service_name = f"{self.project_name}-service"
+        service_exists = False
         
         try:
             # Check if service already exists
@@ -181,28 +217,117 @@ class ECSService:
                 services=[service_name]
             )
             
-            if response["services"] and len(response["services"]) > 0:
-                existing_service = response["services"][0]
+            # Check if any services were returned (including inactive ones)
+            services = response.get("services", [])
+            
+            if services and len(services) > 0:
+                existing_service = services[0]
+                service_status = existing_service.get("status")
+                service_exists = True
                 
-                if existing_service.get("status") == "ACTIVE":
-                    logger.info(f"Updating existing ECS service: {existing_service['serviceArn']}")
-                    
-                    # Update the service with new task definition
+                logger.info(f"Found existing service with status: {service_status}")
+                
+                # Try to update any existing service, regardless of status
+                logger.info(f"Attempting to update existing service: {existing_service.get('serviceArn', 'unknown arn')}")
+                try:
+                    container_name = getattr(self, '_existing_container_name', None) or self.project_name
                     update_response = self.ecs.update_service(
                         cluster=self.cluster_arn,
                         service=service_name,
                         taskDefinition=self.task_definition_arn,
                         desiredCount=1,
-                        enableExecuteCommand=True
+                        enableExecuteCommand=True,
+                        loadBalancers=[{
+                            "targetGroupArn": self.target_group_arn,
+                            "containerName": container_name,
+                            "containerPort": self.container_port
+                        }]
                     )
-                    
                     logger.info("Service updated successfully")
                     return update_response["service"]["serviceArn"]
+                except Exception as update_error:
+                    logger.warning(f"Failed to update existing service: {str(update_error)}")
+
+                # If we get here, the initial update attempt failed
+                logger.info("Initial update failed, checking if we need to wait for service to stabilize...")
+                
+                if service_status in ["DRAINING", "PENDING"]:
+                    logger.info(f"Service is {service_status}. Waiting for it to stabilize...")
+                    try:
+                        # Wait for the service to stabilize before trying again
+                        waiter = self.ecs.get_waiter('services_stable')
+                        waiter.wait(
+                            cluster=self.cluster_arn,
+                            services=[service_name],
+                            WaiterConfig={'maxAttempts': 10, 'delay': 30}
+                        )
+                        
+                        # Try to update the service after waiting
+                        container_name = getattr(self, '_existing_container_name', None) or self.project_name
+                        update_response = self.ecs.update_service(
+                            cluster=self.cluster_arn,
+                            service=service_name,
+                            taskDefinition=self.task_definition_arn,
+                            desiredCount=1,
+                            enableExecuteCommand=True,
+                            loadBalancers=[{
+                                "targetGroupArn": self.target_group_arn,
+                                "containerName": container_name,
+                                "containerPort": self.container_port
+                            }]
+                        )
+                        
+                        logger.info("Service updated after stabilization")
+                        return update_response["service"]["serviceArn"]
+                    except Exception as stabilize_error:
+                        logger.warning(f"Failed to update service after stabilization: {str(stabilize_error)}")
+                        return None
+                # If all update attempts failed, we have a configuration problem - don't try to create new service
+                logger.error("All update attempts failed. Cannot create new service when one already exists.")
+                raise Exception("Service update failed due to configuration mismatch. Service already exists and cannot be updated.")
         except Exception as error:
-            logger.info("No existing service found or error checking, creating new service")
+            logger.error(f"Error checking existing service: {str(error)}")
+            logger.info("Attempting to list ALL services in cluster to debug...")
+            try:
+                all_services = self.ecs.list_services(cluster=self.cluster_arn)
+                logger.info(f"All services in cluster: {all_services}")
+                
+                # Check if our service is in the list
+                service_arns = all_services.get('serviceArns', [])
+                matching_services = [arn for arn in service_arns if service_name in arn]
+                logger.info(f"Services matching {service_name}: {matching_services}")
+                
+                if matching_services:
+                    logger.info("Found matching service! Trying to update it...")
+                    try:
+                        container_name = getattr(self, '_existing_container_name', None) or self.project_name
+                        update_response = self.ecs.update_service(
+                            cluster=self.cluster_arn,
+                            service=service_name,
+                            taskDefinition=self.task_definition_arn,
+                            desiredCount=1,
+                            enableExecuteCommand=True,
+                            loadBalancers=[{
+                                "targetGroupArn": self.target_group_arn,
+                                "containerName": container_name,
+                                "containerPort": self.container_port
+                            }]
+                        )
+                        logger.info("Successfully updated service found via list_services")
+                        return update_response["service"]["serviceArn"]
+                    except Exception as list_update_error:
+                        logger.error(f"Failed to update service found via list: {str(list_update_error)}")
+            except Exception as list_error:
+                logger.error(f"Failed to list services: {str(list_error)}")
         
-        # Create new service
-        response = self.ecs.create_service(
+        # Only create service if one doesn't exist
+        if service_exists:
+            logger.error("Cannot create new service - one already exists!")
+            raise Exception("Service already exists but all update attempts failed. Cannot create duplicate service.")
+        
+        logger.info(f"No existing service found. Creating new service: {service_name}")
+        try:
+            response = self.ecs.create_service(
             serviceName=service_name,
             cluster=self.cluster_arn,
             taskDefinition=self.task_definition_arn,
@@ -218,15 +343,79 @@ class ECSService:
             },
             loadBalancers=[{
                 "targetGroupArn": self.target_group_arn,
-                "containerName": self.project_name,
+                "containerName": getattr(self, '_existing_container_name', None) or self.project_name,
                 "containerPort": self.container_port
             }],
             tags=[{"key": "Name", "value": service_name}]
-        )
-        
-        service_arn = response["service"]["serviceArn"]
-        logger.info(f"ECS service created: {service_arn}")
-        return service_arn
+            )
+            
+            service_arn = response["service"]["serviceArn"]
+            logger.info(f"ECS service created: {service_arn}")
+            return service_arn
+            
+        except Exception as create_error:
+            if "not idempotent" in str(create_error).lower():
+                logger.info("Service creation failed due to existing service. Attempting to update instead...")
+                
+                # First, let's get info about the existing service
+                try:
+                    existing_service_info = self.ecs.describe_services(
+                        cluster=self.cluster_arn,
+                        services=[service_name]
+                    )
+                    if existing_service_info.get("services"):
+                        existing_service = existing_service_info["services"][0]
+                        existing_task_def_arn = existing_service.get("taskDefinition")
+                        logger.info(f"Existing service uses task definition: {existing_task_def_arn}")
+                        
+                        # Get the existing task definition to see the container name
+                        if existing_task_def_arn:
+                            existing_task_def = self.ecs.describe_task_definition(
+                                taskDefinition=existing_task_def_arn
+                            )
+                            containers = existing_task_def.get("taskDefinition", {}).get("containerDefinitions", [])
+                            if containers:
+                                existing_container_name = containers[0].get("name")
+                                existing_port_mappings = containers[0].get("portMappings", [])
+                                logger.info(f"Existing container name: {existing_container_name}")
+                                logger.info(f"Existing port mappings: {existing_port_mappings}")
+                                
+                                # Use the existing container's port if different from what we expect
+                                if existing_port_mappings and len(existing_port_mappings) > 0:
+                                    existing_port = existing_port_mappings[0].get("containerPort")
+                                    if existing_port and existing_port != self.container_port:
+                                        logger.info(f"Using existing container port {existing_port} instead of {self.container_port}")
+                                        self.container_port = existing_port
+                except Exception as info_error:
+                    logger.warning(f"Could not get existing service info: {str(info_error)}")
+                
+                # Try to update the existing service with new task definition
+                try:
+                    logger.info(f"Updating existing service with new task definition...")
+                    logger.info(f"Task definition ARN: {self.task_definition_arn}")
+                    
+                    # Update service with new task definition AND load balancer config
+                    container_name = getattr(self, '_existing_container_name', None) or self.project_name
+                    update_response = self.ecs.update_service(
+                        cluster=self.cluster_arn,
+                        service=service_name,
+                        taskDefinition=self.task_definition_arn,
+                        desiredCount=1,
+                        enableExecuteCommand=True,
+                        loadBalancers=[{
+                            "targetGroupArn": self.target_group_arn,
+                            "containerName": container_name,
+                            "containerPort": self.container_port
+                        }]
+                    )
+                    logger.info("Successfully updated existing service")
+                    return update_response["service"]["serviceArn"]
+                except Exception as update_error:
+                    logger.error(f"Failed to update existing service: {str(update_error)}")
+                    raise create_error
+            else:
+                logger.error(f"Service creation failed: {str(create_error)}")
+                raise create_error
     
     async def _get_account_id(self) -> str:
         """Get AWS account ID"""

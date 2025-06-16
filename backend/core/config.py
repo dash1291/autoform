@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
+import os
 
 
 class Settings(BaseSettings):
@@ -9,6 +10,15 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
     webhook_base_url: Optional[str] = None
+    
+    # CORS Origins - comma-separated list
+    cors_origins: str = "http://localhost:3000"
+    
+    @property
+    def cors_origins_list(self) -> List[str]:
+        """Parse CORS origins from comma-separated string"""
+        origins = self.cors_origins.split(",")
+        return [origin.strip() for origin in origins if origin.strip()]
     
     # Database
     database_url: str
