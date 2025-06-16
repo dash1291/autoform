@@ -12,8 +12,8 @@ import { apiClient } from '@/lib/api'
 import { Key, Shield, TestTube, Trash2, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react'
 
 interface UserAwsConfig {
-  accessKeyId: string // This will be masked from the API
-  region: string
+  accessKeyId?: string // This will be masked from the API
+  region: string | null
   configured: boolean
   createdAt?: string
   updatedAt?: string
@@ -147,7 +147,8 @@ export default function UserAwsConfiguration() {
     }
   }
 
-  const getRegionLabel = (regionValue: string) => {
+  const getRegionLabel = (regionValue: string | null) => {
+    if (!regionValue) return ''
     const region = AWS_REGIONS.find(r => r.value === regionValue)
     return region ? region.label : regionValue
   }
@@ -204,7 +205,7 @@ export default function UserAwsConfiguration() {
               <div className="flex items-center space-x-2 mt-1">
                 <Input
                   type={showSecrets ? 'text' : 'password'}
-                  value={config.accessKeyId}
+                  value={config.accessKeyId || ''}
                   readOnly
                   className="bg-white"
                 />
