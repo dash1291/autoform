@@ -801,7 +801,7 @@ phases:
             await self.log_to_database(deployment_id, f"- ECS Service: {result.service_arn}")
             await self.log_to_database(deployment_id, f"- Load Balancer: {result.load_balancer_dns}")
         
-        # Update project with deployed resource ARNs (only fields that exist in schema)
+        # Update project with deployed resource ARNs and network info
         update_data = {}
         if result.service_arn:
             update_data["ecsServiceArn"] = result.service_arn
@@ -811,6 +811,11 @@ phases:
             update_data["albArn"] = result.load_balancer_arn
         if result.load_balancer_dns:  # Set the domain field for the project
             update_data["domain"] = result.load_balancer_dns
+        if result.vpc_id:
+            update_data["existingVpcId"] = result.vpc_id
+        if result.subnet_ids:
+            import json
+            update_data["existingSubnetIds"] = json.dumps(result.subnet_ids)
         
         if update_data:
             await prisma.project.update(

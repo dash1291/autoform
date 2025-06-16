@@ -78,16 +78,27 @@ async def get_aws_resources(current_user: User = Depends(get_current_user)):
         logger.info(f"Getting AWS resources for user: {current_user.id}")
         
         # Get user's team if they have one
+        logger.info(f"Looking for teams for user ID: {current_user.id}")
         user_teams = await prisma.teammember.find_many(
             where={"userId": current_user.id},
             include={"team": True}
         )
         logger.info(f"Found {len(user_teams)} teams for user")
         
-        if user_teams:
-            # Use the first team's credentials
-            team = user_teams[0].team
-            logger.info(f"Using team: {team.name} (ID: {team.id})")
+        # Also check if user owns any teams
+        owned_teams = await prisma.team.find_many(
+            where={"ownerId": current_user.id}
+        )
+        logger.info(f"User owns {len(owned_teams)} teams")
+        
+        if user_teams or owned_teams:
+            # Use the first team's credentials (either member or owner)
+            if user_teams:
+                team = user_teams[0].team
+                logger.info(f"Using team where user is member: {team.name} (ID: {team.id})")
+            else:
+                team = owned_teams[0]
+                logger.info(f"Using team where user is owner: {team.name} (ID: {team.id})")
             
             team_aws_config = await prisma.teamawsconfig.find_first(
                 where={"teamId": team.id, "isActive": True}
@@ -125,7 +136,7 @@ async def get_aws_resources(current_user: User = Depends(get_current_user)):
         ecs_client = boto3.client('ecs', **client_config)
         
         # Get VPCs
-        logger.info("Attempting to describe VPCs...")
+        logger.info(f"Attempting to describe VPCs in region: {region}...")
         vpcs_response = ec2_client.describe_vpcs()
         logger.info(f"Successfully retrieved {len(vpcs_response['Vpcs'])} VPCs")
         vpcs = []

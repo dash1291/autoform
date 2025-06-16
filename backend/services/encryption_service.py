@@ -18,6 +18,8 @@ class EncryptionService:
         # Try to get key from environment
         key_str = os.getenv("ENCRYPTION_KEY")
         if key_str:
+            # ENCRYPTION_KEY should be a base64-encoded Fernet key
+            # Return it as bytes (Fernet expects the base64-encoded key as bytes)
             return key_str.encode()
         
         # Otherwise, derive key from a secret

@@ -108,7 +108,9 @@ class ECSInfrastructure:
                 cluster_arn=self.ecs_service.cluster_arn,
                 service_arn=self.ecs_service.service_arn,
                 load_balancer_arn=self.load_balancer_service.load_balancer_arn,
-                load_balancer_dns=self.load_balancer_service.load_balancer_dns
+                load_balancer_dns=self.load_balancer_service.load_balancer_dns,
+                vpc_id=self.vpc_service.vpc_id,
+                subnet_ids=self.vpc_service.subnet_ids
             )
             
         except Exception as error:

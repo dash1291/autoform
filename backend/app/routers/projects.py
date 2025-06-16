@@ -963,11 +963,24 @@ async def get_project_deployed_resources(
     current_user: User = Depends(get_current_user)
 ):
     """Get information about deployed AWS resources for a project"""
-    # Check if project exists and belongs to user
+    # Check if project exists and belongs to user or user is team member
     project = await prisma.project.find_first(
         where={
             "id": project_id,
-            "userId": current_user.id
+            "OR": [
+                {"userId": current_user.id},  # User owns the project
+                {
+                    "team": {
+                        "OR": [
+                            {"ownerId": current_user.id},  # User owns the team
+                            {"members": {"some": {"userId": current_user.id}}}  # User is team member
+                        ]
+                    }
+                }
+            ]
+        },
+        include={
+            "team": True
         }
     )
     
@@ -1058,7 +1071,7 @@ async def get_project_deployed_resources(
             except ClientError:
                 pass
         
-        # Try to find ECS service for this project
+        # Try to find ECS service and extract network information
         if project.ecsServiceArn:
             try:
                 # Extract service name from ARN if it's an ARN
@@ -1067,7 +1080,7 @@ async def get_project_deployed_resources(
                     service_identifier = service_identifier.split('/')[-1]
                 
                 # Extract cluster name from ARN if it's an ARN
-                cluster_identifier = project.existingClusterArn or "default"
+                cluster_identifier = project.ecsClusterArn or "default"
                 if cluster_identifier.startswith('arn:aws:ecs:'):
                     cluster_identifier = cluster_identifier.split('/')[-1]
                 
@@ -1084,7 +1097,68 @@ async def get_project_deployed_resources(
                         "runningCount": service['runningCount'],
                         "desiredCount": service['desiredCount']
                     }
-            except ClientError:
+                    
+                    # Get cluster information if not already set from existing resources
+                    if not result["cluster"]:
+                        cluster_response = ecs_client.describe_clusters(clusters=[cluster_identifier])
+                        if cluster_response['clusters']:
+                            cluster = cluster_response['clusters'][0]
+                            result["cluster"] = {
+                                "arn": cluster['clusterArn'],
+                                "name": cluster['clusterName'],
+                                "status": cluster['status'],
+                                "runningTasksCount": cluster['runningTasksCount'],
+                                "activeServicesCount": cluster['activeServicesCount']
+                            }
+                    
+                    # Extract network configuration from Fargate service if not already set
+                    if not result["vpc"] or not result["subnets"]:
+                        network_config = service.get('networkConfiguration', {}).get('awsvpcConfiguration', {})
+                        if network_config:
+                            subnet_ids = network_config.get('subnets', [])
+                            if subnet_ids:
+                                # Get VPC and subnet info from service network configuration
+                                subnet_response = ec2_client.describe_subnets(SubnetIds=subnet_ids)
+                                if subnet_response['Subnets']:
+                                    # Set VPC info if not already set
+                                    if not result["vpc"]:
+                                        vpc_id = subnet_response['Subnets'][0]['VpcId']
+                                        vpc_response = ec2_client.describe_vpcs(VpcIds=[vpc_id])
+                                        if vpc_response['Vpcs']:
+                                            vpc = vpc_response['Vpcs'][0]
+                                            vpc_name = vpc_id
+                                            for tag in vpc.get('Tags', []):
+                                                if tag['Key'] == 'Name':
+                                                    vpc_name = tag['Value']
+                                                    break
+                                            
+                                            result["vpc"] = {
+                                                "id": vpc['VpcId'],
+                                                "name": vpc_name,
+                                                "cidrBlock": vpc['CidrBlock']
+                                            }
+                                    
+                                    # Set subnet info if not already set
+                                    if not result["subnets"]:
+                                        subnets = []
+                                        for subnet in subnet_response['Subnets']:
+                                            subnet_name = subnet['SubnetId']
+                                            for tag in subnet.get('Tags', []):
+                                                if tag['Key'] == 'Name':
+                                                    subnet_name = tag['Value']
+                                                    break
+                                            
+                                            subnets.append({
+                                                "id": subnet['SubnetId'],
+                                                "name": subnet_name,
+                                                "cidrBlock": subnet['CidrBlock'],
+                                                "availabilityZone": subnet['AvailabilityZone']
+                                            })
+                                        
+                                        result["subnets"] = subnets
+                                
+            except ClientError as e:
+                logger.error(f"Error getting deployed resources: {e}")
                 pass
         
         # Try to find load balancer for this project

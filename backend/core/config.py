@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     secret_key: str
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+    encryption_key: Optional[str] = None
     
     # GitHub OAuth
     github_client_id: str

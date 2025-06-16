@@ -35,6 +35,8 @@ class ECSInfrastructureOutput(BaseModel):
     service_arn: str = Field(alias="serviceArn")
     load_balancer_arn: str = Field(alias="loadBalancerArn")
     load_balancer_dns: str = Field(alias="loadBalancerDns")
+    vpc_id: Optional[str] = Field(None, alias="vpcId")
+    subnet_ids: Optional[List[str]] = Field(None, alias="subnetIds")
 
     class Config:
         populate_by_name = True

@@ -45,13 +45,138 @@ class VPCService:
             self.vpc_id = self.existing_vpc_id
             self.subnet_ids = self.existing_subnet_ids
         else:
-            # Get default VPC
-            self.vpc_id = await self._get_default_vpc()
-            # Get subnets
-            self.subnet_ids = await self._get_vpc_subnets()
+            # Create new VPC and subnets for this project
+            logger.info(f"Creating new VPC for project: {self.project_name}")
+            self.vpc_id = await self._create_vpc()
+            self.subnet_ids = await self._create_subnets()
         
         # Create security groups
         self.security_group_ids = await self._create_security_groups()
+    
+    async def _create_vpc(self) -> str:
+        """Create a new VPC for the project"""
+        vpc_name = f"{self.project_name}-vpc"
+        
+        # Create VPC
+        response = self.ec2.create_vpc(
+            CidrBlock="10.0.0.0/16",
+            TagSpecifications=[{
+                "ResourceType": "vpc",
+                "Tags": [
+                    {"Key": "Name", "Value": vpc_name},
+                    {"Key": "Project", "Value": self.project_name}
+                ]
+            }]
+        )
+        
+        vpc_id = response["Vpc"]["VpcId"]
+        logger.info(f"Created VPC: {vpc_id}")
+        
+        # Wait for VPC to be available
+        waiter = self.ec2.get_waiter('vpc_available')
+        waiter.wait(VpcIds=[vpc_id])
+        
+        # Enable DNS hostnames and resolution
+        self.ec2.modify_vpc_attribute(VpcId=vpc_id, EnableDnsHostnames={"Value": True})
+        self.ec2.modify_vpc_attribute(VpcId=vpc_id, EnableDnsSupport={"Value": True})
+        
+        # Create and attach internet gateway
+        igw_response = self.ec2.create_internet_gateway(
+            TagSpecifications=[{
+                "ResourceType": "internet-gateway",
+                "Tags": [
+                    {"Key": "Name", "Value": f"{self.project_name}-igw"},
+                    {"Key": "Project", "Value": self.project_name}
+                ]
+            }]
+        )
+        igw_id = igw_response["InternetGateway"]["InternetGatewayId"]
+        
+        self.ec2.attach_internet_gateway(InternetGatewayId=igw_id, VpcId=vpc_id)
+        logger.info(f"Created and attached Internet Gateway: {igw_id}")
+        
+        return vpc_id
+    
+    async def _create_subnets(self) -> List[str]:
+        """Create subnets for the VPC"""
+        # Get available AZs
+        azs_response = self.ec2.describe_availability_zones()
+        azs = [az["ZoneName"] for az in azs_response["AvailabilityZones"]][:2]  # Use first 2 AZs
+        
+        if len(azs) < 2:
+            raise Exception("Need at least 2 availability zones")
+        
+        subnet_ids = []
+        cidr_blocks = ["10.0.1.0/24", "10.0.2.0/24"]
+        
+        for i, az in enumerate(azs):
+            subnet_name = f"{self.project_name}-subnet-{i+1}"
+            
+            response = self.ec2.create_subnet(
+                VpcId=self.vpc_id,
+                CidrBlock=cidr_blocks[i],
+                AvailabilityZone=az,
+                TagSpecifications=[{
+                    "ResourceType": "subnet",
+                    "Tags": [
+                        {"Key": "Name", "Value": subnet_name},
+                        {"Key": "Project", "Value": self.project_name}
+                    ]
+                }]
+            )
+            
+            subnet_id = response["Subnet"]["SubnetId"]
+            subnet_ids.append(subnet_id)
+            
+            # Enable public IP assignment
+            self.ec2.modify_subnet_attribute(
+                SubnetId=subnet_id,
+                MapPublicIpOnLaunch={"Value": True}
+            )
+            
+            logger.info(f"Created subnet: {subnet_id} in AZ: {az}")
+        
+        # Create route table and add route to internet gateway
+        await self._create_route_table(subnet_ids)
+        
+        return subnet_ids
+    
+    async def _create_route_table(self, subnet_ids: List[str]):
+        """Create route table and associate with subnets"""
+        rt_name = f"{self.project_name}-rt"
+        
+        # Create route table
+        response = self.ec2.create_route_table(
+            VpcId=self.vpc_id,
+            TagSpecifications=[{
+                "ResourceType": "route-table",
+                "Tags": [
+                    {"Key": "Name", "Value": rt_name},
+                    {"Key": "Project", "Value": self.project_name}
+                ]
+            }]
+        )
+        
+        rt_id = response["RouteTable"]["RouteTableId"]
+        
+        # Get internet gateway for this VPC
+        igw_response = self.ec2.describe_internet_gateways(
+            Filters=[{"Name": "attachment.vpc-id", "Values": [self.vpc_id]}]
+        )
+        igw_id = igw_response["InternetGateways"][0]["InternetGatewayId"]
+        
+        # Add route to internet gateway
+        self.ec2.create_route(
+            RouteTableId=rt_id,
+            DestinationCidrBlock="0.0.0.0/0",
+            GatewayId=igw_id
+        )
+        
+        # Associate route table with subnets
+        for subnet_id in subnet_ids:
+            self.ec2.associate_route_table(RouteTableId=rt_id, SubnetId=subnet_id)
+        
+        logger.info(f"Created route table: {rt_id} and associated with subnets")
     
     async def _get_default_vpc(self) -> str:
         """Get the default VPC"""
