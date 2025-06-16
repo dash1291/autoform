@@ -301,7 +301,7 @@ class ApiClient {
   }
 
   async getTeam(teamId: string): Promise<Team> {
-    return this.request<Team>(`/teams/${teamId}/`)
+    return this.request<Team>(`/teams/${teamId}`)
   }
 
   async createTeam(teamData: { name: string; description?: string }) {
@@ -312,33 +312,33 @@ class ApiClient {
   }
 
   async updateTeam(teamId: string, teamData: { name?: string; description?: string }) {
-    return this.request(`/teams/${teamId}/`, {
+    return this.request(`/teams/${teamId}`, {
       method: 'PUT',
       body: JSON.stringify(teamData),
     })
   }
 
   async deleteTeam(teamId: string) {
-    return this.request(`/teams/${teamId}/`, {
+    return this.request(`/teams/${teamId}`, {
       method: 'DELETE',
     })
   }
 
   async addTeamMember(teamId: string, memberData: { githubUsername: string; role: string }) {
-    return this.request(`/teams/${teamId}/members/`, {
+    return this.request(`/teams/${teamId}/members`, {
       method: 'POST',
       body: JSON.stringify(memberData),
     })
   }
 
   async removeTeamMember(teamId: string, memberId: string) {
-    return this.request(`/teams/${teamId}/members/${memberId}/`, {
+    return this.request(`/teams/${teamId}/members/${memberId}`, {
       method: 'DELETE',
     })
   }
 
   async updateTeamMemberRole(teamId: string, memberId: string, role: string) {
-    return this.request(`/teams/${teamId}/members/${memberId}/role/`, {
+    return this.request(`/teams/${teamId}/members/${memberId}/role`, {
       method: 'PUT',
       body: JSON.stringify({ role }),
     })
@@ -360,7 +360,7 @@ class ApiClient {
       isActive: boolean
       createdAt: string
       updatedAt: string
-    }>(`/teams/${teamId}/aws-config/`)
+    }>(`/teams/${teamId}/aws-config`)
   }
 
   async createTeamAwsConfig(teamId: string, awsConfig: { 
@@ -368,20 +368,20 @@ class ApiClient {
     awsSecretAccessKey: string
     awsRegion: string 
   }) {
-    return this.request(`/teams/${teamId}/aws-config/`, {
+    return this.request(`/teams/${teamId}/aws-config`, {
       method: 'POST',
       body: JSON.stringify(awsConfig),
     })
   }
 
   async deleteTeamAwsConfig(teamId: string) {
-    return this.request(`/teams/${teamId}/aws-config/`, {
+    return this.request(`/teams/${teamId}/aws-config`, {
       method: 'DELETE',
     })
   }
 
   async testTeamAwsConfig(teamId: string) {
-    return this.request(`/teams/${teamId}/aws-config/test/`, {
+    return this.request(`/teams/${teamId}/aws-config/test`, {
       method: 'POST',
     })
   }
