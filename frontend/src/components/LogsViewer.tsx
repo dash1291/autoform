@@ -28,8 +28,9 @@ export default function LogsViewer({ projectId }: LogsViewerProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
-  const [limit] = useState(200) // Fixed limit, no UI control
   const [hoursBack, setHoursBack] = useState(1)
+  
+  const limit = 1000 // Fixed limit of 1000 logs
 
   const fetchLogs = async () => {
     setLoading(true)
