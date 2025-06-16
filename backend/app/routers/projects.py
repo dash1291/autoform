@@ -3,6 +3,8 @@ from typing import List, Optional
 import json
 import logging
 import os
+from botocore.exceptions import ClientError, NoCredentialsError
+    
 
 from core.database import prisma
 from core.security import get_current_user
@@ -966,12 +968,7 @@ async def get_project_deployed_resources(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found"
         )
-    
-    # Implement AWS resource information fetching for deployed projects
-    import os
-    from botocore.exceptions import ClientError, NoCredentialsError
-    
-    region = os.getenv('AWS_REGION', 'us-east-1')
+
     
     try:
         # Initialize AWS clients

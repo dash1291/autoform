@@ -75,21 +75,26 @@ async def get_aws_resources(current_user: User = Depends(get_current_user)):
     try:
         # Try to get team AWS credentials for the user's team
         aws_credentials = None
+        logger.info(f"Getting AWS resources for user: {current_user.id}")
         
         # Get user's team if they have one
         user_teams = await prisma.teammember.find_many(
             where={"userId": current_user.id},
             include={"team": True}
         )
+        logger.info(f"Found {len(user_teams)} teams for user")
         
         if user_teams:
             # Use the first team's credentials
             team = user_teams[0].team
+            logger.info(f"Using team: {team.name} (ID: {team.id})")
+            
             team_aws_config = await prisma.teamawsconfig.find_first(
                 where={"teamId": team.id, "isActive": True}
             )
             
             if team_aws_config:
+                logger.info(f"Found team AWS config for region: {team_aws_config.awsRegion}")
                 # Decrypt team credentials
                 access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
                 secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
@@ -100,17 +105,29 @@ async def get_aws_resources(current_user: User = Depends(get_current_user)):
                         "aws_secret_access_key": secret_key
                     }
                     region = team_aws_config.awsRegion
+                    logger.info(f"Using team credentials for region: {region}")
+                else:
+                    logger.warning("Failed to decrypt team AWS credentials")
+            else:
+                logger.info("No active team AWS config found")
+        else:
+            logger.info("User is not a member of any team")
         
         # Initialize AWS clients with team credentials if available, otherwise use default
         client_config = {"region_name": region}
         if aws_credentials:
             client_config.update(aws_credentials)
+            logger.info("Using team AWS credentials")
+        else:
+            logger.info("Using default AWS credentials")
         
         ec2_client = boto3.client('ec2', **client_config)
         ecs_client = boto3.client('ecs', **client_config)
         
         # Get VPCs
+        logger.info("Attempting to describe VPCs...")
         vpcs_response = ec2_client.describe_vpcs()
+        logger.info(f"Successfully retrieved {len(vpcs_response['Vpcs'])} VPCs")
         vpcs = []
         subnets_by_vpc = {}
         
@@ -156,7 +173,9 @@ async def get_aws_resources(current_user: User = Depends(get_current_user)):
             subnets_by_vpc[vpc['VpcId']] = subnets
         
         # Get ECS clusters
+        logger.info("Attempting to list ECS clusters...")
         clusters_response = ecs_client.list_clusters()
+        logger.info(f"Successfully retrieved {len(clusters_response['clusterArns'])} cluster ARNs")
         cluster_details = []
         
         if clusters_response['clusterArns']:
