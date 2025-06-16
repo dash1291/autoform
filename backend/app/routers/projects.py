@@ -468,7 +468,13 @@ async def get_service_status(
         
         # Get cluster and service identifiers
         cluster_identifier = project.ecsClusterArn or "default"
+        if cluster_identifier.startswith('arn:aws:ecs:'):
+            cluster_identifier = cluster_identifier.split('/')[-1]
+        
+        # Extract service name from ARN if it's an ARN, otherwise use as-is
         service_identifier = project.ecsServiceArn
+        if service_identifier and service_identifier.startswith('arn:aws:ecs:'):
+            service_identifier = service_identifier.split('/')[-1]  # Extract service name from ARN
         
         # Describe the service
         service_response = ecs_client.describe_services(
@@ -1053,9 +1059,19 @@ async def get_project_deployed_resources(
         # Try to find ECS service for this project
         if project.ecsServiceArn:
             try:
+                # Extract service name from ARN if it's an ARN
+                service_identifier = project.ecsServiceArn
+                if service_identifier.startswith('arn:aws:ecs:'):
+                    service_identifier = service_identifier.split('/')[-1]
+                
+                # Extract cluster name from ARN if it's an ARN
+                cluster_identifier = project.existingClusterArn or "default"
+                if cluster_identifier.startswith('arn:aws:ecs:'):
+                    cluster_identifier = cluster_identifier.split('/')[-1]
+                
                 service_response = ecs_client.describe_services(
-                    cluster=project.existingClusterArn or "default",
-                    services=[project.ecsServiceArn]
+                    cluster=cluster_identifier,
+                    services=[service_identifier]
                 )
                 if service_response['services']:
                     service = service_response['services'][0]

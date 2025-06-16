@@ -833,10 +833,8 @@ phases:
                 await self.log_to_database(deployment_id, "❌ Missing ECS service or cluster information")
                 return False
             
-            region = os.getenv('AWS_REGION', 'us-east-1')
-            
             # Use the same credentials as the deployment service
-            client_config = {"region_name": region}
+            client_config = {"region_name": self.region}  # Use self.region instead of parameter
             if self.aws_credentials:
                 client_config.update({
                     "aws_access_key_id": self.aws_credentials["access_key"],
@@ -862,10 +860,20 @@ phases:
                     return False
                 
                 try:
+                    # Extract service name from ARN if it's an ARN
+                    service_identifier = service_arn
+                    if service_arn.startswith('arn:aws:ecs:'):
+                        service_identifier = service_arn.split('/')[-1]
+                    
+                    # Extract cluster name from ARN if it's an ARN
+                    cluster_identifier = cluster_arn
+                    if cluster_arn.startswith('arn:aws:ecs:'):
+                        cluster_identifier = cluster_arn.split('/')[-1]
+                    
                     # Check service status
                     response = ecs_client.describe_services(
-                        cluster=cluster_arn,
-                        services=[service_arn]
+                        cluster=cluster_identifier,
+                        services=[service_identifier]
                     )
                     
                     if not response['services']:

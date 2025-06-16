@@ -39,13 +39,6 @@ export default function LogsViewer({ projectId }: LogsViewerProps) {
     try {
       const data: LogsResponse = await apiClient.getProjectLogs(projectId, limit, hoursBack)
       
-      // Debug: Log the timestamps to see what we're getting
-      if (data.logs && data.logs.length > 0) {
-        console.log('First log timestamp:', data.logs[0].timestamp, 'Date:', new Date(data.logs[0].timestamp))
-        console.log('Last log timestamp:', data.logs[data.logs.length - 1].timestamp, 'Date:', new Date(data.logs[data.logs.length - 1].timestamp))
-        console.log(`Fetched ${data.logs.length} logs from last ${hoursBack} hour(s)`)
-      }
-      
       setLogs(data.logs || [])
       
       if (data.message && data.logs.length === 0) {
