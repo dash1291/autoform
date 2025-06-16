@@ -26,7 +26,7 @@ class DeploymentConfig:
         branch: str,
         commit_sha: str,
         subdirectory: Optional[str] = None,
-        health_check_path: str = "/health",
+        health_check_path: str = "/",
         port: int = 3000,
         cpu: int = 256,
         memory: int = 512,
@@ -961,7 +961,7 @@ phases:
                     "memory": 512,
                     "disk_size": 21,
                     "port": 3000,
-                    "health_check_path": "/health"
+                    "health_check_path": "/"
                 }
 
             # Parse existing subnet IDs if they exist
@@ -980,7 +980,7 @@ phases:
                 "memory": project.memory or 512,
                 "disk_size": project.diskSize or 21,
                 "port": project.port or 3000,
-                "health_check_path": project.healthCheckPath or "/health"
+                "health_check_path": project.healthCheckPath or "/"
             }
         except Exception as error:
             logger.error(f"Error fetching project configuration: {error}")
@@ -992,5 +992,5 @@ phases:
                 "memory": 512,
                 "disk_size": 21,
                 "port": 3000,
-                "health_check_path": "/health"
+                "health_check_path": "/"
             }

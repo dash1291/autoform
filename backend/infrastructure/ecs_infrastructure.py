@@ -18,7 +18,7 @@ class ECSInfrastructure:
         self.project_name = args.project_name
         self.image_uri = args.image_uri
         self.container_port = args.container_port or 3000
-        self.health_check_path = args.health_check_path or "/health"
+        self.health_check_path = args.health_check_path or "/"
         self.cpu = args.cpu or 256
         self.memory = args.memory or 512
         self.disk_size = args.disk_size or 21

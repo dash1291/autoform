@@ -16,7 +16,7 @@ class ECSInfrastructureArgs(BaseModel):
     project_name: str = Field(alias="projectName")
     image_uri: str = Field(alias="imageUri")
     container_port: int = Field(3000, alias="containerPort")
-    health_check_path: str = Field("/health", alias="healthCheckPath")
+    health_check_path: str = Field("/", alias="healthCheckPath")
     region: str = "us-east-1"
     existing_vpc_id: Optional[str] = Field(None, alias="existingVpcId")
     existing_subnet_ids: Optional[List[str]] = Field(None, alias="existingSubnetIds")

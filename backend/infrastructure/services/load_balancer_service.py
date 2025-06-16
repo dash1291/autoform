@@ -14,7 +14,7 @@ class LoadBalancerService:
         subnet_ids: List[str] = None,
         security_group_id: str = "",
         container_port: int = 3000,
-        health_check_path: str = "/health",
+        health_check_path: str = "/",
         aws_credentials=None
     ):
         self.project_name = project_name

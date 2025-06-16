@@ -1,13 +1,12 @@
 import { useJwtStore } from './auth-client'
 import { Project, Team, TeamMember, EnvironmentVariable, Deployment } from '../types'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-
 class ApiClient {
   private baseUrl: string
 
-  constructor(baseUrl: string = API_BASE_URL) {
-    this.baseUrl = baseUrl
+  constructor() {
+    // Use the build-time environment variable for API URL
+    this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
   }
 
   private getAuthHeaders(): HeadersInit {

@@ -160,7 +160,7 @@ async def deploy_project(
         branch=project.branch or "main",
         commit_sha=commit_sha,
         subdirectory=project.subdirectory,
-        health_check_path=project.healthCheckPath or "/health",
+        health_check_path=project.healthCheckPath or "/",
         port=project.port or 3000,
         cpu=project.cpu or 256,
         memory=project.memory or 512,

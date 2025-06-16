@@ -23,7 +23,7 @@ class ProjectBase(BaseModel):
     disk_size: int = Field(21, alias="diskSize")
     subdirectory: Optional[str] = None
     port: int = 3000
-    health_check_path: str = Field("/health", alias="healthCheckPath")
+    health_check_path: str = Field("/", alias="healthCheckPath")
     auto_deploy_enabled: bool = Field(False, alias="autoDeployEnabled")
 
     @validator("git_repo_url")
