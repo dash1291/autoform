@@ -905,6 +905,7 @@ async def execute_command(
 async def get_project_logs(
     project_id: str,
     limit: int = 100,
+    hours_back: int = 1,
     current_user: User = Depends(get_current_user)
 ):
     """Get application logs for a project from CloudWatch"""
@@ -936,7 +937,8 @@ async def get_project_logs(
         cloudwatch_svc = await create_cloudwatch_service(project)
         logs_data = await cloudwatch_svc.get_project_logs(
             project_name=project.name,
-            limit=limit
+            limit=limit,
+            hours_back=hours_back
         )
         return logs_data
     except Exception as e:
@@ -971,6 +973,12 @@ async def get_project_deployed_resources(
 
     
     try:
+        # Get region from team config or environment
+        region = os.getenv('AWS_REGION', 'us-east-1')
+        team_credentials = await get_team_aws_credentials(project)
+        if team_credentials and team_credentials.get('region'):
+            region = team_credentials['region']
+        
         # Initialize AWS clients
         ecs_client = await create_aws_client(project, 'ecs', region)
         ec2_client = await create_aws_client(project, 'ec2', region)

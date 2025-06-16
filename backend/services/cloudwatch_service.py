@@ -69,7 +69,8 @@ class CloudWatchLogsService:
         self, 
         project_name: str, 
         limit: int = 100,
-        start_time: Optional[datetime] = None
+        start_time: Optional[datetime] = None,
+        hours_back: int = 24
     ) -> Dict[str, Any]:
         """
         Fetch logs for a project from CloudWatch
@@ -77,7 +78,8 @@ class CloudWatchLogsService:
         Args:
             project_name: Name of the project/ECS service
             limit: Maximum number of log entries to return
-            start_time: Start time for log search (defaults to 1 hour ago)
+            start_time: Start time for log search (if not provided, uses hours_back)
+            hours_back: How many hours back to search for logs (default 24)
             
         Returns:
             Dictionary containing logs and metadata
@@ -135,16 +137,30 @@ class CloudWatchLogsService:
                     }
                 raise
             
-            # Get log streams for this log group
-            streams_response = self.logs_client.describe_log_streams(
-                logGroupName=log_group_name,
-                orderBy='LastEventTime',
-                descending=True,
-                limit=10  # Get up to 10 most recent streams
-            )
+            # Get log streams for this log group - force fresh data
+            # First, get all streams to ensure we have the latest
+            all_streams = []
+            next_token = None
             
-            log_streams = streams_response.get('logStreams', [])
-            logger.info(f"Found {len(log_streams)} log streams in {log_group_name}")
+            while True:
+                params = {
+                    'logGroupName': log_group_name,
+                    'orderBy': 'LastEventTime',
+                    'descending': True,
+                    'limit': 50
+                }
+                if next_token:
+                    params['nextToken'] = next_token
+                    
+                streams_response = self.logs_client.describe_log_streams(**params)
+                all_streams.extend(streams_response.get('logStreams', []))
+                
+                next_token = streams_response.get('nextToken')
+                if not next_token or len(all_streams) >= 50:
+                    break
+            
+            log_streams = all_streams[:10]  # Use top 10 most recent streams
+            logger.info(f"Found {len(log_streams)} total log streams, using top 10 most recent")
             
             if not log_streams:
                 return {
@@ -174,15 +190,23 @@ class CloudWatchLogsService:
             
             all_events = []
             
-            # Approach 1: Use filter_log_events without time restriction
+            # Approach 1: Use filter_log_events without stream names to get ALL recent logs
             try:
+                # Get logs from the specified time period
+                end_time = datetime.utcnow()
+                if start_time is None:
+                    start_time = end_time - timedelta(hours=hours_back)
+                
+                # Don't specify stream names to search across ALL streams
                 events_response = self.logs_client.filter_log_events(
                     logGroupName=log_group_name,
-                    logStreamNames=stream_names,
-                    limit=limit * 2
+                    startTime=int(start_time.timestamp() * 1000),
+                    endTime=int(end_time.timestamp() * 1000),
+                    limit=limit * 2,
+                    interleaved=True  # Interleave results from all streams
                 )
                 filter_events = events_response.get('events', [])
-                logger.info(f"filter_log_events returned {len(filter_events)} events")
+                logger.info(f"filter_log_events returned {len(filter_events)} events from last {hours_back} hours")
                 all_events.extend(filter_events)
             except Exception as e:
                 logger.warning(f"filter_log_events failed: {str(e)}")
@@ -224,6 +248,12 @@ class CloudWatchLogsService:
             # Sort by timestamp (most recent first) and limit to requested amount
             logs.sort(key=lambda x: x['timestamp'], reverse=True)
             logs = logs[:limit]  # Take only the most recent 'limit' entries
+            
+            # Log the time range of returned logs for debugging
+            if logs:
+                oldest_time = datetime.fromtimestamp(logs[-1]['timestamp'] / 1000)
+                newest_time = datetime.fromtimestamp(logs[0]['timestamp'] / 1000)
+                logger.info(f"Returning {len(logs)} logs from {oldest_time} to {newest_time}")
             
             return {
                 "logs": logs,

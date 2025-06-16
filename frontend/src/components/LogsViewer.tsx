@@ -28,14 +28,22 @@ export default function LogsViewer({ projectId }: LogsViewerProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
-  const [limit, setLimit] = useState(100)
+  const [limit] = useState(200) // Fixed limit, no UI control
+  const [hoursBack, setHoursBack] = useState(1)
 
   const fetchLogs = async () => {
     setLoading(true)
     setError(null)
     
     try {
-      const data: LogsResponse = await apiClient.getProjectLogs(projectId, limit)
+      const data: LogsResponse = await apiClient.getProjectLogs(projectId, limit, hoursBack)
+      
+      // Debug: Log the timestamps to see what we're getting
+      if (data.logs && data.logs.length > 0) {
+        console.log('First log timestamp:', data.logs[0].timestamp, 'Date:', new Date(data.logs[0].timestamp))
+        console.log('Last log timestamp:', data.logs[data.logs.length - 1].timestamp, 'Date:', new Date(data.logs[data.logs.length - 1].timestamp))
+        console.log(`Fetched ${data.logs.length} logs from last ${hoursBack} hour(s)`)
+      }
       
       setLogs(data.logs || [])
       
@@ -52,14 +60,14 @@ export default function LogsViewer({ projectId }: LogsViewerProps) {
 
   useEffect(() => {
     fetchLogs()
-  }, [projectId, limit])
+  }, [projectId, limit, hoursBack])
 
   useEffect(() => {
     if (!autoRefresh) return
 
     const interval = setInterval(fetchLogs, 5000) // Refresh every 5 seconds
     return () => clearInterval(interval)
-  }, [autoRefresh, projectId, limit])
+  }, [autoRefresh, projectId, limit, hoursBack])
 
   const formatLogMessage = (message: string) => {
     // Basic formatting for common log patterns
@@ -102,14 +110,15 @@ export default function LogsViewer({ projectId }: LogsViewerProps) {
           </label>
           
           <select
-            value={limit}
-            onChange={(e) => setLimit(parseInt(e.target.value))}
+            value={hoursBack}
+            onChange={(e) => setHoursBack(parseInt(e.target.value))}
             className="border border-gray-300 rounded px-3 py-2 text-sm"
           >
-            <option value={50}>50 logs</option>
-            <option value={100}>100 logs</option>
-            <option value={200}>200 logs</option>
-            <option value={500}>500 logs</option>
+            <option value={1}>Last 1 hour</option>
+            <option value={3}>Last 3 hours</option>
+            <option value={6}>Last 6 hours</option>
+            <option value={12}>Last 12 hours</option>
+            <option value={24}>Last 24 hours</option>
           </select>
         </div>
         

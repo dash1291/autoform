@@ -221,8 +221,12 @@ class ApiClient {
   }
 
   // Logs endpoints
-  async getProjectLogs(projectId: string, limit: number = 100): Promise<{ logs: any[]; logGroupName: string; totalStreams: number; message?: string }> {
-    return this.request<{ logs: any[]; logGroupName: string; totalStreams: number; message?: string }>(`/projects/${projectId}/logs?limit=${limit}`)
+  async getProjectLogs(projectId: string, limit: number = 100, hoursBack?: number): Promise<{ logs: any[]; logGroupName: string; totalStreams: number; message?: string }> {
+    let url = `/projects/${projectId}/logs?limit=${limit}`
+    if (hoursBack !== undefined) {
+      url += `&hours_back=${hoursBack}`
+    }
+    return this.request<{ logs: any[]; logGroupName: string; totalStreams: number; message?: string }>(url)
   }
 
   async getCodeBuildLogs(projectId: string, limit: number = 100): Promise<{ logs: any[]; logGroupName: string; totalStreams: number; message?: string }> {
