@@ -132,14 +132,21 @@ class DeploymentService:
                 await self.log_to_database(deployment_id, f"Error: {str(error)}")
             raise
     
+    async def get_account_id(self) -> str:
+        """Get AWS account ID"""
+        try:
+            response = self.sts.get_caller_identity()
+            return response["Account"]
+        except Exception as error:
+            raise Exception(f"Failed to get AWS account ID: {error}")
+    
     async def get_ecr_registry(self) -> str:
         """Get ECR registry URL"""
         try:
-            response = self.sts.get_caller_identity()
-            account_id = response["Account"]
+            account_id = await self.get_account_id()
             return f"{account_id}.dkr.ecr.{self.region}.amazonaws.com"
         except Exception as error:
-            raise Exception(f"Failed to get AWS account ID: {error}")
+            raise Exception(f"Failed to get ECR registry: {error}")
     
     async def ensure_ecr_repository(self, repository_name: str) -> None:
         """Ensure ECR repository exists"""
@@ -463,12 +470,24 @@ class DeploymentService:
         
         # Create buildspec content
         ecr_registry = await self.get_ecr_registry()
+        account_id = await self.get_account_id()
         
         # Build the buildspec as a proper YAML structure
         buildspec_content = f"""version: 0.2
 phases:
   pre_build:
     commands:
+      - echo Checking for Docker Hub credentials...
+      - |
+        if aws secretsmanager describe-secret --secret-id dockerhub-credentials --region {self.region} >/dev/null 2>&1; then
+          echo "Docker Hub credentials found, logging in..."
+          DOCKERHUB_USERNAME=$(aws secretsmanager get-secret-value --secret-id dockerhub-credentials --region {self.region} --query SecretString --output text | jq -r .username)
+          DOCKERHUB_PASSWORD=$(aws secretsmanager get-secret-value --secret-id dockerhub-credentials --region {self.region} --query SecretString --output text | jq -r .password)
+          echo "$DOCKERHUB_PASSWORD" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+          echo "Docker Hub login successful"
+        else
+          echo "No Docker Hub credentials found, proceeding without authentication"
+        fi
       - echo Logging in to Amazon ECR...
       - aws ecr get-login-password --region {self.region} | docker login --username AWS --password-stdin {ecr_registry}"""
         

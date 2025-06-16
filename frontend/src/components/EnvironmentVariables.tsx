@@ -294,19 +294,20 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
         </div>
       ) : (
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px] table-fixed divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
                   Variable Name
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
                   Type
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-64">
                   Value
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
                   Actions
                 </th>
               </tr>
@@ -337,7 +338,7 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
                           <span className="text-xs">Secret</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 w-48">
                         <input
                           type={Boolean(editVar.isSecret) ? "password" : "text"}
                           value={editVar.value}
@@ -382,13 +383,15 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
                           {envVar.isSecret ? 'Secret' : 'Environment Variable'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 w-48 text-sm text-gray-500">
                         {envVar.isSecret ? (
                           <span className="text-gray-400">••••••••</span>
                         ) : (
-                          <code className="bg-gray-100 px-2 py-1 rounded text-xs">
-                            {envVar.value || '(empty)'}
-                          </code>
+                          <div className="truncate">
+                            <code className="bg-gray-100 px-2 py-1 rounded text-xs">
+                              {envVar.value || '(empty)'}
+                            </code>
+                          </div>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -416,6 +419,7 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
