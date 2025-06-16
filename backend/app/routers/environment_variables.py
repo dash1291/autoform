@@ -217,8 +217,7 @@ async def delete_environment_variable(
     if existing.isSecret and existing.secretKey:
         # Get project info for team credentials
         project = await prisma.project.find_unique(
-            where={"id": project_id},
-            select={"teamId": True}
+            where={"id": project_id}
         )
         await delete_secret(existing.secretKey, project)
     
@@ -234,8 +233,7 @@ async def store_secret(project_id: str, key: str, value: str) -> str:
     """Store a secret in AWS Secrets Manager"""
     # Get project name to use in secret path
     project = await prisma.project.find_unique(
-        where={"id": project_id},
-        select={"name": True, "teamId": True}
+        where={"id": project_id}
     )
     
     if not project:
