@@ -237,11 +237,11 @@ class CloudWatchLogsService:
             logs = []
             for event in all_events:
                 logs.append({
-                    "timestamp": event['timestamp'],
-                    "message": event['message'],
-                    "logStreamName": event['logStreamName'],
+                    "timestamp": event.get('timestamp', 0),
+                    "message": event.get('message', ''),
+                    "logStreamName": event.get('logStreamName', 'unknown'),
                     "formattedTime": datetime.fromtimestamp(
-                        event['timestamp'] / 1000
+                        event.get('timestamp', 0) / 1000
                     ).strftime('%Y-%m-%d %H:%M:%S')
                 })
             
@@ -364,11 +364,11 @@ class CloudWatchLogsService:
                         logs = []
                         for event in all_events:
                             logs.append({
-                                "timestamp": event['timestamp'],
-                                "message": event['message'],
-                                "logStreamName": event['logStreamName'],
+                                "timestamp": event.get('timestamp', 0),
+                                "message": event.get('message', ''),
+                                "logStreamName": event.get('logStreamName', 'unknown'),
                                 "formattedTime": datetime.fromtimestamp(
-                                    event['timestamp'] / 1000
+                                    event.get('timestamp', 0) / 1000
                                 ).strftime('%Y-%m-%d %H:%M:%S')
                             })
                         

@@ -985,6 +985,8 @@ async def get_project_deployed_resources(
         if team_credentials and team_credentials.get('region'):
             region = team_credentials['region']
         
+        logger.info(f"Getting deployed resources for project {project_id} in region {region}")
+        
         # Initialize AWS clients
         ecs_client = await create_aws_client(project, 'ecs', region)
         ec2_client = await create_aws_client(project, 'ec2', region)
