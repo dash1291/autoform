@@ -15,3 +15,7 @@
 - Updated frontend to specify credential context explicitly
 
 **Security principle**: Credential selection should be explicit, not implicit. Users should always know exactly which credentials are being used for their operations.
+
+## Infrastructure Development Practices
+
+**Test-Driven Infrastructure Changes**: When using moto for infrastructure testing, always write tests before making code changes. After implementing modifications, run tests to ensure both new and existing scenarios pass successfully.
