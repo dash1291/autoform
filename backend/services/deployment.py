@@ -500,14 +500,19 @@ phases:
   build:
     commands:
       - echo Build started on `date`
-      - echo Building the Docker image...
-      - docker build{build_args} -t {repository_name}:{commit_sha} .
+      - echo Building the Docker image with cache...
+      - |
+        # Try to pull the latest image for cache
+        docker pull {ecr_registry}/{repository_name}:latest || echo "No previous image found for cache"
+      - docker build{build_args} --cache-from {ecr_registry}/{repository_name}:latest -t {repository_name}:{commit_sha} -t {repository_name}:latest .
       - docker tag {repository_name}:{commit_sha} {ecr_registry}/{repository_name}:{commit_sha}
+      - docker tag {repository_name}:latest {ecr_registry}/{repository_name}:latest
   post_build:
     commands:
       - echo Build completed on `date`
-      - echo Pushing the Docker image...
-      - docker push {ecr_registry}/{repository_name}:{commit_sha}"""
+      - echo Pushing the Docker images...
+      - docker push {ecr_registry}/{repository_name}:{commit_sha}
+      - docker push {ecr_registry}/{repository_name}:latest"""
         
         buildspec = buildspec_content
         
@@ -541,6 +546,10 @@ phases:
                 "image": "aws/codebuild/amazonlinux2-x86_64-standard:4.0",
                 "computeType": "BUILD_GENERAL1_SMALL",
                 "privilegedMode": True
+            },
+            "cache": {
+                "type": "LOCAL",
+                "modes": ["LOCAL_DOCKER_LAYER_CACHE"]
             },
             "logsConfig": {
                 "cloudWatchLogs": {
