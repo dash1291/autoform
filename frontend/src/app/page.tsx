@@ -30,7 +30,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gradient-to-br">
       {/* Hero Section */}
-      <div className="container mx-auto px-4 py-16">
+      <div className="container w-full md:w-3/4 mx-auto px-4 py-16">
         <div className="text-center mb-16">
           <h1 className="text-5xl font-bold text-gray-900 mb-6">
             Autoform
@@ -42,7 +42,7 @@ export default function Home() {
             <Button 
               onClick={handleGetStarted}
               size="lg"
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-primary hover:bg-primary/90"
             >
               <Github className="mr-2 h-5 w-5" />
               Get Started
@@ -60,10 +60,9 @@ export default function Home() {
         {/* Features Section */}
         <div className="mb-16">
           <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
-            Why Choose Autoform?
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <Card className="bg-white/50 border-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Card className="bg-white/50 border-0 border-r border-gray-100">
               <CardHeader>
                 <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
                   <Cloud className="h-6 w-6 text-orange-600" />
@@ -75,7 +74,7 @@ export default function Home() {
               </CardHeader>
             </Card>
 
-            <Card className="bg-white/50 border-0">
+            <Card className="bg-white/50 border-0 border-r border-gray-100">
               <CardHeader>
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
                   <Zap className="h-6 w-6 text-blue-600" />
@@ -103,7 +102,7 @@ export default function Home() {
         </div>
 
         {/* Call to Action */}
-        <div className="text-center bg-white rounded-lg shadow-lg p-8">
+        <div className="text-center bg-white rounded p-8 border-t w-full border-gray-100 mx-auto">
           <h3 className="text-2xl font-bold text-gray-900 mb-4">
             Ready to Deploy?
           </h3>
@@ -113,7 +112,7 @@ export default function Home() {
           <Button 
             onClick={handleGetStarted}
             size="lg"
-            className="bg-blue-600 hover:bg-blue-700"
+            className="bg-primary hover:bg-primary/90"
           >
             <Github className="mr-2 h-5 w-5" />
             Start Deploying Now

@@ -66,15 +66,15 @@ export default function LogsViewer({ projectId }: LogsViewerProps) {
   const formatLogMessage = (message: string) => {
     // Basic formatting for common log patterns
     if (message.includes('ERROR') || message.includes('error')) {
-      return 'text-red-600'
+      return 'text-red-400'
     }
     if (message.includes('WARN') || message.includes('warn')) {
-      return 'text-yellow-600'
+      return 'text-yellow-400'
     }
     if (message.includes('INFO') || message.includes('info')) {
-      return 'text-blue-600'
+      return 'text-blue-400'
     }
-    return 'text-gray-700'
+    return 'text-gray-300'
   }
 
   const formatTimestamp = (timestamp: number) => {
@@ -131,11 +131,7 @@ export default function LogsViewer({ projectId }: LogsViewerProps) {
       )}
 
       {/* Logs Display */}
-      <div className="bg-black text-green-400 font-mono text-sm rounded-lg overflow-hidden">
-        <div className="bg-gray-800 px-4 py-2 text-white text-xs border-b border-gray-700">
-          Application Logs
-        </div>
-        
+      <div className="bg-gray-900 text-green-400 font-mono text-sm rounded overflow-hidden">
         <div className="max-h-96 overflow-y-auto">
           {loading && logs.length === 0 ? (
             <div className="p-4 text-center text-gray-400">
