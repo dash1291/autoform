@@ -29,6 +29,7 @@ export default function ProjectDetail() {
   const [activeTab, setActiveTab] = useState<'overview' | 'deployments' | 'logs' | 'settings' | 'shell'>('overview')
   const [activeSettingsTab, setActiveSettingsTab] = useState<'environment' | 'repository' | 'resources'>('repository')
   const [serviceStatus, setServiceStatus] = useState<any>(null)
+  const [awsRegion, setAwsRegion] = useState<string | null>(null)
 
   useEffect(() => {
     if (isAuthenticated && !authLoading && params.id) {
@@ -77,6 +78,8 @@ export default function ProjectDetail() {
     try {
       const data = await apiClient.getProject(params.id as string)
       setProject(data)
+      // Fetch AWS region based on project ownership
+      await fetchAwsRegion(data)
     } catch (err: any) {
       if (err.message.includes('404')) {
         setError('Project not found')
@@ -85,6 +88,23 @@ export default function ProjectDetail() {
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchAwsRegion = async (projectData: any) => {
+    try {
+      if (projectData.teamId) {
+        // Team project - get team AWS config
+        const config = await apiClient.getTeamAwsConfig(projectData.teamId)
+        setAwsRegion(config.awsRegion)
+      } else {
+        // Personal project - get user AWS config
+        const config = await apiClient.getUserAwsConfig()
+        setAwsRegion(config.region)
+      }
+    } catch (err) {
+      console.error('Failed to fetch AWS region:', err)
+      setAwsRegion(null)
     }
   }
 
@@ -390,20 +410,9 @@ export default function ProjectDetail() {
               {/* Live Deployment Logs */}
               {activeDeploymentId && liveLogs && (
                 <div className="bg-white shadow rounded-lg p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-semibold text-gray-900">
-                      🔴 Live Deployment Logs
-                    </h2>
-                    {(project.status === 'DEPLOYING' || project.status === 'BUILDING' || project.status === 'CLONING') && (
-                      <Button
-                        onClick={handleAbortDeployment}
-                        variant="destructive"
-                        size="sm"
-                      >
-                        Abort Deployment
-                      </Button>
-                    )}
-                  </div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                    🔴 Live Deployment Logs
+                  </h2>
                   <div className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-y-auto max-h-96 font-mono text-sm">
                     <pre className="whitespace-pre-wrap break-words">{liveLogs}</pre>
                   </div>
@@ -490,7 +499,23 @@ export default function ProjectDetail() {
 
           {activeTab === 'logs' && (
             <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Application Logs</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">Application Logs</h2>
+                <Button
+                  onClick={() => {
+                    if (awsRegion && project?.name) {
+                      const logGroupName = `/ecs/${project.name}`
+                      const cloudwatchUrl = `https://${awsRegion}.console.aws.amazon.com/cloudwatch/home?region=${awsRegion}#logsV2:log-groups/log-group/${encodeURIComponent(logGroupName)}`
+                      window.open(cloudwatchUrl, '_blank')
+                    }
+                  }}
+                  variant="outline"
+                  size="sm"
+                  disabled={!awsRegion}
+                >
+                  View in CloudWatch
+                </Button>
+              </div>
               <LogsViewer projectId={params.id as string} />
             </div>
           )}
