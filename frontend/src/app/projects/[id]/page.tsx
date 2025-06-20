@@ -219,19 +219,11 @@ export default function ProjectDetail() {
               <p className="text-gray-600">{project.gitRepoUrl}</p>
             </div>
             {project.status === 'DEPLOYING' || project.status === 'BUILDING' || project.status === 'CLONING' ? (
-              <div className="flex space-x-3">
-                <Button disabled variant="secondary">
-                  {project.status === 'DEPLOYING' ? 'Deploying...' : 
-                   project.status === 'BUILDING' ? 'Building...' : 
-                   'Cloning...'}
-                </Button>
-                <Button
-                  onClick={handleAbortDeployment}
-                  variant="destructive"
-                >
-                  Abort Deployment
-                </Button>
-              </div>
+              <Button disabled variant="secondary">
+                {project.status === 'DEPLOYING' ? 'Deploying...' : 
+                 project.status === 'BUILDING' ? 'Building...' : 
+                 'Cloning...'}
+              </Button>
             ) : null}
           </div>
         </div>
@@ -398,9 +390,20 @@ export default function ProjectDetail() {
               {/* Live Deployment Logs */}
               {activeDeploymentId && liveLogs && (
                 <div className="bg-white shadow rounded-lg p-6">
-                  <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                    🔴 Live Deployment Logs
-                  </h2>
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-semibold text-gray-900">
+                      🔴 Live Deployment Logs
+                    </h2>
+                    {(project.status === 'DEPLOYING' || project.status === 'BUILDING' || project.status === 'CLONING') && (
+                      <Button
+                        onClick={handleAbortDeployment}
+                        variant="destructive"
+                        size="sm"
+                      >
+                        Abort Deployment
+                      </Button>
+                    )}
+                  </div>
                   <div className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-y-auto max-h-96 font-mono text-sm">
                     <pre className="whitespace-pre-wrap break-words">{liveLogs}</pre>
                   </div>
@@ -440,7 +443,7 @@ export default function ProjectDetail() {
                           <div className="flex items-center space-x-1">
                             <GitCommit className="h-3 w-3 text-gray-500" />
                             <code className="text-sm bg-gray-100 px-2 py-1 rounded">
-                              {deployment.commitSha.substring(0, 8)}
+                              {deployment.commitSha ? deployment.commitSha.substring(0, 8) : 'N/A'}
                             </code>
                           </div>
                           <div className="flex items-center space-x-1">
@@ -458,6 +461,15 @@ export default function ProjectDetail() {
                             </span>
                           </div>
                         </div>
+                        {['PENDING', 'BUILDING', 'PUSHING', 'PROVISIONING', 'DEPLOYING'].includes(deployment.status) && (
+                          <Button
+                            onClick={handleAbortDeployment}
+                            variant="destructive"
+                            size="sm"
+                          >
+                            Abort
+                          </Button>
+                        )}
                       </div>
                       {deployment.logs && (
                         <div className="mt-3">
