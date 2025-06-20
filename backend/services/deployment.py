@@ -583,7 +583,18 @@ phases:
         next_token: Optional[str] = None
         log_stream_found = False
         
+        # Add timeout protection
+        start_time = time.time()
+        MAX_WAIT_SECONDS = 30 * 60  # 30 minutes maximum
+        
         while True:
+            # Check timeout
+            elapsed_time = time.time() - start_time
+            if elapsed_time > MAX_WAIT_SECONDS:
+                error_msg = f"CodeBuild timeout after {MAX_WAIT_SECONDS // 60} minutes"
+                if deployment_id:
+                    await self.log_to_database(deployment_id, f"❌ {error_msg}")
+                raise TimeoutError(error_msg)
             result = self.codebuild.batch_get_builds(ids=[build_id])
             build = result["builds"][0]
             status = build["buildStatus"]

@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+import asyncio
+import concurrent.futures
 
 from core.config import settings
 from app.routers import projects, auth, deployments, environment_variables, github, debug, aws, webhook, teams
@@ -15,13 +17,24 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up...")
+    
+    # Configure increased thread pool for background tasks
+    loop = asyncio.get_event_loop()
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
+    loop.set_default_executor(executor)
+    logger.info(f"Thread pool configured with 20 max workers")
+    
     # Initialize database connection
     from core.database import prisma
     await prisma.connect()
+    
     yield
+    
     # Shutdown
     logger.info("Shutting down...")
     await prisma.disconnect()
+    executor.shutdown(wait=True)
+    logger.info("Thread pool shut down")
 
 
 app = FastAPI(
