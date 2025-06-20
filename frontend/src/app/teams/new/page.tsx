@@ -11,7 +11,6 @@ import { apiClient } from '@/lib/api'
 import { useAuth } from '@/lib/auth-client'
 import { Team } from '@/types'
 import { Users, ArrowLeft } from 'lucide-react'
-import Navbar from '@/components/Navbar'
 
 export default function NewTeamPage() {
   const { isAuthenticated, isLoading } = useAuth()
@@ -70,10 +69,8 @@ export default function NewTeamPage() {
   }
 
   return (
-    <>
-      <Navbar />
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <Button
             variant="ghost"
@@ -170,8 +167,7 @@ export default function NewTeamPage() {
             <li>• Create projects under this team</li>
           </ul>
         </div>
-        </div>
       </div>
-    </>
+    </div>
   )
 }
