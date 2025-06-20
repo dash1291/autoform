@@ -16,7 +16,7 @@ export default function Dashboard() {
   const [teams, setTeams] = useState<Team[]>([])
   const [loading, setLoading] = useState(true)
   const [teamsLoading, setTeamsLoading] = useState(true)
-  const [selectedTeam, setSelectedTeam] = useState<string>('personal') // 'personal' or team ID
+  const [selectedTeam, setSelectedTeam] = useState<string>('') // team ID
 
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
@@ -27,6 +27,13 @@ export default function Dashboard() {
       setTeamsLoading(false)
     }
   }, [isAuthenticated, isLoading])
+
+  // Set first team as selected when teams load
+  useEffect(() => {
+    if (teams.length > 0 && !selectedTeam) {
+      setSelectedTeam(teams[0].id)
+    }
+  }, [teams, selectedTeam])
 
   const fetchProjects = async () => {
     try {
@@ -70,82 +77,103 @@ export default function Dashboard() {
   }
 
   // Filter projects based on selected team
-  const filteredProjects = selectedTeam === 'personal' 
-    ? projects.filter(p => !p.teamId)
-    : projects.filter(p => p.teamId === selectedTeam)
+  const filteredProjects = selectedTeam 
+    ? projects.filter(p => p.teamId === selectedTeam)
+    : []
 
-  const selectedTeamData = selectedTeam === 'personal' 
-    ? null 
-    : teams.find(t => t.id === selectedTeam)
+  const selectedTeamData = teams.find(t => t.id === selectedTeam)
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Card>
-          <CardHeader>
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Projects</h2>
-            <div className="flex justify-between items-center">
-              <div className="flex items-center space-x-4">
+        {teams.length === 0 && !teamsLoading ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Welcome to Autoform!</CardTitle>
+              <CardDescription>
+                Get started by creating your first team. Teams help you organize projects and manage AWS resources.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8">
+                <div className="text-gray-400 mb-4">
+                  <Users className="mx-auto h-12 w-12" />
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Create your first team</h3>
+                <p className="text-gray-600 mb-6">
+                  Teams allow you to manage projects, configure AWS credentials, and collaborate with others.
+                </p>
+                <CreateTeamButton onTeamCreated={fetchTeams} />
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-medium text-gray-900 mb-4">Projects</h2>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center space-x-4">
+                  {/* Team Switcher */}
+                  {teams.length > 0 && (
+                    <div className="flex items-center space-x-2">
+                      <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+                        <SelectTrigger className="w-48">
+                          <SelectValue placeholder="Select a team" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {teams.map((team) => (
+                            <SelectItem key={team.id} value={team.id}>
+                              <div className="flex items-center space-x-2">
+                                <Users className="h-4 w-4" />
+                                <span>{team.name}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
                 
-                
-                {/* Team Switcher */}
                 <div className="flex items-center space-x-2">
-                  <Select value={selectedTeam} onValueChange={setSelectedTeam}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="personal">
-                        <div className="flex items-center space-x-2">
-                          <div className="h-4 w-4 rounded-full bg-gray-300"></div>
-                          <span>Personal Projects</span>
-                        </div>
-                      </SelectItem>
-                      {teams.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
-                          <div className="flex items-center space-x-2">
-                            <Users className="h-4 w-4" />
-                            <span>{team.name}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {/* Team Management Button */}
+                  {selectedTeamData && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.location.href = `/teams/${selectedTeam}`}
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Manage Team
+                    </Button>
+                  )}
+                  
+                  {/* Create Team Button */}
+                  <CreateTeamButton onTeamCreated={fetchTeams} />
+                  
+                  {/* New Project Button */}
+                  {selectedTeam && (
+                    <Link href={`/projects/new?team=${selectedTeam}`}>
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        New Project
+                      </Button>
+                    </Link>
+                  )}
                 </div>
               </div>
-              
-              <div className="flex items-center space-x-2">
-                {/* Team Management Button */}
-                {selectedTeam !== 'personal' && selectedTeamData && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.location.href = `/teams/${selectedTeam}`}
-                  >
-                    <Settings className="h-4 w-4 mr-2" />
-                    Manage Team
-                  </Button>
-                )}
-                
-                {/* Create Team Button */}
-                {selectedTeam === 'personal' && (
-                  <CreateTeamButton onTeamCreated={fetchTeams} />
-                )}
-                
-                {/* New Project Button */}
-                <Link href={`/projects/new${selectedTeam !== 'personal' ? `?team=${selectedTeam}` : ''}`}>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Project
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ProjectsList projects={filteredProjects} loading={loading} />
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent>
+              {selectedTeam ? (
+                <ProjectsList projects={filteredProjects} loading={loading} />
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-600">Select a team to view projects</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )
@@ -170,10 +198,7 @@ function ProjectsList({ projects, loading }: { projects: Project[], loading: boo
           </svg>
         </div>
         <h3 className="text-lg font-medium text-gray-900 mb-2">No projects yet</h3>
-        <p className="text-gray-600 mb-4">Get started by creating your first project.</p>
-        <Link href="/projects/new">
-          <Button>Create Project</Button>
-        </Link>
+        <p className="text-gray-600 mb-4">Get started by creating your first project for this team.</p>
       </div>
     )
   }
@@ -300,7 +325,7 @@ function CreateTeamButton({ onTeamCreated }: { onTeamCreated: () => void }) {
   }
 
   return (
-    <Button onClick={() => setShowForm(true)}>
+    <Button onClick={() => window.location.href = '/teams/new'}>
       <Plus className="h-4 w-4 mr-2" />
       New Team
     </Button>

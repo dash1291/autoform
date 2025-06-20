@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Team, TeamMember, TeamMemberRole } from '@/types'
 import { apiClient } from '@/lib/api'
 import { useAuth } from '@/lib/auth-client'
@@ -16,7 +16,9 @@ export default function TeamDetail() {
   const { isAuthenticated, isLoading: authLoading } = useAuth()
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const teamId = params.id as string
+  const initialTab = searchParams.get('tab') || 'members'
 
   const [team, setTeam] = useState<Team | null>(null)
   const [members, setMembers] = useState<TeamMember[]>([])
@@ -176,10 +178,11 @@ export default function TeamDetail() {
           </div>
         </div>
 
-        <Tabs defaultValue="members" className="space-y-8">
+        <Tabs defaultValue={initialTab} className="space-y-8">
           <TabsList>
             <TabsTrigger value="members">Members</TabsTrigger>
-            {isOwner && <TabsTrigger value="settings">Settings</TabsTrigger>}
+            <TabsTrigger value="settings">AWS Settings</TabsTrigger>
+            {isOwner && <TabsTrigger value="team-settings">Team Settings</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="members">
@@ -209,8 +212,16 @@ export default function TeamDetail() {
           </TabsContent>
 
 
+          <TabsContent value="settings">
+            <Card>
+              <CardContent className="p-8">
+                <TeamAwsConfiguration teamId={teamId} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {isOwner && (
-            <TabsContent value="settings">
+            <TabsContent value="team-settings">
               <Card>
                 <CardHeader>
                   <CardTitle>Team Settings</CardTitle>
@@ -398,10 +409,47 @@ function AddMemberButton({ onAddMember }: { onAddMember: (githubUsername: string
 }
 
 function TeamSettings({ team }: { team: Team }) {
+  const [editName, setEditName] = useState(team.name)
+  const [editDescription, setEditDescription] = useState(team.description || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSave = async () => {
+    if (!editName.trim()) {
+      setError('Team name is required')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+    try {
+      await apiClient.updateTeam(team.id, {
+        name: editName.trim(),
+        description: editDescription.trim() || undefined
+      })
+      // Refresh the page to show updated data
+      window.location.reload()
+    } catch (err: any) {
+      setError(err.message || 'Failed to update team')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+
   return (
     <div className="space-y-8">
       <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Team Information</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-medium text-gray-900">Team Information</h3>
+        </div>
+        
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+            <p className="text-red-800 text-sm">{error}</p>
+          </div>
+        )}
+        
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -409,9 +457,10 @@ function TeamSettings({ team }: { team: Team }) {
             </label>
             <input
               type="text"
-              value={team.name}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
-              disabled
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter team name"
             />
           </div>
           <div>
@@ -419,18 +468,26 @@ function TeamSettings({ team }: { team: Team }) {
               Description
             </label>
             <textarea
-              value={team.description || ''}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
               rows={3}
-              disabled
+              placeholder="Enter team description (optional)"
             />
+          </div>
+          
+          <div>
+            <Button
+              onClick={handleSave}
+              disabled={saving || !editName.trim()}
+              size="sm"
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
           </div>
         </div>
       </div>
 
-      <div className="border-t pt-6">
-        <TeamAwsConfiguration teamId={team.id} />
-      </div>
 
       <div className="border-t pt-6">
         <h3 className="text-lg font-medium text-red-900 mb-4">Danger Zone</h3>

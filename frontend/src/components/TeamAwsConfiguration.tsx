@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { apiClient } from '@/lib/api'
-import { Key, Shield, TestTube, Trash2, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react'
+import { Key, Shield, TestTube, Trash2, AlertCircle, CheckCircle, BookOpen, ExternalLink } from 'lucide-react'
 
 interface TeamAwsConfig {
   awsAccessKeyId: string // This will be masked from the API
@@ -42,8 +42,6 @@ const AWS_REGIONS = [
 export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationProps) {
   const [config, setConfig] = useState<TeamAwsConfig | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [showSecrets, setShowSecrets] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -61,6 +59,17 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
   useEffect(() => {
     fetchAwsConfig()
   }, [teamId])
+
+  // Initialize form data when config is loaded
+  useEffect(() => {
+    if (config) {
+      setFormData({
+        awsAccessKeyId: config.awsAccessKeyId, // This will be masked from API
+        awsSecretAccessKey: '••••••••••••••••••••', // Show masked placeholder
+        awsRegion: config.awsRegion
+      })
+    }
+  }, [config])
 
   useEffect(() => {
     if (success) {
@@ -93,10 +102,21 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
     setSuccess('')
 
     try {
-      await apiClient.createTeamAwsConfig(teamId, formData)
+      // Prepare data for submission
+      const submitData = {
+        awsAccessKeyId: formData.awsAccessKeyId,
+        awsSecretAccessKey: formData.awsSecretAccessKey,
+        awsRegion: formData.awsRegion
+      }
+
+      // If updating existing config and secret key wasn't changed, don't send masked value
+      if (config && formData.awsSecretAccessKey === '••••••••••••••••••••') {
+        // Only update access key and region, keep existing secret
+        submitData.awsSecretAccessKey = '' // Backend will handle keeping existing value
+      }
+
+      await apiClient.createTeamAwsConfig(teamId, submitData)
       setSuccess('AWS credentials saved successfully')
-      setShowForm(false)
-      setFormData({ awsAccessKeyId: '', awsSecretAccessKey: '', awsRegion: 'us-east-1' })
       await fetchAwsConfig()
     } catch (error: any) {
       setError(error.message || 'Failed to save AWS credentials')
@@ -117,7 +137,9 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
       // Handle different types of errors based on message content
       const errorMessage = error.message || 'Failed to test AWS credentials'
       
-      if (errorMessage.includes('lack sufficient permissions') || 
+      if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        setError('Please save your credentials before testing the connection')
+      } else if (errorMessage.includes('lack sufficient permissions') || 
           errorMessage.includes('not authorized to perform') ||
           errorMessage.includes('permission to list S3 buckets')) {
         setTestResult({
@@ -169,29 +191,6 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium text-gray-900 flex items-center">
-            <Key className="h-5 w-5 mr-2" />
-            AWS Configuration
-          </h3>
-          <p className="text-sm text-gray-600 mt-1">
-            Configure team AWS credentials for deployments and infrastructure management
-          </p>
-        </div>
-        {config && !showForm && (
-          <div className="flex space-x-2">
-            <Button variant="outline" onClick={handleTest} disabled={isTesting}>
-              <TestTube className="h-4 w-4 mr-2" />
-              {isTesting ? 'Testing...' : 'Test Connection'}
-            </Button>
-            <Button variant="outline" onClick={() => setShowForm(true)}>
-              Update Credentials
-            </Button>
-          </div>
-        )}
-      </div>
-
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -206,139 +205,48 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
         </Alert>
       )}
 
-      {config && !showForm ? (
+      {config ? (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span className="flex items-center">
-                <Shield className="h-5 w-5 mr-2 text-green-600" />
-                AWS Credentials Configured
-              </span>
-              <Badge variant="outline" className="bg-green-50 text-green-700">
-                Active
-              </Badge>
-            </CardTitle>
-            <CardDescription>
-              Your team is using custom AWS credentials for deployments
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex items-center justify-between">
               <div>
-                <Label className="text-sm font-medium text-gray-700">Access Key ID</Label>
-                <div className="flex items-center space-x-2 mt-1">
-                  <Input
-                    type={showSecrets ? 'text' : 'password'}
-                    value={config.awsAccessKeyId}
-                    readOnly
-                    className="bg-gray-50"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowSecrets(!showSecrets)}
-                  >
-                    {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
+                <CardTitle className="flex items-center">
+                  <Shield className="h-5 w-5 mr-2 text-green-600" />
+                  AWS Credentials
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Your team AWS credentials for deployments and infrastructure management
+                </CardDescription>
               </div>
-              <div>
-                <Label className="text-sm font-medium text-gray-700">Secret Access Key</Label>
-                <div className="flex items-center space-x-2 mt-1">
-                  <Input
-                    type="password"
-                    value={config.awsSecretAccessKey}
-                    readOnly
-                    className="bg-gray-50"
-                  />
-                </div>
-              </div>
-              <div>
-                <Label className="text-sm font-medium text-gray-700">Region</Label>
-                <Input
-                  value={getRegionLabel(config.awsRegion)}
-                  readOnly
-                  className="bg-gray-50 mt-1"
-                />
-              </div>
-              <div>
-                <Label className="text-sm font-medium text-gray-700">Last Updated</Label>
-                <Input
-                  value={new Date(config.updatedAt).toLocaleDateString()}
-                  readOnly
-                  className="bg-gray-50 mt-1"
-                />
+              <div className="flex items-center space-x-2">
+                <Badge variant="outline" className="bg-green-50 text-green-700">
+                  Active
+                </Badge>
+                <Button variant="outline" size="sm" asChild>
+                  <a href="/docs" target="_blank" rel="noopener noreferrer">
+                    <BookOpen className="h-4 w-4 mr-2" />
+                    Setup Guide
+                    <ExternalLink className="h-3 w-3 ml-1" />
+                  </a>
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleTest} disabled={isTesting}>
+                  <TestTube className="h-4 w-4 mr-2" />
+                  {isTesting ? 'Testing...' : 'Test Connection'}
+                </Button>
               </div>
             </div>
-
-            {testResult && (
-              <div className={`mt-4 p-4 rounded-lg border ${
-                testResult.permissionIssue 
-                  ? 'bg-yellow-50 border-yellow-200' 
-                  : 'bg-green-50 border-green-200'
-              }`}>
-                <h4 className={`text-sm font-medium mb-2 ${
-                  testResult.permissionIssue 
-                    ? 'text-yellow-900' 
-                    : 'text-green-900'
-                }`}>
-                  {testResult.permissionIssue 
-                    ? '⚠️ Credentials Valid, Limited Permissions' 
-                    : '✅ Connection Test Successful'
-                  }
-                </h4>
-                <div className={`text-sm space-y-1 ${
-                  testResult.permissionIssue 
-                    ? 'text-yellow-700' 
-                    : 'text-green-700'
-                }`}>
-                  {testResult.permissionIssue ? (
-                    <p>{testResult.message}</p>
-                  ) : (
-                    <>
-                      <p>Account ID: {testResult.accountId}</p>
-                      <p>Region: {testResult.region}</p>
-                      <p>S3 Buckets Found: {testResult.bucketCount}</p>
-                      {testResult.arn && <p>User/Role: {testResult.arn}</p>}
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-end pt-4">
-              <Button
-                variant="outline"
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="text-red-600 border-red-300 hover:bg-red-50"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                {isDeleting ? 'Deleting...' : 'Delete Configuration'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : showForm || !config ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {config ? 'Update AWS Credentials' : 'Configure AWS Credentials'}
-            </CardTitle>
-            <CardDescription>
-              Enter your AWS credentials to enable team deployments. These will be encrypted and stored securely.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <Label htmlFor="accessKeyId">AWS Access Key ID</Label>
+                <Label>AWS Access Key ID</Label>
                 <Input
-                  id="accessKeyId"
                   type="text"
                   value={formData.awsAccessKeyId}
                   onChange={(e) => setFormData({ ...formData, awsAccessKeyId: e.target.value })}
-                  placeholder="AKIA..."
+                  placeholder={config ? "AKIA••••••••••••••••" : "AKIA..."}
+                  autoComplete="new-password"
+                  data-lpignore="true"
                   required
                   className="mt-1"
                 />
@@ -348,13 +256,14 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
               </div>
 
               <div>
-                <Label htmlFor="secretAccessKey">AWS Secret Access Key</Label>
+                <Label>AWS Secret Access Key</Label>
                 <Input
-                  id="secretAccessKey"
                   type="password"
                   value={formData.awsSecretAccessKey}
                   onChange={(e) => setFormData({ ...formData, awsSecretAccessKey: e.target.value })}
-                  placeholder="Enter your secret access key"
+                  placeholder={config ? "••••••••••••••••••••••••••••••••••••••••" : "Enter your secret access key"}
+                  autoComplete="new-password"
+                  data-lpignore="true"
                   required
                   className="mt-1"
                 />
@@ -364,7 +273,143 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
               </div>
 
               <div>
-                <Label htmlFor="region">AWS Region</Label>
+                <Label>AWS Region</Label>
+                <Select
+                  value={formData.awsRegion}
+                  onValueChange={(value) => setFormData({ ...formData, awsRegion: value })}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select a region" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AWS_REGIONS.map((region) => (
+                      <SelectItem key={region.value} value={region.value}>
+                        {region.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Primary AWS region for deployments
+                </p>
+              </div>
+
+              {testResult && (
+                <div className={`mt-4 p-4 rounded-lg border ${
+                  testResult.permissionIssue 
+                    ? 'bg-yellow-50 border-yellow-200' 
+                    : 'bg-green-50 border-green-200'
+                }`}>
+                  <h4 className={`text-sm font-medium mb-2 ${
+                    testResult.permissionIssue 
+                      ? 'text-yellow-900' 
+                      : 'text-green-900'
+                  }`}>
+                    {testResult.permissionIssue 
+                      ? '⚠️ Credentials Valid, Limited Permissions' 
+                      : '✅ Connection Test Successful'
+                    }
+                  </h4>
+                  <div className={`text-sm space-y-1 ${
+                    testResult.permissionIssue 
+                      ? 'text-yellow-700' 
+                      : 'text-green-700'
+                  }`}>
+                    {testResult.permissionIssue ? (
+                      <p>{testResult.message}</p>
+                    ) : (
+                      <>
+                        <p>Account ID: {testResult.accountId}</p>
+                        <p>Region: {testResult.region}</p>
+                        <p>S3 Buckets Found: {testResult.bucketCount}</p>
+                        {testResult.arn && <p>User/Role: {testResult.arn}</p>}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-between pt-4">
+                <Button
+                  type="submit"
+                  disabled={isSubmitting || !formData.awsAccessKeyId || (!formData.awsSecretAccessKey && !config)}
+                >
+                  {isSubmitting ? 'Saving...' : 'Save Credentials'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="text-red-600 border-red-300 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {isDeleting ? 'Deleting...' : 'Delete Configuration'}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center">
+                  <Key className="h-5 w-5 mr-2" />
+                  Configure AWS Credentials
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Enter your AWS credentials to enable team deployments. These will be encrypted and stored securely.
+                </CardDescription>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <a href="/docs" target="_blank" rel="noopener noreferrer">
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  Setup Guide
+                  <ExternalLink className="h-3 w-3 ml-1" />
+                </a>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <Label>AWS Access Key ID</Label>
+                <Input
+                  type="text"
+                  value={formData.awsAccessKeyId}
+                  onChange={(e) => setFormData({ ...formData, awsAccessKeyId: e.target.value })}
+                  placeholder={config ? "AKIA••••••••••••••••" : "AKIA..."}
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  required
+                  className="mt-1"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Your AWS Access Key ID (starts with AKIA)
+                </p>
+              </div>
+
+              <div>
+                <Label>AWS Secret Access Key</Label>
+                <Input
+                  type="password"
+                  value={formData.awsSecretAccessKey}
+                  onChange={(e) => setFormData({ ...formData, awsSecretAccessKey: e.target.value })}
+                  placeholder={config ? "••••••••••••••••••••••••••••••••••••••••" : "Enter your secret access key"}
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  required
+                  className="mt-1"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Your AWS Secret Access Key (will be encrypted)
+                </p>
+              </div>
+
+              <div>
+                <Label>AWS Region</Label>
                 <Select
                   value={formData.awsRegion}
                   onValueChange={(value) => setFormData({ ...formData, awsRegion: value })}
@@ -388,40 +433,12 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
               <div className="flex space-x-2 pt-4">
                 <Button
                   type="submit"
-                  disabled={isSubmitting || !formData.awsAccessKeyId || !formData.awsSecretAccessKey}
+                  disabled={isSubmitting || !formData.awsAccessKeyId || (!formData.awsSecretAccessKey && !config)}
                 >
                   {isSubmitting ? 'Saving...' : config ? 'Update Credentials' : 'Save Credentials'}
                 </Button>
-                {(showForm && config) && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setShowForm(false)
-                      setFormData({ awsAccessKeyId: '', awsSecretAccessKey: '', awsRegion: 'us-east-1' })
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                )}
               </div>
             </form>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {!config && !showForm && (
-        <Card>
-          <CardContent className="text-center py-8">
-            <Key className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No AWS Configuration</h3>
-            <p className="text-gray-600 mb-4">
-              Configure AWS credentials to enable team deployments with your own AWS account.
-            </p>
-            <Button onClick={() => setShowForm(true)}>
-              <Key className="h-4 w-4 mr-2" />
-              Configure AWS Credentials
-            </Button>
           </CardContent>
         </Card>
       )}
