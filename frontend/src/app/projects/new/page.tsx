@@ -20,7 +20,7 @@ export default function NewProject() {
     gitRepoUrl: '',
     branch: 'main',
     subdirectory: '',
-    teamId: '', // empty string means personal project
+    teamId: '', // team is required
     cpu: 256,
     memory: 512,
     diskSize: 21,
@@ -38,7 +38,7 @@ export default function NewProject() {
       
       // Set team from query parameter if provided
       const teamParam = searchParams.get('team')
-      if (teamParam && teamParam !== 'personal') {
+      if (teamParam) {
         setFormData(prev => ({ ...prev, teamId: teamParam }))
       }
     }
@@ -120,7 +120,7 @@ export default function NewProject() {
 
       await apiClient.createProject({
         ...formData,
-        teamId: formData.teamId || undefined // Convert empty string to undefined
+        teamId: formData.teamId
       })
       router.push('/dashboard')
     } catch (err: any) {
@@ -179,28 +179,45 @@ export default function NewProject() {
 
             <div>
               <label htmlFor="team" className="block text-sm font-medium text-gray-700 mb-2">
-                Team (Optional)
+                Team <span className="text-red-500">*</span>
               </label>
-              <select
-                id="team"
-                value={formData.teamId}
-                onChange={(e) => setFormData({ ...formData, teamId: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-                disabled={teamsLoading}
-              >
-                <option value="">Personal Project</option>
-                {teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
+              {teams.length === 0 && !teamsLoading ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-yellow-800 text-sm mb-2">
+                    You need to create a team before creating a project.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push('/dashboard')}
+                  >
+                    Go to Dashboard
+                  </Button>
+                </div>
+              ) : (
+                <select
+                  id="team"
+                  value={formData.teamId}
+                  onChange={(e) => setFormData({ ...formData, teamId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+                  disabled={teamsLoading}
+                  required
+                >
+                  <option value="">Select a team</option>
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              )}
               <p className="text-sm text-gray-500 mt-1">
                 {teamsLoading 
                   ? 'Loading teams...' 
                   : teams.length > 0 
-                    ? 'Choose a team to share this project with team members, or leave as personal project'
-                    : 'Create a team to collaborate with others'
+                    ? 'Projects must belong to a team for AWS credential and resource management'
+                    : 'Create a team first to organize your projects and AWS resources'
                 }
               </p>
             </div>
