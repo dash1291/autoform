@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAuth } from '@/lib/auth-client'
 import { signIn } from 'next-auth/react'
 import { Github, Zap, Users, Cloud } from 'lucide-react'
+import Navbar from '@/components/Navbar'
 
 export default function Home() {
   const { isAuthenticated, isLoading } = useAuth()
@@ -28,7 +29,9 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br">
+    <>
+      <Navbar />
+      <main className="min-h-screen bg-gradient-to-br">
       {/* Hero Section */}
       <div className="container w-full md:w-3/4 mx-auto px-4 py-16">
         <div className="text-center mb-16">
@@ -119,6 +122,7 @@ export default function Home() {
           </Button>
         </div>
       </div>
-    </main>
+      </main>
+    </>
   )
 }

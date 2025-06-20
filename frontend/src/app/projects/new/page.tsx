@@ -154,9 +154,7 @@ export default function NewProject() {
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Create New Project</h1>
-          <p className="text-gray-600">Deploy your application to AWS ECS</p>
         </div>
-
         <div className="bg-white shadow rounded-lg p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
