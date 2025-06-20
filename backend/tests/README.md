@@ -9,6 +9,8 @@ tests/
 ├── infrastructure/          # Infrastructure service tests
 │   ├── test_working_services.py    # Comprehensive infrastructure service tests
 │   └── test_simple_vpc.py          # Simple VPC service tests
+├── test_webhook_credentials.py     # Webhook auto-deployment credential tests
+├── run_webhook_tests.py           # Script to run webhook tests
 ├── conftest.py             # Shared pytest fixtures
 └── test_utils.py          # Test utility functions
 ```
@@ -39,6 +41,12 @@ python -m pytest tests/infrastructure/test_simple_vpc.py -v
 
 # Run specific test
 python -m pytest tests/infrastructure/test_working_services.py::TestWorkingVPCService::test_vpc_service_initialization -v
+
+# Run webhook credential tests
+python -m pytest tests/test_webhook_credentials.py -v
+
+# Or use the dedicated script
+python tests/run_webhook_tests.py
 ```
 
 ### Using LocalStack (Optional - Requires Docker)
@@ -86,6 +94,16 @@ python tests/test_utils.py --localstack
 - ✅ VPC-to-ECS resource sharing
 - ✅ IAM-to-ECS role assignment
 - ✅ Cross-service resource validation
+
+### Webhook Credential Tests (`test_webhook_credentials.py`)
+**Auto-Deployment Credential Selection:**
+- ✅ Team projects use team AWS credentials
+- ✅ Personal projects use user AWS credentials  
+- ✅ Credential decryption and validation
+- ✅ Missing credentials handled gracefully
+- ✅ Invalid credentials handled gracefully
+- ✅ Project not found handled gracefully
+- ✅ DeploymentService receives correct configuration
 
 ## Writing New Tests
 
@@ -142,4 +160,8 @@ These tests should be run in CI/CD pipelines before deployment:
   run: |
     cd backend
     python -m pytest tests/infrastructure/ --tb=short
+- name: Run Webhook Credential Tests
+  run: |
+    cd backend
+    python -m pytest tests/test_webhook_credentials.py --tb=short
 ```

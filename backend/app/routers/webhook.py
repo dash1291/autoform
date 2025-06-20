@@ -142,8 +142,11 @@ async def trigger_auto_deployment(project_id: str, webhook_payload: Dict[str, An
         
         logger.info(f"Starting auto-deployment for project {project_id}, commit {commit_sha}")
         
-        # Get project name for image tag
-        project = await prisma.project.find_unique(where={"id": project_id})
+        # Get project with team info for credential selection
+        project = await prisma.project.find_unique(
+            where={"id": project_id},
+            include={"team": True}
+        )
         if not project:
             logger.error(f"Project {project_id} not found")
             return
@@ -159,8 +162,65 @@ async def trigger_auto_deployment(project_id: str, webhook_payload: Dict[str, An
             }
         )
         
-        # Initialize deployment service
-        deployment_service = DeploymentService()
+        # Get appropriate AWS credentials based on project type
+        aws_credentials = None
+        aws_region = None
+        
+        if project.teamId:
+            # Team project - use team credentials
+            team_aws_config = await prisma.teamawsconfig.find_first(
+                where={"teamId": project.teamId, "isActive": True}
+            )
+            
+            if team_aws_config:
+                # Decrypt team credentials
+                from services.encryption_service import EncryptionService
+                encryption_service = EncryptionService()
+                access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
+                secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
+                
+                if access_key and secret_key:
+                    aws_credentials = {
+                        "access_key": access_key,
+                        "secret_key": secret_key
+                    }
+                    aws_region = team_aws_config.awsRegion
+                    logger.info(f"Using team AWS credentials for team project {project_id}")
+                else:
+                    logger.error(f"Team project {project_id} has invalid team AWS credentials")
+                    return
+            else:
+                logger.error(f"Team project {project_id} has no team AWS credentials configured")
+                return
+        else:
+            # Personal project - use personal credentials
+            user_aws_config = await prisma.userawsconfig.find_first(
+                where={"userId": project.userId, "isActive": True}
+            )
+            
+            if user_aws_config:
+                # Decrypt personal credentials
+                from services.encryption_service import EncryptionService
+                encryption_service = EncryptionService()
+                access_key = encryption_service.decrypt(user_aws_config.awsAccessKeyId)
+                secret_key = encryption_service.decrypt(user_aws_config.awsSecretAccessKey)
+                
+                if access_key and secret_key:
+                    aws_credentials = {
+                        "access_key": access_key,
+                        "secret_key": secret_key
+                    }
+                    aws_region = user_aws_config.awsRegion
+                    logger.info(f"Using personal AWS credentials for personal project {project_id}")
+                else:
+                    logger.error(f"Personal project {project_id} has invalid personal AWS credentials")
+                    return
+            else:
+                logger.error(f"Personal project {project_id} has no personal AWS credentials configured")
+                return
+        
+        # Initialize deployment service with proper credentials
+        deployment_service = DeploymentService(region=aws_region, aws_credentials=aws_credentials)
         
         # Create deployment configuration
         config = DeploymentConfig(
