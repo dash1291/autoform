@@ -442,16 +442,6 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
           </CardContent>
         </Card>
       )}
-
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h4 className="text-sm font-medium text-blue-900 mb-2">Security Information</h4>
-        <ul className="text-sm text-blue-700 space-y-1">
-          <li>• AWS credentials are encrypted using AES-256 encryption before storage</li>
-          <li>• Only team owners can view and manage AWS credentials</li>
-          <li>• Credentials are used exclusively for team project deployments</li>
-          <li>• You can test your credentials at any time to verify they're working</li>
-        </ul>
-      </div>
     </div>
   )
 }

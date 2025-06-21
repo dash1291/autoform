@@ -138,39 +138,9 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
         <CardTitle>Network Configuration</CardTitle>
         <CardDescription>
           Configure existing AWS network resources to use instead of creating new ones. Leave fields empty to create new resources automatically.
-          <Button
-            type="button"
-            onClick={() => setShowTips(!showTips)}
-            variant="ghost"
-            size="sm"
-            className="flex items-center space-x-1 text-blue-600 hover:text-blue-700 text-sm font-medium h-auto p-0"
-          >
-            <svg
-              className={`w-4 h-4 transition-transform ${showTips ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-            <span>Configuration Tips</span>
-          </Button>
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {showTips && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-            <h4 className="font-medium text-blue-900 mb-2">💡 Configuration Tips</h4>
-            <ul className="text-sm text-blue-800 space-y-1">
-              <li>• VPC and subnets must be in the same AWS region as your project</li>
-              <li>• Subnets should be in different availability zones for high availability</li>
-              <li>• ECS cluster must exist and be in ACTIVE status</li>
-              <li>• These settings only apply to new deployments</li>
-              <li>• Leave fields empty to let the system create resources automatically</li>
-            </ul>
-          </div>
-        )}
-        
         {isReadOnly && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
             <div className="flex items-start">

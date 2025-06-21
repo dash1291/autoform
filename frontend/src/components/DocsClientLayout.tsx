@@ -14,6 +14,7 @@ const docSections = [
     items: [
       { title: 'Overview', slug: 'overview', href: '/docs' },
       { title: 'AWS Setup', slug: 'aws-setup', href: '/docs/aws-setup' },
+      { title: 'Cost Breakdown', slug: 'cost-breakdown', href: '/docs/cost-breakdown' },
     ]
   }
 ]

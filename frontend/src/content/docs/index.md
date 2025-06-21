@@ -29,4 +29,10 @@ The most important step is setting up your AWS credentials. Once configured, you
 
 [→ **AWS Setup Guide**](/docs/aws-setup) - Start here to configure your AWS credentials
 
+## Understanding Costs
+
+Autoform creates AWS infrastructure for your deployments. Understanding the costs helps you plan your budget and optimize your applications.
+
+[→ **Cost Breakdown**](/docs/cost-breakdown) - See detailed AWS pricing for deployed resources
+
 ---

@@ -429,14 +429,6 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
         </div>
       </form>
 
-      <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-        <h4 className="font-medium text-blue-900 mb-2">ℹ️ Configuration Updates</h4>
-        <div className="text-sm text-blue-800 space-y-1">
-          <p><strong>Health check path & port:</strong> Updates take effect immediately on deployed services.</p>
-          <p><strong>Repository changes:</strong> Require a new deployment to take effect.</p>
-        </div>
-      </div>
-
       {/* Auto-deploy section */}
       <div className="mt-8 border-t pt-8">
         <div className="mb-4">
@@ -600,17 +592,6 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
             )}
           </div>
         )}
-
-        {/* Info box */}
-        <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <h5 className="font-medium text-gray-900 mb-2">How it works</h5>
-          <ul className="text-sm text-gray-600 space-y-1">
-            <li>• Webhook listens for push events to the <strong>{formData.branch}</strong> branch</li>
-            <li>• Only commits to this specific branch trigger deployments</li>
-            <li>• Deployments are queued if one is already in progress</li>
-            <li>• You can still manually deploy from any branch</li>
-          </ul>
-        </div>
       </div>
     </div>
   )
