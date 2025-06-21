@@ -104,7 +104,6 @@ class Project(ProjectBase):
     existing_subnet_ids: Optional[str] = Field(None, alias="existingSubnetIds")
     existing_cluster_arn: Optional[str] = Field(None, alias="existingClusterArn")
     secrets_arn: Optional[str] = Field(None, alias="secretsArn")
-    webhook_secret: Optional[str] = Field(None, alias="webhookSecret")
     webhook_configured: bool = Field(False, alias="webhookConfigured")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")

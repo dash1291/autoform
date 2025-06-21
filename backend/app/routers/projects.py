@@ -1289,17 +1289,29 @@ async def configure_webhook(
             detail="Project not found"
         )
     
-    # Generate webhook secret if not exists
-    if not project.webhookSecret:
+    # Find or create webhook for this repository
+    webhook = await prisma.webhook.find_unique(
+        where={"gitRepoUrl": project.gitRepoUrl}
+    )
+    
+    if not webhook:
         import secrets
         webhook_secret = secrets.token_urlsafe(32)
         
+        webhook = await prisma.webhook.create(
+            data={
+                "gitRepoUrl": project.gitRepoUrl,
+                "secret": webhook_secret,
+                "isActive": True
+            }
+        )
+    
+    # Associate project with webhook if not already associated
+    if not project.webhookId:
         await prisma.project.update(
             where={"id": project_id},
-            data={"webhookSecret": webhook_secret}
+            data={"webhookId": webhook.id}
         )
-    else:
-        webhook_secret = project.webhookSecret
     
     # Webhook URL
     base_url = settings.webhook_base_url or settings.backend_url
@@ -1312,11 +1324,11 @@ async def configure_webhook(
             webhook_result = await webhook_service.create_webhook(
                 git_repo_url=project.gitRepoUrl,
                 webhook_url=webhook_url,
-                webhook_secret=webhook_secret,
+                webhook_secret=webhook.secret,
                 access_token=github_access_token
             )
             
-            # Mark webhook as configured
+            # Mark project as webhook configured
             await prisma.project.update(
                 where={"id": project_id},
                 data={"webhookConfigured": True}
@@ -1324,7 +1336,7 @@ async def configure_webhook(
             
             return {
                 "webhookUrl": webhook_url,
-                "webhookSecret": webhook_secret,
+                "webhookSecret": webhook.secret,
                 "automatic": True,
                 "webhookId": webhook_result.get("id"),
                 "status": "created" if webhook_result.get("created") else "updated" if webhook_result.get("updated") else "exists"
@@ -1336,7 +1348,7 @@ async def configure_webhook(
     # Return manual instructions
     return {
         "webhookUrl": webhook_url,
-        "webhookSecret": webhook_secret,
+        "webhookSecret": webhook.secret,
         "automatic": False,
         "instructions": {
             "1": "Go to your GitHub repository settings",
@@ -1344,7 +1356,7 @@ async def configure_webhook(
             "3": "Click 'Add webhook'",
             "4": f"Set Payload URL to: {webhook_url}",
             "5": "Set Content type to: application/json",
-            "6": f"Set Secret to: {webhook_secret}",
+            "6": f"Set Secret to: {webhook.secret}",
             "7": "Select 'Just the push event'",
             "8": "Make sure 'Active' is checked",
             "9": "Click 'Add webhook'"
@@ -1364,7 +1376,8 @@ async def delete_webhook_config(
         where={
             "id": project_id,
             "userId": current_user.id
-        }
+        },
+        include={"webhook": True}
     )
     
     if not project:
@@ -1374,7 +1387,7 @@ async def delete_webhook_config(
         )
     
     # If GitHub access token provided, try to delete webhook from GitHub
-    if github_access_token and project.webhookSecret:
+    if github_access_token and project.webhook:
         try:
             base_url = settings.webhook_base_url or settings.backend_url
             webhook_url = f"{base_url}/api/webhook/github"
@@ -1388,15 +1401,31 @@ async def delete_webhook_config(
             logger.error(f"Failed to delete webhook from GitHub: {str(e)}")
             # Continue with local deletion even if GitHub deletion fails
     
-    # Remove webhook secret and disable auto-deploy
+    # Dissociate project from webhook and disable auto-deploy
     await prisma.project.update(
         where={"id": project_id},
         data={
-            "webhookSecret": None,
+            "webhookId": None,
             "autoDeployEnabled": False,
             "webhookConfigured": False
         }
     )
+    
+    # Check if any other projects are using this webhook
+    if project.webhook:
+        other_projects = await prisma.project.find_many(
+            where={
+                "webhookId": project.webhook.id,
+                "id": {"not": project_id}
+            }
+        )
+        
+        # If no other projects are using this webhook, delete it
+        if not other_projects:
+            await prisma.webhook.delete(
+                where={"id": project.webhook.id}
+            )
+            logger.info(f"Deleted unused webhook for repository {project.gitRepoUrl}")
     
     return {"message": "Webhook configuration deleted successfully"}
 

@@ -79,14 +79,33 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
         
         logger.info(f"Webhook: Push to {github_url} branch {branch}")
         
-        # Find matching projects
-        projects = await prisma.project.find_many(
-            where={
-                "gitRepoUrl": github_url,
-                "branch": branch,
-                "autoDeployEnabled": True
-            }
+        # Find webhook by repository URL
+        webhook = await prisma.webhook.find_unique(
+            where={"gitRepoUrl": github_url},
+            include={"projects": True}
         )
+        
+        if not webhook:
+            logger.info(f"No webhook configured for repository {github_url}")
+            return {"message": "No webhook configured for this repository"}
+        
+        if not webhook.isActive:
+            logger.info(f"Webhook for repository {github_url} is not active")
+            return {"message": "Webhook is not active"}
+        
+        # Verify webhook signature using shared secret
+        if not verify_github_signature(payload, signature, webhook.secret):
+            logger.warning(f"Invalid webhook signature for repository {github_url}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid webhook signature"
+            )
+        
+        # Filter projects by branch and auto-deploy settings
+        projects = [
+            project for project in webhook.projects
+            if project.branch == branch and project.autoDeployEnabled
+        ]
         
         if not projects:
             logger.info(f"No projects found with auto-deploy enabled for {github_url}:{branch}")
@@ -100,19 +119,12 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
             changed_files.update(commit.get('removed', []))
         
         logger.info(f"Changed files in push: {changed_files}")
+        logger.info(f"Found {len(projects)} projects for repo {github_url}:{branch}")
         
-        # Verify webhook signature for each project and trigger deployments
+        # Trigger deployments for matching projects
         deployed_projects = []
         
         for project in projects:
-            if not project.webhookSecret:
-                logger.warning(f"Project {project.name} has auto-deploy enabled but no webhook secret")
-                continue
-            
-            # Verify signature
-            if not verify_github_signature(payload, signature, project.webhookSecret):
-                logger.warning(f"Invalid webhook signature for project {project.name}")
-                continue
             
             # Check if project is not already deploying
             if project.status in ['DEPLOYING', 'BUILDING', 'CLONING']:
@@ -129,6 +141,7 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
             else:
                 # Check if any changed file is in the project's subdirectory
                 subdirectory_prefix = project.subdirectory.rstrip('/') + '/'
+                logger.info(f"Project {project.name}: Checking subdirectory '{project.subdirectory}' (prefix: '{subdirectory_prefix}') against files: {list(changed_files)}")
                 for file_path in changed_files:
                     if file_path.startswith(subdirectory_prefix) or file_path == project.subdirectory:
                         should_deploy = True

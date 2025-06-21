@@ -60,6 +60,16 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+model Webhook {
+  id          String    @id @default(cuid())
+  gitRepoUrl  String    @unique
+  secret      String
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  projects    Project[]
+}
+
 model Project {
   id                 String                @id @default(cuid())
   name               String
@@ -82,13 +92,13 @@ model Project {
   port               Int                   @default(3000)
   healthCheckPath    String                @default("/health")
   autoDeployEnabled  Boolean               @default(false)
-  webhookSecret      String?
-  webhookConfigured  Boolean               @default(false)
+  webhookId          String?
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
   secretsArn         String?
   deployments        Deployment[]
   environmentVars    EnvironmentVariable[]
+  webhook            Webhook?              @relation(fields: [webhookId], references: [id])
   team               Team?                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
   user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
