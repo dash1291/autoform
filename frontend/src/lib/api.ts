@@ -134,8 +134,8 @@ class ApiClient {
     })
   }
 
-  async abortDeployment(projectId: string): Promise<{ message: string }> {
-    return this.request<{ message: string }>(`/deployments/projects/${projectId}/abort`, {
+  async abortDeployment(deploymentId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/deployments/${deploymentId}/abort`, {
       method: 'POST',
     })
   }

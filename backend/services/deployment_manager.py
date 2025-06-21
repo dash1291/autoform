@@ -40,7 +40,7 @@ class DeploymentManager:
         logger.info(f"Completed deployment for project {project_id}")
     
     def abort_deployment(self, project_id: str) -> bool:
-        """Abort an active deployment"""
+        """Abort an active deployment by project ID"""
         with self._lock:
             if project_id in self._active_deployments:
                 deployment_id = self._active_deployments[project_id]
@@ -49,6 +49,27 @@ class DeploymentManager:
                 logger.info(f"Aborted deployment {deployment_id} for project {project_id}")
                 return True
             return False
+    
+    def abort_deployment_by_id(self, deployment_id: str, project_id: str) -> bool:
+        """Abort a specific deployment by deployment ID"""
+        with self._lock:
+            # Check if this deployment is the active one for the project
+            active_deployment_id = self._active_deployments.get(project_id)
+            
+            if active_deployment_id == deployment_id:
+                # This is the active deployment, mark project as aborted
+                self._aborted_deployments.add(project_id)
+                del self._active_deployments[project_id]
+            
+            # Mark the specific deployment as aborted
+            self._deployment_statuses[deployment_id] = "aborted"
+            logger.info(f"Aborted specific deployment {deployment_id} for project {project_id}")
+            return True
+    
+    def is_deployment_aborted(self, deployment_id: str) -> bool:
+        """Check if a specific deployment is aborted"""
+        with self._lock:
+            return self._deployment_statuses.get(deployment_id) == "aborted"
     
     def is_aborted(self, project_id: str) -> bool:
         """Check if deployment is aborted"""

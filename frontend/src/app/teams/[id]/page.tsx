@@ -7,8 +7,8 @@ import { apiClient } from '@/lib/api'
 import { useAuth } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Users, Mail, Settings, Trash2, UserMinus, Crown, Shield, User } from 'lucide-react'
 import TeamAwsConfiguration from '@/components/TeamAwsConfiguration'
 
@@ -18,13 +18,14 @@ export default function TeamDetail() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const teamId = params.id as string
-  const initialTab = searchParams.get('tab') || 'members'
+  const initialTab = searchParams.get('tab') || 'team-settings'
 
   const [team, setTeam] = useState<Team | null>(null)
   const [members, setMembers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
   const [membersLoading, setMembersLoading] = useState(true)
   const [error, setError] = useState('')
+  const [activeTab, setActiveTab] = useState<'members' | 'settings' | 'team-settings'>(initialTab as any || 'members')
 
   useEffect(() => {
     if (isAuthenticated && !authLoading && teamId) {
@@ -178,14 +179,51 @@ export default function TeamDetail() {
           </div>
         </div>
 
-        <Tabs defaultValue={initialTab} className="space-y-8">
-          <TabsList>
-            <TabsTrigger value="members">Members</TabsTrigger>
-            <TabsTrigger value="settings">AWS Settings</TabsTrigger>
-            {isOwner && <TabsTrigger value="team-settings">Team Settings</TabsTrigger>}
-          </TabsList>
+        {/* Tabs */}
+        <div className="mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              {isOwner && (
+                <Button
+                  variant="ghost"
+                  onClick={() => setActiveTab('team-settings')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
+                    activeTab === 'team-settings'
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                  }`}
+                >
+                  Team Settings
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                onClick={() => setActiveTab('members')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
+                  activeTab === 'members'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                }`}
+              >
+                Members
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setActiveTab('settings')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
+                  activeTab === 'settings'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                }`}
+              >
+                AWS Settings
+              </Button>
+            </nav>
+          </div>
+        </div>
 
-          <TabsContent value="members">
+        <div className="space-y-6">
+          {activeTab === 'members' && (
             <Card>
               <CardHeader>
                 <div className="flex justify-between items-center">
@@ -209,33 +247,30 @@ export default function TeamDetail() {
                 />
               </CardContent>
             </Card>
-          </TabsContent>
+          )}
 
-
-          <TabsContent value="settings">
+          {activeTab === 'settings' && (
             <Card>
               <CardContent className="p-8">
                 <TeamAwsConfiguration teamId={teamId} />
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {isOwner && (
-            <TabsContent value="team-settings">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Team Settings</CardTitle>
-                  <CardDescription>
-                    Manage team configuration and danger zone
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <TeamSettings team={team} />
-                </CardContent>
-              </Card>
-            </TabsContent>
           )}
-        </Tabs>
+
+          {activeTab === 'team-settings' && isOwner && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Team Settings</CardTitle>
+                <CardDescription>
+                  Manage team configuration and danger zone
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TeamSettings team={team} />
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -378,14 +413,15 @@ function AddMemberButton({ onAddMember }: { onAddMember: (githubUsername: string
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Role
             </label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as TeamMemberRole)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value={TeamMemberRole.MEMBER}>Member</option>
-              <option value={TeamMemberRole.ADMIN}>Admin</option>
-            </select>
+            <Select value={role} onValueChange={(value) => setRole(value as TeamMemberRole)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TeamMemberRole.MEMBER}>Member</SelectItem>
+                <SelectItem value={TeamMemberRole.ADMIN}>Admin</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex space-x-2">
             <Button type="submit" disabled={isAdding || !githubUsername.trim()}>

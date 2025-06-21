@@ -162,11 +162,11 @@ export default function ProjectDetail() {
     }
   }
 
-  const handleAbortDeployment = async () => {
-    if (!project || !confirm('Are you sure you want to abort the current deployment?')) return
+  const handleAbortDeployment = async (deploymentId: string) => {
+    if (!confirm('Are you sure you want to abort this deployment?')) return
     
     try {
-      await apiClient.abortDeployment(project.id)
+      await apiClient.abortDeployment(deploymentId)
       // Refresh project and deployments
       fetchProject()
       fetchDeployments()
@@ -451,9 +451,34 @@ export default function ProjectDetail() {
                           </span>
                           <div className="flex items-center space-x-1">
                             <GitCommit className="h-3 w-3 text-gray-500" />
-                            <code className="text-sm bg-gray-100 px-2 py-1 rounded">
-                              {deployment.commitSha ? deployment.commitSha.substring(0, 8) : 'N/A'}
-                            </code>
+                            {deployment.commitSha ? (
+                              (() => {
+                                // Extract owner and repo from project.gitRepoUrl
+                                let commitUrl = null
+                                if (project.gitRepoUrl) {
+                                  const match = project.gitRepoUrl.match(/github.com[/:]([^/]+)\/(.+?)(?:\.git)?$/)
+                                  if (match) {
+                                    const owner = match[1]
+                                    const repo = match[2]
+                                    commitUrl = `https://github.com/${owner}/${repo}/commit/${deployment.commitSha}`
+                                  }
+                                }
+                                return commitUrl ? (
+                                  <a
+                                    href={commitUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-sm bg-gray-100 px-2 py-1 rounded hover:underline"
+                                  >
+                                    {deployment.commitSha.substring(0, 8)}
+                                  </a>
+                                ) : (
+                                  <code className="text-sm bg-gray-100 px-2 py-1 rounded">{deployment.commitSha.substring(0, 8)}</code>
+                                )
+                              })()
+                            ) : (
+                              <code className="text-sm bg-gray-100 px-2 py-1 rounded">N/A</code>
+                            )}
                           </div>
                           <div className="flex items-center space-x-1">
                             <Clock className="h-3 w-3 text-gray-500" />
@@ -472,7 +497,7 @@ export default function ProjectDetail() {
                         </div>
                         {['PENDING', 'BUILDING', 'PUSHING', 'PROVISIONING', 'DEPLOYING'].includes(deployment.status) && (
                           <Button
-                            onClick={handleAbortDeployment}
+                            onClick={() => handleAbortDeployment(deployment.id)}
                             variant="destructive"
                             size="sm"
                           >

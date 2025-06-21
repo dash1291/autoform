@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { apiClient } from '@/lib/api'
 
 interface LogEntry {
@@ -103,17 +104,21 @@ export default function LogsViewer({ projectId }: LogsViewerProps) {
             <span className="text-sm text-gray-700">Auto-refresh (5s)</span>
           </label>
           
-          <select
-            value={hoursBack}
-            onChange={(e) => setHoursBack(parseInt(e.target.value))}
-            className="border border-gray-300 rounded px-3 py-2 text-sm"
+          <Select 
+            value={hoursBack.toString()} 
+            onValueChange={(value) => setHoursBack(parseInt(value))}
           >
-            <option value={1}>Last 1 hour</option>
-            <option value={3}>Last 3 hours</option>
-            <option value={6}>Last 6 hours</option>
-            <option value={12}>Last 12 hours</option>
-            <option value={24}>Last 24 hours</option>
-          </select>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">Last 1 hour</SelectItem>
+              <SelectItem value="3">Last 3 hours</SelectItem>
+              <SelectItem value="6">Last 6 hours</SelectItem>
+              <SelectItem value="12">Last 12 hours</SelectItem>
+              <SelectItem value="24">Last 24 hours</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         
         {logs.length > 0 && (

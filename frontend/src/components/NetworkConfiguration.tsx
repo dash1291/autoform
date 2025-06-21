@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { apiClient } from '@/lib/api'
 
 interface NetworkConfigurationProps {
@@ -195,19 +196,19 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
                 Loading VPCs...
               </div>
             ) : (
-              <select
-                id="existingVpcId"
-                value={formData.existingVpcId}
-                onChange={(e) => handleVpcChange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Create new VPC</option>
-                {awsResources?.vpcs?.map((vpc: any) => (
-                  <option key={vpc.id} value={vpc.id}>
-                    {vpc.name} ({vpc.cidrBlock}){vpc.isDefault ? ' - Default' : ''}
-                  </option>
-                ))}
-              </select>
+              <Select value={formData.existingVpcId} onValueChange={handleVpcChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Create new VPC" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Create new VPC</SelectItem>
+                  {awsResources?.vpcs?.map((vpc: any) => (
+                    <SelectItem key={vpc.id} value={vpc.id}>
+                      {vpc.name} ({vpc.cidrBlock}){vpc.isDefault ? ' - Default' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
             <p className="text-xs text-gray-500 mt-1">
               {isReadOnly 
@@ -326,19 +327,22 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
                 Loading ECS clusters...
               </div>
             ) : (
-              <select
-                id="existingClusterArn"
-                value={formData.existingClusterArn}
-                onChange={(e) => setFormData({ ...formData, existingClusterArn: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              <Select 
+                value={formData.existingClusterArn} 
+                onValueChange={(value) => setFormData({ ...formData, existingClusterArn: value })}
               >
-                <option value="">Create new ECS cluster</option>
-                {awsResources?.clusters?.map((cluster: any) => (
-                  <option key={cluster.arn} value={cluster.arn}>
-                    {cluster.name} ({cluster.runningTasksCount} running, {cluster.activeServicesCount} services)
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Create new ECS cluster" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Create new ECS cluster</SelectItem>
+                  {awsResources?.clusters?.map((cluster: any) => (
+                    <SelectItem key={cluster.arn} value={cluster.arn}>
+                      {cluster.name} ({cluster.runningTasksCount} running, {cluster.activeServicesCount} services)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
             <p className="text-xs text-gray-500 mt-1">
               {isReadOnly 

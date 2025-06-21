@@ -26,7 +26,7 @@ export default function Navbar() {
                 <div className="flex items-center space-x-3">
                   <Link href="/dashboard">
                     <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
-                      Dashboard
+                      Projects
                     </Button>
                   </Link>
                   <Link href="/docs">

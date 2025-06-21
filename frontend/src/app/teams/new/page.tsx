@@ -85,9 +85,6 @@ export default function NewTeamPage() {
               <Users className="mx-auto h-12 w-12" />
             </div>
             <h1 className="text-3xl font-bold text-gray-900">Create New Team</h1>
-            <p className="text-gray-600 mt-2">
-              Teams help you organize projects and collaborate with others
-            </p>
           </div>
         </div>
 
@@ -157,16 +154,6 @@ export default function NewTeamPage() {
             </form>
           </CardContent>
         </Card>
-
-        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h4 className="text-sm font-medium text-blue-900 mb-2">What happens next?</h4>
-          <ul className="text-sm text-blue-700 space-y-1">
-            <li>• You'll be automatically redirected to configure AWS settings</li>
-            <li>• Set up AWS credentials to enable team deployments</li>
-            <li>• Invite team members to start collaborating</li>
-            <li>• Create projects under this team</li>
-          </ul>
-        </div>
       </div>
     </div>
   )

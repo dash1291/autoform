@@ -221,30 +221,71 @@ async def deploy_project(
     }
 
 
-@router.post("/projects/{project_id}/abort")
+@router.post("/{deployment_id}/abort")
 async def abort_deployment(
-    project_id: str,
+    deployment_id: str,
     current_user: User = Depends(get_current_user)
 ):
-    """Abort the current deployment"""
-    # Verify project belongs to user
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "userId": current_user.id
+    """Abort a specific deployment"""
+    # Get deployment and verify access
+    deployment = await prisma.deployment.find_unique(
+        where={"id": deployment_id},
+        include={"project": True}
+    )
+    
+    if not deployment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Deployment not found"
+        )
+    
+    # Verify user has access to the project
+    if deployment.project.userId != current_user.id:
+        # Also check if user is a team member
+        if deployment.project.teamId:
+            team_member = await prisma.teammember.find_first(
+                where={
+                    "teamId": deployment.project.teamId,
+                    "userId": current_user.id
+                }
+            )
+            if not team_member:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied"
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
+    
+    # Check if deployment can be aborted
+    if deployment.status not in [
+        DeploymentStatus.PENDING,
+        DeploymentStatus.BUILDING,
+        DeploymentStatus.PUSHING,
+        DeploymentStatus.PROVISIONING,
+        DeploymentStatus.DEPLOYING
+    ]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot abort deployment with status: {deployment.status}"
+        )
+    
+    # Update deployment status
+    await prisma.deployment.update(
+        where={"id": deployment_id},
+        data={
+            "status": DeploymentStatus.FAILED,
+            "logs": (deployment.logs or "") + "\n[ABORTED] Deployment aborted by user"
         }
     )
     
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
-    # Find active deployment
+    # Update project status only if this was the active deployment
     active_deployment = await prisma.deployment.find_first(
         where={
-            "projectId": project_id,
+            "projectId": deployment.projectId,
             "status": {"in": [
                 DeploymentStatus.PENDING,
                 DeploymentStatus.BUILDING,
@@ -252,32 +293,19 @@ async def abort_deployment(
                 DeploymentStatus.PROVISIONING,
                 DeploymentStatus.DEPLOYING
             ]}
-        }
+        },
+        order={"createdAt": "desc"}
     )
     
-    if not active_deployment:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No active deployment found"
+    # If this was the only/latest active deployment, update project status
+    if not active_deployment or active_deployment.id == deployment_id:
+        await prisma.project.update(
+            where={"id": deployment.projectId},
+            data={"status": ProjectStatus.FAILED}
         )
     
-    # Update deployment status
-    await prisma.deployment.update(
-        where={"id": active_deployment.id},
-        data={
-            "status": DeploymentStatus.FAILED,
-            "logs": (active_deployment.logs or "") + "\n[ABORTED] Deployment aborted by user"
-        }
-    )
-    
-    # Update project status
-    await prisma.project.update(
-        where={"id": project_id},
-        data={"status": ProjectStatus.FAILED}
-    )
-    
     # Abort the deployment process
-    deployment_manager.abort_deployment(project_id)
+    deployment_manager.abort_deployment_by_id(deployment_id, deployment.projectId)
     
     return {"message": "Deployment aborted"}
 

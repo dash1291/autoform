@@ -194,21 +194,23 @@ export default function NewProject() {
                   </Button>
                 </div>
               ) : (
-                <select
-                  id="team"
-                  value={formData.teamId}
-                  onChange={(e) => setFormData({ ...formData, teamId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+                <Select 
+                  value={formData.teamId} 
+                  onValueChange={(value) => setFormData({ ...formData, teamId: value })}
                   disabled={teamsLoading}
                   required
                 >
-                  <option value="">Select a team</option>
-                  {teams.map((team) => (
-                    <option key={team.id} value={team.id}>
-                      {team.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {teams.map((team) => (
+                      <SelectItem key={team.id} value={team.id}>
+                        {team.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
               <p className="text-sm text-gray-500 mt-1">
                 {teamsLoading 
@@ -281,24 +283,23 @@ export default function NewProject() {
               <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-2">
                 Branch to Deploy
               </label>
-              <select
-                id="branch"
+              <Select
                 value={formData.branch}
-                onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+                onValueChange={(value) => setFormData({ ...formData, branch: value })}
                 disabled={!repoInfo || !repoInfo.branches}
                 required
               >
-                {repoInfo && repoInfo.branches ? (
-                  repoInfo.branches.map((branch: string) => (
-                    <option key={branch} value={branch}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {repoInfo && repoInfo.branches && repoInfo.branches.map((branch: string) => (
+                    <SelectItem key={branch} value={branch}>
                       {branch} {branch === repoInfo.defaultBranch ? '(default)' : ''}
-                    </option>
-                  ))
-                ) : (
-                  <option value="">Select a branch</option>
-                )}
-              </select>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-sm text-gray-500 mt-1">
                 {repoInfo ? 'Select which branch to deploy from this repository' : 'Save repository access first to see available branches'}
               </p>
@@ -329,18 +330,21 @@ export default function NewProject() {
                   <label htmlFor="cpu" className="block text-sm font-medium text-gray-700 mb-2">
                     CPU (units)
                   </label>
-                  <select
-                    id="cpu"
-                    value={formData.cpu}
-                    onChange={(e) => setFormData({ ...formData, cpu: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  <Select
+                    value={formData.cpu.toString()}
+                    onValueChange={(value) => setFormData({ ...formData, cpu: parseInt(value) })}
                   >
-                    <option value={256}>256 (0.25 vCPU)</option>
-                    <option value={512}>512 (0.5 vCPU)</option>
-                    <option value={1024}>1024 (1 vCPU)</option>
-                    <option value={2048}>2048 (2 vCPU)</option>
-                    <option value={4096}>4096 (4 vCPU)</option>
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="256">256 (0.25 vCPU)</SelectItem>
+                      <SelectItem value="512">512 (0.5 vCPU)</SelectItem>
+                      <SelectItem value="1024">1024 (1 vCPU)</SelectItem>
+                      <SelectItem value="2048">2048 (2 vCPU)</SelectItem>
+                      <SelectItem value="4096">4096 (4 vCPU)</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <p className="text-xs text-gray-500 mt-1">AWS Fargate CPU allocation</p>
                 </div>
 
@@ -348,20 +352,23 @@ export default function NewProject() {
                   <label htmlFor="memory" className="block text-sm font-medium text-gray-700 mb-2">
                     Memory (MB)
                   </label>
-                  <select
-                    id="memory"
-                    value={formData.memory}
-                    onChange={(e) => setFormData({ ...formData, memory: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  <Select
+                    value={formData.memory.toString()}
+                    onValueChange={(value) => setFormData({ ...formData, memory: parseInt(value) })}
                   >
-                    <option value={512}>512 MB</option>
-                    <option value={1024}>1 GB</option>
-                    <option value={2048}>2 GB</option>
-                    <option value={4096}>4 GB</option>
-                    <option value={8192}>8 GB</option>
-                    <option value={16384}>16 GB</option>
-                    <option value={30720}>30 GB</option>
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="512">512 MB</SelectItem>
+                      <SelectItem value="1024">1 GB</SelectItem>
+                      <SelectItem value="2048">2 GB</SelectItem>
+                      <SelectItem value="4096">4 GB</SelectItem>
+                      <SelectItem value="8192">8 GB</SelectItem>
+                      <SelectItem value="16384">16 GB</SelectItem>
+                      <SelectItem value="30720">30 GB</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <p className="text-xs text-gray-500 mt-1">Container memory limit</p>
                 </div>
 

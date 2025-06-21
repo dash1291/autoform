@@ -133,21 +133,22 @@ export default function Dashboard() {
                       </Select>
                     </div>
                   )}
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  {/* Team Management Button */}
-                  {selectedTeamData && (
+                   {/* Team Management Button */}
+                   {selectedTeamData && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => window.location.href = `/teams/${selectedTeam}`}
                     >
                       <Settings className="h-4 w-4 mr-2" />
-                      Manage Team
+                      Team Settings
                     </Button>
                   )}
                   
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                 
                   {/* Create Team Button */}
                   <CreateTeamButton onTeamCreated={fetchTeams} />
                   
@@ -211,21 +212,15 @@ function ProjectsList({ projects, loading }: { projects: Project[], loading: boo
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-medium text-gray-900">{project.name}</h3>
-                {project.team && (
-                  <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
-                    <Users className="h-3 w-3 mr-1" />
-                    {project.team.name}
-                  </span>
-                )}
               </div>
               <p className="text-sm text-gray-600">{project.gitRepoUrl}</p>
               <div className="mt-2">
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                <span className={`inline-flex px-2 py-1 capitalize text-xs font-semibold rounded ${
                   project.status === 'DEPLOYED' ? 'bg-green-100 text-green-800' :
                   project.status === 'FAILED' ? 'bg-red-100 text-red-800' :
                   'bg-yellow-100 text-yellow-800'
                 }`}>
-                  {project.status}
+                  {project.status.toLowerCase()}
                 </span>
               </div>
             </div>
