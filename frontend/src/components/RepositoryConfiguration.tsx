@@ -48,6 +48,11 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
   const [webhookLoading, setWebhookLoading] = useState(false)
   const [showWebhookInstructions, setShowWebhookInstructions] = useState(false)
 
+  // Update webhookConfigured when project prop changes
+  useEffect(() => {
+    setWebhookConfigured(project.webhookConfigured || false)
+  }, [project.webhookConfigured])
+
   const validateRepository = async (url: string) => {
     if (!url || !url.includes('github.com')) return
 

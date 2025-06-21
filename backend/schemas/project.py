@@ -86,7 +86,6 @@ class ProjectUpdate(BaseModel):
     port: Optional[int] = None
     health_check_path: Optional[str] = Field(None, alias="healthCheckPath")
     auto_deploy_enabled: Optional[bool] = Field(None, alias="autoDeployEnabled")
-    webhook_configured: Optional[bool] = Field(None, alias="webhookConfigured")
 
     class Config:
         populate_by_name = True
@@ -104,7 +103,6 @@ class Project(ProjectBase):
     existing_subnet_ids: Optional[str] = Field(None, alias="existingSubnetIds")
     existing_cluster_arn: Optional[str] = Field(None, alias="existingClusterArn")
     secrets_arn: Optional[str] = Field(None, alias="secretsArn")
-    webhook_configured: bool = Field(False, alias="webhookConfigured")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
     team: Optional[dict] = None  # Will include team info if project belongs to a team

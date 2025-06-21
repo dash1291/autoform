@@ -153,7 +153,8 @@ async def get_user_accessible_projects(user_id: str):
             ]
         },
         include={
-            "team": True
+            "team": True,
+            "webhook": True
         },
         order={"createdAt": "desc"}
     )
@@ -162,6 +163,10 @@ async def get_user_accessible_projects(user_id: str):
     result = []
     for project in projects:
         project_dict = project.dict()
+        
+        # Add webhookConfigured based on whether project has a webhook associated
+        project_dict["webhookConfigured"] = bool(project.webhook and project.webhook.isActive)
+        
         if project_dict.get("team"):
             project_dict["team"] = {
                 "id": project_dict["team"]["id"],
@@ -278,12 +283,17 @@ async def get_project(
     project = await prisma.project.find_unique(
         where={"id": project_id},
         include={
-            "team": True
+            "team": True,
+            "webhook": True
         }
     )
     
     # Convert to dict and handle team object
     project_dict = project.dict()
+    
+    # Add webhookConfigured based on whether project has a webhook associated
+    project_dict["webhookConfigured"] = bool(project.webhook and project.webhook.isActive)
+    
     if project_dict.get("team"):
         project_dict["team"] = {
             "id": project_dict["team"]["id"],
@@ -1328,11 +1338,7 @@ async def configure_webhook(
                 access_token=github_access_token
             )
             
-            # Mark project as webhook configured
-            await prisma.project.update(
-                where={"id": project_id},
-                data={"webhookConfigured": True}
-            )
+            # Webhook configured successfully (status determined by relationship)
             
             return {
                 "webhookUrl": webhook_url,
@@ -1406,8 +1412,7 @@ async def delete_webhook_config(
         where={"id": project_id},
         data={
             "webhookId": None,
-            "autoDeployEnabled": False,
-            "webhookConfigured": False
+            "autoDeployEnabled": False
         }
     )
     

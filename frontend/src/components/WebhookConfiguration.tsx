@@ -33,6 +33,11 @@ export default function WebhookConfiguration({ projectId, project, onUpdate }: W
   const [showInstructions, setShowInstructions] = useState(false)
   const [webhookConfigured, setWebhookConfigured] = useState(project.webhookConfigured || false)
 
+  // Update webhookConfigured when project prop changes
+  useEffect(() => {
+    setWebhookConfigured(project.webhookConfigured || false)
+  }, [project.webhookConfigured])
+
   const handleAutoDeployToggle = async (enabled: boolean) => {
     setLoading(true)
     setError('')

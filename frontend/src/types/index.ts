@@ -42,7 +42,6 @@ export interface Project {
   port: number
   healthCheckPath: string
   autoDeployEnabled: boolean
-  webhookSecret?: string
   webhookConfigured: boolean
   team?: {
     id: string
