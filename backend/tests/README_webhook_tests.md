@@ -37,6 +37,17 @@ Integration tests for the webhook processing functionality that handles incoming
   - Inactive webhook handling
   - Subdirectory-based filtering
 
+### `test_parallel_webhook_deployments.py`
+Tests for parallel deployment execution when multiple projects share the same webhook.
+
+**Test Coverage:**
+- `TestParallelWebhookDeployments`: Tests concurrent deployment execution
+  - Multiple projects deploying in parallel (not serially)
+  - Subdirectory filtering with parallel deployment
+  - Projects without subdirectories always deploying
+  - No deployments when no changes match project filters
+  - Timing verification to ensure true parallelism
+
 ## Key Features Tested
 
 ### Shared Webhook Functionality

@@ -247,7 +247,7 @@ class TestProjectWebhookDelete:
             update_args = mock_prisma.project.update.call_args[1]['data']
             assert update_args['webhookId'] is None
             assert update_args['autoDeployEnabled'] is False
-            assert update_args['webhookConfigured'] is False
+            # Note: webhookConfigured is now calculated dynamically from webhook relationship
             
             # Verify webhook was deleted (no other projects using it)
             mock_prisma.webhook.delete.assert_called_once_with(

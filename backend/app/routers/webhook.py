@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, HTTPException, status, BackgroundTasks
+import asyncio
 import hashlib
 import hmac
 import json
@@ -121,11 +122,10 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
         logger.info(f"Changed files in push: {changed_files}")
         logger.info(f"Found {len(projects)} projects for repo {github_url}:{branch}")
         
-        # Trigger deployments for matching projects
-        deployed_projects = []
+        # Collect projects that should be deployed
+        projects_to_deploy = []
         
         for project in projects:
-            
             # Check if project is not already deploying
             if project.status in ['DEPLOYING', 'BUILDING', 'CLONING']:
                 logger.info(f"Project {project.name} already deploying, skipping")
@@ -152,10 +152,22 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
                     logger.info(f"Project {project.name} subdirectory '{project.subdirectory}' has no changes, skipping deployment")
             
             if should_deploy:
-                # Trigger deployment in background
+                projects_to_deploy.append(project)
+        
+        # Trigger all deployments concurrently
+        deployed_projects = []
+        if projects_to_deploy:
+            
+            # Create deployment tasks for all projects in parallel
+            deployment_tasks = []
+            for project in projects_to_deploy:
                 logger.info(f"Triggering auto-deployment for project {project.name}")
-                background_tasks.add_task(trigger_auto_deployment, project.id, payload_data)
+                task = asyncio.create_task(trigger_auto_deployment(project.id, payload_data))
+                deployment_tasks.append(task)
                 deployed_projects.append(project.name)
+            
+            # Add a single background task to wait for all deployments
+            background_tasks.add_task(wait_for_deployments, deployment_tasks)
         
         if deployed_projects:
             return {
@@ -171,6 +183,15 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Webhook processing failed: {str(e)}"
         )
+
+
+async def wait_for_deployments(deployment_tasks):
+    """Wait for all deployment tasks to complete"""
+    try:
+        await asyncio.gather(*deployment_tasks, return_exceptions=True)
+        logger.info("All webhook-triggered deployments completed")
+    except Exception as e:
+        logger.error(f"Error waiting for webhook deployments: {e}")
 
 
 async def trigger_auto_deployment(project_id: str, webhook_payload: Dict[str, Any]):
