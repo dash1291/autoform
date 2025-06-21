@@ -92,6 +92,15 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
             logger.info(f"No projects found with auto-deploy enabled for {github_url}:{branch}")
             return {"message": "No matching projects with auto-deploy enabled"}
         
+        # Extract changed files from commits
+        changed_files = set()
+        for commit in payload_data.get('commits', []):
+            changed_files.update(commit.get('added', []))
+            changed_files.update(commit.get('modified', []))
+            changed_files.update(commit.get('removed', []))
+        
+        logger.info(f"Changed files in push: {changed_files}")
+        
         # Verify webhook signature for each project and trigger deployments
         deployed_projects = []
         
@@ -110,10 +119,30 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
                 logger.info(f"Project {project.name} already deploying, skipping")
                 continue
             
-            # Trigger deployment in background
-            logger.info(f"Triggering auto-deployment for project {project.name}")
-            background_tasks.add_task(trigger_auto_deployment, project.id, payload_data)
-            deployed_projects.append(project.name)
+            # Check if project subdirectory has changes
+            should_deploy = False
+            
+            if not project.subdirectory:
+                # Projects without subdirectory deploy on any change
+                should_deploy = True
+                logger.info(f"Project {project.name} has no subdirectory, will deploy on any change")
+            else:
+                # Check if any changed file is in the project's subdirectory
+                subdirectory_prefix = project.subdirectory.rstrip('/') + '/'
+                for file_path in changed_files:
+                    if file_path.startswith(subdirectory_prefix) or file_path == project.subdirectory:
+                        should_deploy = True
+                        logger.info(f"Project {project.name} subdirectory '{project.subdirectory}' has changes in file: {file_path}")
+                        break
+                
+                if not should_deploy:
+                    logger.info(f"Project {project.name} subdirectory '{project.subdirectory}' has no changes, skipping deployment")
+            
+            if should_deploy:
+                # Trigger deployment in background
+                logger.info(f"Triggering auto-deployment for project {project.name}")
+                background_tasks.add_task(trigger_auto_deployment, project.id, payload_data)
+                deployed_projects.append(project.name)
         
         if deployed_projects:
             return {
@@ -124,10 +153,10 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
             return {"message": "No deployments triggered"}
         
     except Exception as e:
-        logger.error(f"Webhook processing error: {e}")
+        logger.error(f"Webhook processing error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Webhook processing failed"
+            detail=f"Webhook processing failed: {str(e)}"
         )
 
 
