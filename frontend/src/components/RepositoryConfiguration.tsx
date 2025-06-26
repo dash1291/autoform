@@ -244,7 +244,7 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
     formData.port !== (project.port || 3000) ||
     formData.healthCheckPath !== (project.healthCheckPath || '/health')
 
-  const isDeploying = project.status === 'DEPLOYING' || project.status === 'BUILDING' || project.status === 'CLONING'
+  const isDeploying = false // Status is now at environment level
   
   // Some fields should be locked during deployment, others can be modified
   const shouldLockRepoFields = isDeploying // Repository URL, branch, subdirectory - affect build
@@ -304,53 +304,6 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
             </div>
           )}
           <p className="text-xs text-gray-500 mt-1">GitHub repository URL for your project</p>
-        </div>
-
-        <div>
-          <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-2">
-            Branch
-          </label>
-          {branches.length > 0 ? (
-            <Select
-              value={formData.branch}
-              onValueChange={(value) => setFormData({ ...formData, branch: value })}
-              disabled={shouldLockRepoFields}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a branch" />
-              </SelectTrigger>
-              <SelectContent>
-                {branches.map((branch) => (
-                  <SelectItem key={branch} value={branch}>
-                    <div className="flex items-center space-x-2">
-                      <GitBranch className="h-3 w-3" />
-                      <span>{branch}</span>
-                      {repoInfo?.defaultBranch === branch && (
-                        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">Default</span>
-                      )}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <input
-              type="text"
-              id="branch"
-              value={formData.branch}
-              onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
-              disabled={shouldLockRepoFields}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              placeholder="main"
-              required
-            />
-          )}
-          <p className="text-xs text-gray-500 mt-1">
-            {branches.length > 0 
-              ? `Choose from ${branches.length} available branches` 
-              : 'Git branch to deploy from'
-            }
-          </p>
         </div>
 
         <div>
@@ -436,28 +389,21 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
 
       {/* Auto-deploy section */}
       <div className="mt-8 border-t pt-8">
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Automatic Deployments</h3>
-          <p className="text-sm text-gray-600 mt-1">
-            Enable automatic deployments when commits are pushed to the <strong>{formData.branch}</strong> branch.
-          </p>
-        </div>
-
-        {/* Auto-deploy toggle */}
-        <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-          <div>
-            <h4 className="font-medium text-gray-900">Auto-deploy on push</h4>
-            <p className="text-sm text-gray-600">
-              Automatically deploy when commits are pushed to {formData.branch}
+        <div className="mb-4 w-full flex">
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-gray-900">Automatic Deployments</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Deploy environments automatically when commits are pushed to the configured branches.
             </p>
           </div>
           <Switch
+            className="w-10"
             checked={autoDeployEnabled}
             onCheckedChange={handleAutoDeployToggle}
             disabled={webhookLoading}
           />
         </div>
-
+        
         {/* Webhook configuration */}
         {autoDeployEnabled && (
           <div className="mt-4 border border-gray-200 rounded-lg p-4 space-y-4">

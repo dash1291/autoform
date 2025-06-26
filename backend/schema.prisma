@@ -93,10 +93,12 @@ model Project {
   healthCheckPath    String                @default("/health")
   autoDeployEnabled  Boolean               @default(false)
   webhookId          String?
+  webhookConfigured  Boolean               @default(false)
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
   secretsArn         String?
   deployments        Deployment[]
+  environments       Environment[]
   environmentVars    EnvironmentVariable[]
   webhook            Webhook?              @relation(fields: [webhookId], references: [id])
   team               Team?                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
@@ -104,42 +106,76 @@ model Project {
 }
 
 model Deployment {
-  id        String           @id @default(cuid())
-  projectId String
-  status    DeploymentStatus @default(PENDING)
-  imageTag  String
-  commitSha String
-  logs      String?
-  details   String?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id            String           @id @default(cuid())
+  projectId     String
+  environmentId String?
+  status        DeploymentStatus @default(PENDING)
+  imageTag      String
+  commitSha     String
+  logs          String?
+  details       String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  environment   Environment?     @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+}
+
+model Environment {
+  id                   String                @id @default(cuid())
+  name                 String
+  projectId            String
+  teamAwsConfigId      String
+  status               EnvironmentStatus     @default(CREATED)
+  branch               String                @default("main")
+  cpu                  Int                   @default(256)
+  memory               Int                   @default(512)
+  diskSize             Int                   @default(21)
+  existingVpcId        String?
+  existingSubnetIds    String?
+  existingClusterArn   String?
+  ecsClusterArn        String?
+  ecsServiceArn        String?
+  albArn               String?
+  albName              String?
+  domain               String?
+  taskDefinitionArn    String?
+  secretsArn           String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  project              Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  teamAwsConfig        TeamAwsConfig         @relation(fields: [teamAwsConfigId], references: [id], onDelete: Cascade)
+  deployments          Deployment[]
+  environmentVariables EnvironmentVariable[]
+
+  @@unique([projectId, name])
 }
 
 model EnvironmentVariable {
-  id        String   @id @default(cuid())
-  projectId String
-  key       String
-  value     String?
-  isSecret  Boolean  @default(false)
-  secretKey String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id            String      @id @default(cuid())
+  environmentId String
+  projectId     String
+  key           String
+  value         String?
+  isSecret      Boolean     @default(false)
+  secretKey     String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  environment   Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, key])
 }
 
 model Team {
-  id          String         @id @default(cuid())
+  id          String          @id @default(cuid())
   name        String
   description String?
   ownerId     String
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
   projects    Project[]
-  owner       User           @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  awsConfig   TeamAWSConfig?
+  owner       User            @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  awsConfigs  TeamAwsConfig[]
   members     TeamMember[]
 }
 
@@ -155,16 +191,20 @@ model TeamMember {
   @@unique([teamId, userId])
 }
 
-model TeamAWSConfig {
-  id                 String   @id @default(cuid())
-  teamId             String   @unique
+model TeamAwsConfig {
+  id                 String        @id @default(cuid())
+  teamId             String
+  name               String
   awsAccessKeyId     String
   awsSecretAccessKey String
-  awsRegion          String   @default("us-east-1")
-  isActive           Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  team               Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  awsRegion          String        @default("us-east-1")
+  isActive           Boolean       @default(true)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  team               Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  environments       Environment[]
+
+  @@unique([teamId, name])
 }
 
 model UserAWSConfig {
@@ -202,4 +242,13 @@ enum TeamMemberRole {
   OWNER
   ADMIN
   MEMBER
+}
+
+enum EnvironmentStatus {
+  CREATED
+  PROVISIONING
+  DEPLOYING
+  DEPLOYED
+  FAILED
+  DELETING
 }

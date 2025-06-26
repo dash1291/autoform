@@ -1,20 +1,50 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Project } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { apiClient } from '@/lib/api'
 
 interface ResourceConfigurationProps {
   projectId: string
+  environmentId?: string
   project: Project
   onUpdate: () => void
 }
 
-export default function ResourceConfiguration({ projectId, project, onUpdate }: ResourceConfigurationProps) {
+export default function ResourceConfiguration({ projectId, environmentId, project, onUpdate }: ResourceConfigurationProps) {
+  // If environmentId is provided, we need to load and configure that environment's resources
+  const [environment, setEnvironment] = useState<any>(null)
+  const [loadingEnv, setLoadingEnv] = useState(false)
+
+  useEffect(() => {
+    if (environmentId) {
+      fetchEnvironment()
+    }
+  }, [environmentId])
+
+  const fetchEnvironment = async () => {
+    if (!environmentId) return
+    setLoadingEnv(true)
+    try {
+      const envData = await apiClient.getEnvironment(environmentId)
+      setEnvironment(envData)
+      setFormData({
+        cpu: envData.cpu || 256,
+        memory: envData.memory || 512,
+        diskSize: envData.diskSize || 21,
+      })
+    } catch (error) {
+      console.error('Failed to fetch environment:', error)
+    } finally {
+      setLoadingEnv(false)
+    }
+  }
+
   const [formData, setFormData] = useState({
     cpu: project.cpu || 256,
     memory: project.memory || 512,
@@ -31,42 +61,47 @@ export default function ResourceConfiguration({ projectId, project, onUpdate }: 
     setSuccess('')
 
     try {
-      const response = await fetch(`/api/projects/${projectId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      })
-
-      if (response.ok) {
-        setSuccess('Resource configuration updated successfully!')
-        onUpdate()
+      if (environmentId) {
+        // Update environment resources
+        await apiClient.updateEnvironment(environmentId, {
+          cpu: formData.cpu,
+          memory: formData.memory,
+          diskSize: formData.diskSize,
+        })
+        setSuccess('Environment resource configuration updated successfully!')
+        await fetchEnvironment() // Refresh environment data
       } else {
-        const data = await response.json()
-        setError(data.error || 'Failed to update resource configuration')
+        // Update project resources (legacy)
+        await apiClient.updateProject(projectId, formData)
+        setSuccess('Resource configuration updated successfully!')
       }
-    } catch (err) {
-      setError('Failed to update resource configuration')
+      onUpdate()
+    } catch (err: any) {
+      setError(err.message || 'Failed to update resource configuration')
     } finally {
       setLoading(false)
     }
   }
 
   // Check if form data has changed from original values
-  const hasChanges = 
-    formData.cpu !== (project.cpu || 256) ||
-    formData.memory !== (project.memory || 512) ||
-    formData.diskSize !== (project.diskSize || 21)
+  const originalData = environmentId ? environment : project
+  const hasChanges = originalData && (
+    formData.cpu !== (originalData.cpu || 256) ||
+    formData.memory !== (originalData.memory || 512) ||
+    formData.diskSize !== (originalData.diskSize || 21)
+  )
 
-  const isDeploying = project.status === 'DEPLOYING' || project.status === 'BUILDING' || project.status === 'CLONING'
+  const isDeploying = false // Status is now at environment level
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Resource Configuration</CardTitle>
         <CardDescription>
-          Configure CPU, memory, and storage resources for your deployment
+          {environmentId 
+            ? 'Configure CPU, memory, and storage resources for this environment'
+            : 'Configure CPU, memory, and storage resources for your deployment'
+          }
         </CardDescription>
       </CardHeader>
       <CardContent>

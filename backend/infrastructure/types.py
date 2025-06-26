@@ -21,7 +21,9 @@ class ECSInfrastructureArgs(BaseModel):
     existing_vpc_id: Optional[str] = Field(None, alias="existingVpcId")
     existing_subnet_ids: Optional[List[str]] = Field(None, alias="existingSubnetIds")
     existing_cluster_arn: Optional[str] = Field(None, alias="existingClusterArn")
-    environment_variables: List[EnvironmentVariable] = Field(default_factory=list, alias="environmentVariables")
+    environment_variables: List[EnvironmentVariable] = Field(
+        default_factory=list, alias="environmentVariables"
+    )
     cpu: int = 256
     memory: int = 512
     disk_size: int = Field(21, alias="diskSize")
@@ -35,6 +37,7 @@ class ECSInfrastructureOutput(BaseModel):
     service_arn: str = Field(alias="serviceArn")
     load_balancer_arn: str = Field(alias="loadBalancerArn")
     load_balancer_dns: str = Field(alias="loadBalancerDns")
+    load_balancer_name: str = Field(alias="loadBalancerName")
     vpc_id: Optional[str] = Field(None, alias="vpcId")
     subnet_ids: Optional[List[str]] = Field(None, alias="subnetIds")
 

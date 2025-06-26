@@ -2,9 +2,20 @@
 
 ## Guidelines
 - Do not use emojis in generated code and docs unless specifically asked
+- Make sure to never run db commands that will cleanup the database
 
 ## Project setup
-- Prisma and database setup is in Python (backend subdirector). Use appropriate tooling%  
+- Prisma and database setup is in Python (backend subdirectory). Use appropriate tooling
+- **ALWAYS use `rye run` for Prisma commands** (e.g., `rye run prisma generate`, `rye run prisma migrate deploy`)  
+
+## Data Protection Rules
+  - NEVER run `prisma migrate reset`
+  - NEVER run `prisma db push --force-reset`
+  - NEVER run `prisma db pull --force` without explicit permission
+  - NEVER run any database commands that could delete or modify data
+  - ALWAYS ask before running any prisma commands that could affect the database
+  - If database schema changes are needed, only create migrations with `prisma
+  migrate dev --create-only`
 
 ## Debugging Lessons Learned
 

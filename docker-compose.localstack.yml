@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"              # LocalStack edge port
+      - "4510-4559:4510-4559"    # External services port range (optional)
+    environment:
+      - SERVICES=s3,ecs,ecr,secretsmanager,iam,sts,elasticloadbalancingv2,ec2,logs,codebuild
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - LAMBDA_EXECUTOR=docker
+      - HOSTNAME_EXTERNAL=localstack
+    volumes:
+      - ./localstack_data:/tmp/localstack/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./localstack-init:/docker-entrypoint-initaws.d  # Scripts to initialize LocalStack
+    networks:
+      - autoform-network
+
+networks:
+  autoform-network:
+    driver: bridge

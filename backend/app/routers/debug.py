@@ -19,7 +19,7 @@ async def debug_users():
                 "email": True,
                 "name": True,
                 "githubId": True,
-                "createdAt": True
+                "createdAt": True,
             }
         )
         logger.info(f"Found {len(users)} users in database")
@@ -39,7 +39,7 @@ async def debug_projects():
                 "name": True,
                 "userId": True,
                 "gitRepoUrl": True,
-                "createdAt": True
+                "createdAt": True,
             }
         )
         logger.info(f"Found {len(projects)} projects in database")
@@ -60,18 +60,18 @@ async def debug_current_user_projects(current_user: User = Depends(get_current_u
                 "name": True,
                 "userId": True,
                 "gitRepoUrl": True,
-                "createdAt": True
-            }
+                "createdAt": True,
+            },
         )
         logger.info(f"Found {len(projects)} projects for user {current_user.id}")
         return {
             "user": {
                 "id": current_user.id,
                 "email": current_user.email,
-                "name": current_user.name
+                "name": current_user.name,
             },
             "projects": projects,
-            "count": len(projects)
+            "count": len(projects),
         }
     except Exception as e:
         logger.error(f"Error fetching projects for user {current_user.id}: {e}")

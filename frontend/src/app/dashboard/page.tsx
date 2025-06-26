@@ -214,15 +214,6 @@ function ProjectsList({ projects, loading }: { projects: Project[], loading: boo
                 <h3 className="text-lg font-medium text-gray-900">{project.name}</h3>
               </div>
               <p className="text-sm text-gray-600">{project.gitRepoUrl}</p>
-              <div className="mt-2">
-                <span className={`inline-flex px-2 py-1 capitalize text-xs font-semibold rounded ${
-                  project.status === 'DEPLOYED' ? 'bg-green-100 text-green-800' :
-                  project.status === 'FAILED' ? 'bg-red-100 text-red-800' :
-                  'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {project.status.toLowerCase()}
-                </span>
-              </div>
             </div>
             <div className="flex space-x-2">
               {project.domain && (

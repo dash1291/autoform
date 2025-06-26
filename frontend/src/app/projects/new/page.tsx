@@ -18,13 +18,14 @@ export default function NewProject() {
   const [formData, setFormData] = useState({
     name: '',
     gitRepoUrl: '',
-    branch: 'main',
-    subdirectory: '',
     teamId: '', // team is required
+    branch: 'main', // default branch
+    subdirectory: '',
     cpu: 256,
     memory: 512,
     diskSize: 21,
   })
+  const [projectCreated, setProjectCreated] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [validating, setValidating] = useState(false)
@@ -118,11 +119,12 @@ export default function NewProject() {
         }
       }
 
-      await apiClient.createProject({
-        ...formData,
+      const newProject = await apiClient.createProject({
+        name: formData.name,
+        gitRepoUrl: formData.gitRepoUrl,
         teamId: formData.teamId
       })
-      router.push('/dashboard')
+      setProjectCreated(newProject)
     } catch (err: any) {
       setError(err.message || 'Failed to create project')
     } finally {
@@ -145,6 +147,45 @@ export default function NewProject() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  // Show environment creation step after project is created
+  if (projectCreated) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">Project Created Successfully!</h1>
+            <p className="text-gray-600 mt-2">
+              Your project "{projectCreated.name}" has been created. Now let's set up your first environment.
+            </p>
+          </div>
+          <div className="bg-white shadow rounded-lg p-6">
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">Create Your First Environment</h2>
+              <p className="text-gray-600">
+                Environments allow you to deploy your application to different stages like production, staging, or development.
+              </p>
+            </div>
+            <div className="space-y-4">
+              <Button 
+                onClick={() => router.push(`/projects/${projectCreated.id}?tab=environments`)}
+                className="w-full"
+              >
+                Set Up Environment
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => router.push('/dashboard')}
+                className="w-full"
+              >
+                Skip for Now (Go to Dashboard)
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -280,32 +321,6 @@ export default function NewProject() {
             </div>
 
             <div>
-              <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-2">
-                Branch to Deploy
-              </label>
-              <Select
-                value={formData.branch}
-                onValueChange={(value) => setFormData({ ...formData, branch: value })}
-                disabled={!repoInfo || !repoInfo.branches}
-                required
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a branch" />
-                </SelectTrigger>
-                <SelectContent>
-                  {repoInfo && repoInfo.branches && repoInfo.branches.map((branch: string) => (
-                    <SelectItem key={branch} value={branch}>
-                      {branch} {branch === repoInfo.defaultBranch ? '(default)' : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-sm text-gray-500 mt-1">
-                {repoInfo ? 'Select which branch to deploy from this repository' : 'Save repository access first to see available branches'}
-              </p>
-            </div>
-
-            <div>
               <label htmlFor="subdirectory" className="block text-sm font-medium text-gray-700 mb-2">
                 Subdirectory (Optional)
               </label>
@@ -320,74 +335,6 @@ export default function NewProject() {
               <p className="text-sm text-gray-500 mt-1">
                 Specify a subdirectory if your application code is not in the repository root
               </p>
-            </div>
-
-            {/* Resource Configuration Section */}
-            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Resource Configuration</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label htmlFor="cpu" className="block text-sm font-medium text-gray-700 mb-2">
-                    CPU (units)
-                  </label>
-                  <Select
-                    value={formData.cpu.toString()}
-                    onValueChange={(value) => setFormData({ ...formData, cpu: parseInt(value) })}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="256">256 (0.25 vCPU)</SelectItem>
-                      <SelectItem value="512">512 (0.5 vCPU)</SelectItem>
-                      <SelectItem value="1024">1024 (1 vCPU)</SelectItem>
-                      <SelectItem value="2048">2048 (2 vCPU)</SelectItem>
-                      <SelectItem value="4096">4096 (4 vCPU)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-gray-500 mt-1">AWS Fargate CPU allocation</p>
-                </div>
-
-                <div>
-                  <label htmlFor="memory" className="block text-sm font-medium text-gray-700 mb-2">
-                    Memory (MB)
-                  </label>
-                  <Select
-                    value={formData.memory.toString()}
-                    onValueChange={(value) => setFormData({ ...formData, memory: parseInt(value) })}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="512">512 MB</SelectItem>
-                      <SelectItem value="1024">1 GB</SelectItem>
-                      <SelectItem value="2048">2 GB</SelectItem>
-                      <SelectItem value="4096">4 GB</SelectItem>
-                      <SelectItem value="8192">8 GB</SelectItem>
-                      <SelectItem value="16384">16 GB</SelectItem>
-                      <SelectItem value="30720">30 GB</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-gray-500 mt-1">Container memory limit</p>
-                </div>
-
-                <div>
-                  <label htmlFor="diskSize" className="block text-sm font-medium text-gray-700 mb-2">
-                    Disk Size (GB)
-                  </label>
-                  <input
-                    type="number"
-                    id="diskSize"
-                    min="21"
-                    max="200"
-                    value={formData.diskSize}
-                    onChange={(e) => setFormData({ ...formData, diskSize: parseInt(e.target.value) || 21 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Ephemeral storage (21-200 GB)</p>
-                </div>
-              </div>
             </div>
 
             {error && (

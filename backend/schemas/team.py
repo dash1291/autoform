@@ -20,7 +20,10 @@ class TeamMemberAdd(BaseModel):
             raise ValueError("GitHub username is required")
         # Basic GitHub username validation
         import re
-        if not re.match(r'^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$', v.strip()):
+
+        if not re.match(
+            r"^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$", v.strip()
+        ):
             raise ValueError("Invalid GitHub username format")
         return v.strip()
 
@@ -91,5 +94,3 @@ class Team(TeamBase):
     class Config:
         from_attributes = True
         populate_by_name = True
-
-

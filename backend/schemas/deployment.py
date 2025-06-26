@@ -16,6 +16,7 @@ class DeploymentStatus(str, Enum):
 
 class DeploymentBase(BaseModel):
     project_id: str = Field(alias="projectId")
+    environment_id: Optional[str] = Field(None, alias="environmentId")
     image_tag: str = Field(alias="imageTag")
     commit_sha: str = Field(alias="commitSha")
 

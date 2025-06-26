@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { apiClient } from '@/lib/api'
 
 interface SimpleShellProps {
-  projectId: string
+  environmentId: string
   isActive?: boolean
 }
 
@@ -26,7 +26,7 @@ interface ShellCommand {
   timestamp: Date
 }
 
-export default function SimpleShell({ projectId, isActive = false }: SimpleShellProps) {
+export default function SimpleShell({ environmentId, isActive = false }: SimpleShellProps) {
   const [execStatus, setExecStatus] = useState<ExecStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -42,7 +42,7 @@ export default function SimpleShell({ projectId, isActive = false }: SimpleShell
       const interval = setInterval(checkExecAvailability, 15000)
       return () => clearInterval(interval)
     }
-  }, [projectId, isActive])
+  }, [environmentId, isActive])
 
   // Auto-generate shell command when tab becomes active and exec is available
   useEffect(() => {
@@ -57,12 +57,12 @@ export default function SimpleShell({ projectId, isActive = false }: SimpleShell
 
   const checkExecAvailability = async () => {
     try {
-      const data = await apiClient.checkExecAvailability(projectId)
-      setExecStatus(data)
+      const data = await apiClient.checkEnvironmentExecAvailability(environmentId)
+      setExecStatus(data as ExecStatus)
       setError('') // Clear any previous errors
       
       // Reset retry count on successful check
-      if (data.available) {
+      if ((data as ExecStatus).available) {
         setRetryCount(0)
       }
     } catch (err) {
@@ -90,7 +90,7 @@ export default function SimpleShell({ projectId, isActive = false }: SimpleShell
       // If missing required fields, fetch fresh data
       if (!data.clusterArn || !data.taskArn || !data.containerName) {
         console.log('Fetching fresh exec data due to missing fields')
-        data = await apiClient.checkExecAvailability(projectId)
+        data = await apiClient.checkEnvironmentExecAvailability(environmentId) as ExecStatus
         setExecStatus(data)
       }
       
@@ -138,13 +138,6 @@ export default function SimpleShell({ projectId, isActive = false }: SimpleShell
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Container Shell Access</h2>
-        <p className="text-gray-600 mb-4">
-          Get the AWS CLI command to access a shell in your running container.
-        </p>
-      </div>
-
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-md p-4">
           <div className="flex">

@@ -7,7 +7,16 @@ import pytest_asyncio
 import boto3
 from typing import Dict, Any
 import asyncio
-from moto import mock_sts, mock_ec2, mock_ecs, mock_iam, mock_elbv2, mock_logs, mock_s3, mock_ecr
+from moto import (
+    mock_sts,
+    mock_ec2,
+    mock_ecs,
+    mock_iam,
+    mock_elbv2,
+    mock_logs,
+    mock_s3,
+    mock_ecr,
+)
 
 # Configure LocalStack endpoints if available, otherwise use moto
 LOCALSTACK_ENDPOINT = os.getenv("LOCALSTACK_ENDPOINT", "http://localhost:4566")
@@ -22,7 +31,7 @@ def get_aws_client(service_name: str, region: str = "us-east-1"):
             endpoint_url=LOCALSTACK_ENDPOINT,
             region_name=region,
             aws_access_key_id="test",
-            aws_secret_access_key="test"
+            aws_secret_access_key="test",
         )
     else:
         # For moto, return standard client (moto will mock it)
@@ -40,10 +49,7 @@ def event_loop():
 @pytest.fixture
 def aws_credentials():
     """Test AWS credentials"""
-    return {
-        "access_key": "test-access-key",
-        "secret_key": "test-secret-key"
-    }
+    return {"access_key": "test-access-key", "secret_key": "test-secret-key"}
 
 
 @pytest.fixture
@@ -65,14 +71,14 @@ def mock_aws_services():
             mock_elbv2(),
             mock_logs(),
             mock_s3(),
-            mock_ecr()
+            mock_ecr(),
         ]
-        
+
         for mock in mocks:
             mock.start()
-        
+
         yield
-        
+
         for mock in mocks:
             mock.stop()
     else:
@@ -123,16 +129,16 @@ def test_project_config():
         "health_check_path": "/health",
         "environment_variables": [
             {"key": "NODE_ENV", "value": "production"},
-            {"key": "PORT", "value": "3000"}
-        ]
+            {"key": "PORT", "value": "3000"},
+        ],
     }
 
 
 @pytest.fixture
 def test_deployment_config(test_project_config):
-    """Test deployment configuration"""
+    """Test deployment configuration (legacy - without environment)"""
     from services.deployment import DeploymentConfig
-    
+
     return DeploymentConfig(
         project_id=test_project_config["project_id"],
         project_name=test_project_config["project_name"],
@@ -143,5 +149,45 @@ def test_deployment_config(test_project_config):
         port=test_project_config["port"],
         cpu=test_project_config["cpu"],
         memory=test_project_config["memory"],
-        disk_size=test_project_config["disk_size"]
+        disk_size=test_project_config["disk_size"],
+    )
+
+
+@pytest.fixture
+def test_environment_config():
+    """Test environment configuration"""
+    return {
+        "environment_id": "env-test-123",
+        "environment_name": "production",
+        "branch": "main",
+        "existing_vpc_id": "vpc-test-123",
+        "existing_subnet_ids": ["subnet-test-1", "subnet-test-2"],
+        "existing_cluster_arn": "arn:aws:ecs:us-east-1:123456789:cluster/test-cluster",
+        "cpu": 512,
+        "memory": 1024,
+        "disk_size": 30,
+        "port": 8080,
+        "health_check_path": "/api/health",
+        "subdirectory": "backend"
+    }
+
+
+@pytest.fixture
+def test_environment_deployment_config(test_project_config, test_environment_config):
+    """Test deployment configuration with environment"""
+    from services.deployment import DeploymentConfig
+
+    return DeploymentConfig(
+        project_id=test_project_config["project_id"],
+        project_name=f"{test_project_config['project_name']}-{test_environment_config['environment_name']}",
+        git_repo_url="https://github.com/test/repo.git",
+        branch=test_environment_config["branch"],
+        commit_sha="abc123def456",
+        environment_id=test_environment_config["environment_id"],
+        subdirectory=test_environment_config["subdirectory"],
+        health_check_path=test_environment_config["health_check_path"],
+        port=test_environment_config["port"],
+        cpu=test_environment_config["cpu"],
+        memory=test_environment_config["memory"],
+        disk_size=test_environment_config["disk_size"],
     )

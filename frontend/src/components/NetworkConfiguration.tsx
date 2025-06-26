@@ -8,11 +8,42 @@ import { apiClient } from '@/lib/api'
 
 interface NetworkConfigurationProps {
   projectId: string
+  environmentId?: string
   project: any
   onUpdate: () => void
 }
 
-export default function NetworkConfiguration({ projectId, project, onUpdate }: NetworkConfigurationProps) {
+export default function NetworkConfiguration({ projectId, environmentId, project, onUpdate }: NetworkConfigurationProps) {
+  // If environmentId is provided, we need to load and configure that environment's network settings
+  const [environment, setEnvironment] = useState<any>(null)
+  const [loadingEnv, setLoadingEnv] = useState(false)
+
+  useEffect(() => {
+    if (environmentId) {
+      fetchEnvironment()
+    }
+  }, [environmentId])
+
+  const fetchEnvironment = async () => {
+    if (!environmentId) return
+    setLoadingEnv(true)
+    try {
+      const envData = await apiClient.getEnvironment(environmentId)
+      setEnvironment(envData)
+      const subnets = envData.existingSubnetIds ? JSON.parse(envData.existingSubnetIds) : []
+      setFormData({
+        existingVpcId: envData.existingVpcId || '',
+        existingSubnetIds: subnets.join(','),
+        existingClusterArn: envData.existingClusterArn || ''
+      })
+      setSelectedSubnets(subnets)
+    } catch (error) {
+      console.error('Failed to fetch environment:', error)
+    } finally {
+      setLoadingEnv(false)
+    }
+  }
+
   const isDeployed = project?.status === 'DEPLOYED' || project?.ecsServiceArn || project?.albArn
   const isReadOnly = isDeployed
   const [loading, setLoading] = useState(false)
@@ -80,7 +111,7 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
     e.preventDefault()
     
     if (isReadOnly) {
-      setError('Network configuration cannot be changed for deployed projects')
+      setError('Network configuration cannot be changed for deployed projects/environments')
       return
     }
     
@@ -91,16 +122,24 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
     try {
       const payload = {
         existingVpcId: formData.existingVpcId || null,
-        existingSubnetIds: selectedSubnets.length > 0 ? selectedSubnets : null,
+        existingSubnetIds: selectedSubnets.length > 0 ? JSON.stringify(selectedSubnets) : null,
         existingClusterArn: formData.existingClusterArn || null
       }
 
-      await apiClient.updateProject(projectId, payload)
-      setSuccess('Network configuration updated successfully!')
+      if (environmentId) {
+        // Update environment network settings
+        await apiClient.updateEnvironment(environmentId, payload)
+        setSuccess('Environment network configuration updated successfully!')
+        await fetchEnvironment() // Refresh environment data
+      } else {
+        // Update project network settings (legacy)
+        await apiClient.updateProject(projectId, payload)
+        setSuccess('Network configuration updated successfully!')
+      }
       onUpdate()
       setTimeout(() => setSuccess(''), 3000)
-    } catch (err) {
-      setError('Failed to update network configuration')
+    } catch (err: any) {
+      setError(err.message || 'Failed to update network configuration')
     } finally {
       setLoading(false)
     }
@@ -117,7 +156,8 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
 
 
   const handleVpcChange = (vpcId: string) => {
-    setFormData({ ...formData, existingVpcId: vpcId })
+    const actualVpcId = vpcId === "create-new" ? "" : vpcId
+    setFormData({ ...formData, existingVpcId: actualVpcId })
     setSelectedSubnets([])
   }
 
@@ -196,12 +236,12 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
                 Loading VPCs...
               </div>
             ) : (
-              <Select value={formData.existingVpcId} onValueChange={handleVpcChange}>
+              <Select value={formData.existingVpcId || "create-new"} onValueChange={handleVpcChange}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Create new VPC" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Create new VPC</SelectItem>
+                  <SelectItem value="create-new">Create new VPC</SelectItem>
                   {awsResources?.vpcs?.map((vpc: any) => (
                     <SelectItem key={vpc.id} value={vpc.id}>
                       {vpc.name} ({vpc.cidrBlock}){vpc.isDefault ? ' - Default' : ''}
@@ -328,14 +368,17 @@ export default function NetworkConfiguration({ projectId, project, onUpdate }: N
               </div>
             ) : (
               <Select 
-                value={formData.existingClusterArn} 
-                onValueChange={(value) => setFormData({ ...formData, existingClusterArn: value })}
+                value={formData.existingClusterArn || "create-new"} 
+                onValueChange={(value) => {
+                  const actualValue = value === "create-new" ? "" : value
+                  setFormData({ ...formData, existingClusterArn: actualValue })
+                }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Create new ECS cluster" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Create new ECS cluster</SelectItem>
+                  <SelectItem value="create-new">Create new ECS cluster</SelectItem>
                   {awsResources?.clusters?.map((cluster: any) => (
                     <SelectItem key={cluster.arn} value={cluster.arn}>
                       {cluster.name} ({cluster.runningTasksCount} running, {cluster.activeServicesCount} services)

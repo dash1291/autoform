@@ -10,77 +10,88 @@ logger = logging.getLogger(__name__)
 
 class CloudWatchLogsService:
     """Service for fetching logs from AWS CloudWatch"""
-    
+
     def __init__(self, region_name: str = None, aws_credentials: dict = None):
         if region_name is None:
-            region_name = os.getenv('AWS_REGION', 'us-east-1')
-        
+            region_name = os.getenv("AWS_REGION", "us-east-1")
+
         self.region_name = region_name
         self.aws_credentials = aws_credentials
-        
+
         try:
             logger.info(f"Initializing AWS clients for region: {region_name}")
-            
+
             # Initialize AWS clients with custom credentials if provided
             client_config = {"region_name": region_name}
             if aws_credentials:
-                client_config.update({
-                    "aws_access_key_id": aws_credentials["access_key"],
-                    "aws_secret_access_key": aws_credentials["secret_key"]
-                })
+                client_config.update(
+                    {
+                        "aws_access_key_id": aws_credentials["access_key"],
+                        "aws_secret_access_key": aws_credentials["secret_key"],
+                    }
+                )
                 logger.info("Using custom AWS credentials for CloudWatch service")
-            
+
             # Create session to check credentials
             if aws_credentials:
                 session = boto3.Session(
                     aws_access_key_id=aws_credentials["access_key"],
                     aws_secret_access_key=aws_credentials["secret_key"],
-                    region_name=region_name
+                    region_name=region_name,
                 )
             else:
                 session = boto3.Session()
-            
+
             # Get credentials info for debugging (without exposing secrets)
             credentials = session.get_credentials()
             if credentials:
-                logger.info(f"AWS credentials found - Access Key ID starts with: {credentials.access_key[:10]}...")
+                logger.info(
+                    f"AWS credentials found - Access Key ID starts with: {credentials.access_key[:10]}..."
+                )
                 logger.info(f"Using AWS region: {region_name}")
             else:
                 logger.warning("No AWS credentials found!")
+
+            # Use LocalStack-aware client creation
+            from utils.aws_client import create_client
             
-            self.logs_client = boto3.client('logs', **client_config)
-            self.ecs_client = boto3.client('ecs', **client_config)
-            
+            self.logs_client = create_client("logs", region_name, aws_credentials)
+            self.ecs_client = create_client("ecs", region_name, aws_credentials)
+
             # Test credentials by making a simple API call
             try:
-                sts_client = boto3.client('sts', **client_config)
+                sts_client = create_client("sts", region_name, aws_credentials)
                 identity = sts_client.get_caller_identity()
-                logger.info(f"AWS identity confirmed - Account: {identity.get('Account')}, User/Role: {identity.get('Arn', 'unknown')}")
+                logger.info(
+                    f"AWS identity confirmed - Account: {identity.get('Account')}, User/Role: {identity.get('Arn', 'unknown')}"
+                )
             except Exception as e:
                 logger.warning(f"Failed to verify AWS identity: {str(e)}")
-            
+
             logger.info("AWS clients initialized successfully")
         except (NoCredentialsError, Exception) as e:
-            logger.warning(f"AWS client initialization failed: {str(e)} - CloudWatch logs will be unavailable")
+            logger.warning(
+                f"AWS client initialization failed: {str(e)} - CloudWatch logs will be unavailable"
+            )
             self.logs_client = None
             self.ecs_client = None
-    
+
     async def get_project_logs(
-        self, 
-        project_name: str, 
+        self,
+        project_name: str,
         limit: int = 100,
         start_time: Optional[datetime] = None,
-        hours_back: int = 24
+        hours_back: int = 24,
     ) -> Dict[str, Any]:
         """
         Fetch logs for a project from CloudWatch
-        
+
         Args:
             project_name: Name of the project/ECS service
             limit: Maximum number of log entries to return
             start_time: Start time for log search (if not provided, uses hours_back)
             hours_back: How many hours back to search for logs (default 24)
-            
+
         Returns:
             Dictionary containing logs and metadata
         """
@@ -89,128 +100,142 @@ class CloudWatchLogsService:
                 "logs": [],
                 "message": "AWS credentials not configured",
                 "logGroupName": None,
-                "totalStreams": 0
+                "totalStreams": 0,
             }
-        
+
         # We'll fetch the most recent logs regardless of age to match UI expectations
-        
+
         log_group_name = f"/ecs/{project_name}"
-        
+
         try:
             # First, check if the log group exists
             logger.info(f"Searching for log group: {log_group_name}")
             try:
                 response = self.logs_client.describe_log_groups(
                     logGroupNamePrefix=log_group_name,
-                    limit=10  # Get more groups to see what exists
+                    limit=10,  # Get more groups to see what exists
                 )
-                log_groups = response.get('logGroups', [])
-                logger.info(f"Found {len(log_groups)} log groups with prefix {log_group_name}")
+                log_groups = response.get("logGroups", [])
+                logger.info(
+                    f"Found {len(log_groups)} log groups with prefix {log_group_name}"
+                )
                 for lg in log_groups:
                     logger.info(f"  - {lg['logGroupName']}")
-                
+
                 # Check if our exact log group exists
-                exact_match = any(lg['logGroupName'] == log_group_name for lg in log_groups)
+                exact_match = any(
+                    lg["logGroupName"] == log_group_name for lg in log_groups
+                )
                 if not exact_match:
                     # List all ECS log groups to help debug
                     all_ecs_response = self.logs_client.describe_log_groups(
-                        logGroupNamePrefix="/ecs/",
-                        limit=50
+                        logGroupNamePrefix="/ecs/", limit=50
                     )
-                    all_ecs_groups = [lg['logGroupName'] for lg in all_ecs_response.get('logGroups', [])]
+                    all_ecs_groups = [
+                        lg["logGroupName"]
+                        for lg in all_ecs_response.get("logGroups", [])
+                    ]
                     logger.info(f"All ECS log groups found: {all_ecs_groups}")
-                    
+
                     return {
                         "logs": [],
                         "message": f"Log group '{log_group_name}' not found. Available ECS log groups: {', '.join(all_ecs_groups) if all_ecs_groups else 'None'}",
                         "logGroupName": log_group_name,
-                        "totalStreams": 0
+                        "totalStreams": 0,
                     }
             except ClientError as e:
-                logger.error(f"Error checking log groups: {e.response['Error']['Code']} - {e.response['Error']['Message']}")
-                if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                logger.error(
+                    f"Error checking log groups: {e.response['Error']['Code']} - {e.response['Error']['Message']}"
+                )
+                if e.response["Error"]["Code"] == "ResourceNotFoundException":
                     return {
                         "logs": [],
                         "message": f"No log group found for project '{project_name}'. Make sure the project is deployed and has generated logs.",
                         "logGroupName": log_group_name,
-                        "totalStreams": 0
+                        "totalStreams": 0,
                     }
                 raise
-            
+
             # Get log streams for this log group - force fresh data
             # First, get all streams to ensure we have the latest
             all_streams = []
             next_token = None
-            
+
             while True:
                 params = {
-                    'logGroupName': log_group_name,
-                    'orderBy': 'LastEventTime',
-                    'descending': True,
-                    'limit': 50
+                    "logGroupName": log_group_name,
+                    "orderBy": "LastEventTime",
+                    "descending": True,
+                    "limit": 50,
                 }
                 if next_token:
-                    params['nextToken'] = next_token
-                    
+                    params["nextToken"] = next_token
+
                 streams_response = self.logs_client.describe_log_streams(**params)
-                all_streams.extend(streams_response.get('logStreams', []))
-                
-                next_token = streams_response.get('nextToken')
+                all_streams.extend(streams_response.get("logStreams", []))
+
+                next_token = streams_response.get("nextToken")
                 if not next_token or len(all_streams) >= 50:
                     break
-            
+
             log_streams = all_streams[:10]  # Use top 10 most recent streams
-            logger.info(f"Found {len(log_streams)} total log streams, using top 10 most recent")
-            
+            logger.info(
+                f"Found {len(log_streams)} total log streams, using top 10 most recent"
+            )
+
             if not log_streams:
                 return {
                     "logs": [],
                     "message": f"No log streams found in log group '{log_group_name}'",
                     "logGroupName": log_group_name,
-                    "totalStreams": 0
+                    "totalStreams": 0,
                 }
-            
+
             # Log detailed info about the streams
             for i, stream in enumerate(log_streams[:3]):  # Log first 3 streams
-                last_event_time = stream.get('lastEventTime')
+                last_event_time = stream.get("lastEventTime")
                 if last_event_time:
                     last_event_dt = datetime.fromtimestamp(last_event_time / 1000)
                     logger.info(f"Stream {i+1}: {stream['logStreamName']}")
                     logger.info(f"  Last event: {last_event_dt} ({last_event_time})")
-                    logger.info(f"  First event: {stream.get('firstEventTime', 'unknown')}")
+                    logger.info(
+                        f"  First event: {stream.get('firstEventTime', 'unknown')}"
+                    )
                     logger.info(f"  Stored bytes: {stream.get('storedBytes', 0)}")
                 else:
                     logger.info(f"Stream {i+1}: {stream['logStreamName']} - No events")
-            
+
             # Collect log stream names
-            stream_names = [stream['logStreamName'] for stream in log_streams]
-            
+            stream_names = [stream["logStreamName"] for stream in log_streams]
+
             # Try two approaches: filter_log_events and direct stream reading
             logger.info(f"Fetching last {limit} log events from {log_group_name}")
-            
+
             all_events = []
-            
+
             # Approach 1: Use filter_log_events without stream names to get ALL recent logs
             try:
                 # Get logs from the specified time period
                 end_time = datetime.utcnow()
                 if start_time is None:
                     start_time = end_time - timedelta(hours=hours_back)
-                
+
                 # Don't specify stream names to search across ALL streams
                 events_response = self.logs_client.filter_log_events(
                     logGroupName=log_group_name,
                     startTime=int(start_time.timestamp() * 1000),
                     endTime=int(end_time.timestamp() * 1000),
                     limit=limit * 2,
-                    interleaved=True  # Interleave results from all streams
+                    interleaved=True,  # Interleave results from all streams
                 )
-                filter_events = events_response.get('events', [])
-                logger.info(f"filter_log_events returned {len(filter_events)} events from last {hours_back} hours")
+                filter_events = events_response.get("events", [])
+                logger.info(
+                    f"filter_log_events returned {len(filter_events)} events from last {hours_back} hours"
+                )
                 all_events.extend(filter_events)
             except Exception as e:
                 logger.warning(f"filter_log_events failed: {str(e)}")
-            
+
             # Approach 2: If filter_log_events didn't work, try reading from individual streams
             if not all_events and log_streams:
                 logger.info("Trying to read from individual log streams...")
@@ -218,88 +243,100 @@ class CloudWatchLogsService:
                     try:
                         stream_response = self.logs_client.get_log_events(
                             logGroupName=log_group_name,
-                            logStreamName=stream['logStreamName'],
+                            logStreamName=stream["logStreamName"],
                             startFromHead=False,  # Start from the end (most recent)
-                            limit=min(50, limit)  # Get up to 50 events per stream
+                            limit=min(50, limit),  # Get up to 50 events per stream
                         )
-                        stream_events = stream_response.get('events', [])
-                        logger.info(f"Stream {stream['logStreamName']} returned {len(stream_events)} events")
+                        stream_events = stream_response.get("events", [])
+                        logger.info(
+                            f"Stream {stream['logStreamName']} returned {len(stream_events)} events"
+                        )
                         all_events.extend(stream_events)
-                        
+
                         if len(all_events) >= limit:
                             break  # We have enough events
                     except Exception as e:
-                        logger.warning(f"Failed to read from stream {stream['logStreamName']}: {str(e)}")
-            
+                        logger.warning(
+                            f"Failed to read from stream {stream['logStreamName']}: {str(e)}"
+                        )
+
             logger.info(f"Total events collected: {len(all_events)}")
-            
+
             # Format the log events for frontend consumption
             logs = []
             for event in all_events:
-                logs.append({
-                    "timestamp": event.get('timestamp', 0),
-                    "message": event.get('message', ''),
-                    "logStreamName": event.get('logStreamName', 'unknown'),
-                    "formattedTime": datetime.fromtimestamp(
-                        event.get('timestamp', 0) / 1000
-                    ).strftime('%Y-%m-%d %H:%M:%S')
-                })
-            
+                logs.append(
+                    {
+                        "timestamp": event.get("timestamp", 0),
+                        "message": event.get("message", ""),
+                        "logStreamName": event.get("logStreamName", "unknown"),
+                        "formattedTime": datetime.fromtimestamp(
+                            event.get("timestamp", 0) / 1000
+                        ).strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                )
+
             # Sort by timestamp (most recent first) and limit to requested amount
-            logs.sort(key=lambda x: x['timestamp'], reverse=True)
+            logs.sort(key=lambda x: x["timestamp"], reverse=True)
             logs = logs[:limit]  # Take only the most recent 'limit' entries
-            
+
             # Log the time range of returned logs for debugging
             if logs:
-                oldest_time = datetime.fromtimestamp(logs[-1]['timestamp'] / 1000)
-                newest_time = datetime.fromtimestamp(logs[0]['timestamp'] / 1000)
-                logger.info(f"Returning {len(logs)} logs from {oldest_time} to {newest_time}")
-            
+                oldest_time = datetime.fromtimestamp(logs[-1]["timestamp"] / 1000)
+                newest_time = datetime.fromtimestamp(logs[0]["timestamp"] / 1000)
+                logger.info(
+                    f"Returning {len(logs)} logs from {oldest_time} to {newest_time}"
+                )
+
             return {
                 "logs": logs,
                 "logGroupName": log_group_name,
                 "totalStreams": len(log_streams),
-                "message": None if logs else "No log entries found in this log group"
+                "message": None if logs else "No log entries found in this log group",
             }
-            
+
         except ClientError as e:
-            error_code = e.response['Error']['Code']
-            error_message = e.response['Error']['Message']
-            
-            logger.error(f"Error fetching CloudWatch logs: {error_code} - {error_message}")
-            
-            if error_code == 'AccessDeniedException':
+            error_code = e.response["Error"]["Code"]
+            error_message = e.response["Error"]["Message"]
+
+            logger.error(
+                f"Error fetching CloudWatch logs: {error_code} - {error_message}"
+            )
+
+            if error_code == "AccessDeniedException":
                 return {
                     "logs": [],
                     "message": "Access denied to CloudWatch logs. Check AWS permissions.",
                     "logGroupName": log_group_name,
-                    "totalStreams": 0
+                    "totalStreams": 0,
                 }
             else:
                 return {
                     "logs": [],
                     "message": f"Error fetching logs: {error_message}",
                     "logGroupName": log_group_name,
-                    "totalStreams": 0
+                    "totalStreams": 0,
                 }
-        
+
         except Exception as e:
             logger.error(f"Unexpected error fetching CloudWatch logs: {str(e)}")
             return {
                 "logs": [],
                 "message": f"Unexpected error: {str(e)}",
                 "logGroupName": log_group_name,
-                "totalStreams": 0
+                "totalStreams": 0,
             }
-    
-    async def get_codebuild_logs(self, project_name: str, limit: int = 100) -> Dict[str, Any]:
+
+    async def get_codebuild_logs(
+        self, project_name: str, limit: int = 100
+    ) -> Dict[str, Any]:
         """
         Get CodeBuild logs for a project
-        
+
         Args:
             project_name: Name of the project
             limit: Maximum number of log entries to return
-            
+
         Returns:
             Dictionary containing CodeBuild logs and metadata
         """
@@ -308,42 +345,41 @@ class CloudWatchLogsService:
                 "logs": [],
                 "message": "AWS credentials not configured",
                 "logGroupName": None,
-                "totalStreams": 0
+                "totalStreams": 0,
             }
-        
+
         # CodeBuild log groups typically follow patterns like:
         # /aws/codebuild/{project-name} or /aws/codebuild/{project-name}-build
         codebuild_patterns = [
             f"/aws/codebuild/{project_name}",
             f"/aws/codebuild/{project_name}-build",
             f"/aws/codebuild/autoform-{project_name}",
-            f"/aws/codebuild/autoform-{project_name}-build"
+            f"/aws/codebuild/autoform-{project_name}-build",
         ]
-        
+
         for pattern in codebuild_patterns:
             try:
                 logger.info(f"Searching for CodeBuild log group: {pattern}")
                 response = self.logs_client.describe_log_groups(
-                    logGroupNamePrefix=pattern,
-                    limit=10
+                    logGroupNamePrefix=pattern, limit=10
                 )
-                
-                log_groups = response.get('logGroups', [])
+
+                log_groups = response.get("logGroups", [])
                 if log_groups:
-                    log_group_name = log_groups[0]['logGroupName']
+                    log_group_name = log_groups[0]["logGroupName"]
                     logger.info(f"Found CodeBuild log group: {log_group_name}")
-                    
+
                     # Get log streams
                     streams_response = self.logs_client.describe_log_streams(
                         logGroupName=log_group_name,
-                        orderBy='LastEventTime',
+                        orderBy="LastEventTime",
                         descending=True,
-                        limit=10
+                        limit=10,
                     )
-                    
-                    log_streams = streams_response.get('logStreams', [])
+
+                    log_streams = streams_response.get("logStreams", [])
                     logger.info(f"Found {len(log_streams)} CodeBuild log streams")
-                    
+
                     if log_streams:
                         # Get events from the most recent streams
                         all_events = []
@@ -351,108 +387,258 @@ class CloudWatchLogsService:
                             try:
                                 stream_response = self.logs_client.get_log_events(
                                     logGroupName=log_group_name,
-                                    logStreamName=stream['logStreamName'],
+                                    logStreamName=stream["logStreamName"],
                                     startFromHead=False,
-                                    limit=min(100, limit)
+                                    limit=min(100, limit),
                                 )
-                                stream_events = stream_response.get('events', [])
+                                stream_events = stream_response.get("events", [])
                                 all_events.extend(stream_events)
                             except Exception as e:
-                                logger.warning(f"Failed to read CodeBuild stream {stream['logStreamName']}: {str(e)}")
-                        
+                                logger.warning(
+                                    f"Failed to read CodeBuild stream {stream['logStreamName']}: {str(e)}"
+                                )
+
                         # Format events
                         logs = []
                         for event in all_events:
-                            logs.append({
-                                "timestamp": event.get('timestamp', 0),
-                                "message": event.get('message', ''),
-                                "logStreamName": event.get('logStreamName', 'unknown'),
-                                "formattedTime": datetime.fromtimestamp(
-                                    event.get('timestamp', 0) / 1000
-                                ).strftime('%Y-%m-%d %H:%M:%S')
-                            })
-                        
+                            logs.append(
+                                {
+                                    "timestamp": event.get("timestamp", 0),
+                                    "message": event.get("message", ""),
+                                    "logStreamName": event.get(
+                                        "logStreamName", "unknown"
+                                    ),
+                                    "formattedTime": datetime.fromtimestamp(
+                                        event.get("timestamp", 0) / 1000
+                                    ).strftime("%Y-%m-%d %H:%M:%S"),
+                                }
+                            )
+
                         # Sort by timestamp (most recent first)
-                        logs.sort(key=lambda x: x['timestamp'], reverse=True)
+                        logs.sort(key=lambda x: x["timestamp"], reverse=True)
                         logs = logs[:limit]
-                        
+
                         return {
                             "logs": logs,
                             "logGroupName": log_group_name,
                             "totalStreams": len(log_streams),
-                            "message": None if logs else "No CodeBuild log entries found"
+                            "message": None
+                            if logs
+                            else "No CodeBuild log entries found",
                         }
-            
+
             except ClientError as e:
-                logger.debug(f"CodeBuild log group {pattern} not found: {e.response['Error']['Code']}")
+                logger.debug(
+                    f"CodeBuild log group {pattern} not found: {e.response['Error']['Code']}"
+                )
                 continue
-        
+
         # If no CodeBuild logs found, list all CodeBuild log groups
         try:
             all_codebuild_response = self.logs_client.describe_log_groups(
-                logGroupNamePrefix="/aws/codebuild/",
-                limit=50
+                logGroupNamePrefix="/aws/codebuild/", limit=50
             )
-            all_codebuild_groups = [lg['logGroupName'] for lg in all_codebuild_response.get('logGroups', [])]
+            all_codebuild_groups = [
+                lg["logGroupName"] for lg in all_codebuild_response.get("logGroups", [])
+            ]
             logger.info(f"All CodeBuild log groups: {all_codebuild_groups}")
-            
+
             return {
                 "logs": [],
                 "message": f"No CodeBuild logs found for project '{project_name}'. Available CodeBuild log groups: {', '.join(all_codebuild_groups) if all_codebuild_groups else 'None'}",
                 "logGroupName": None,
-                "totalStreams": 0
+                "totalStreams": 0,
             }
         except Exception as e:
             return {
                 "logs": [],
                 "message": f"Error searching for CodeBuild logs: {str(e)}",
                 "logGroupName": None,
-                "totalStreams": 0
+                "totalStreams": 0,
             }
 
     async def get_log_group_info(self, project_name: str) -> Dict[str, Any]:
         """
         Get information about the log group for a project
-        
+
         Args:
             project_name: Name of the project
-            
+
         Returns:
             Dictionary with log group information
         """
         if not self.logs_client:
             return {"exists": False, "message": "AWS credentials not configured"}
-        
+
         log_group_name = f"/ecs/{project_name}"
-        
+
         try:
             response = self.logs_client.describe_log_groups(
-                logGroupNamePrefix=log_group_name,
-                limit=1
+                logGroupNamePrefix=log_group_name, limit=1
             )
-            
-            log_groups = response.get('logGroups', [])
-            
+
+            log_groups = response.get("logGroups", [])
+
             if log_groups:
                 log_group = log_groups[0]
                 return {
                     "exists": True,
-                    "name": log_group['logGroupName'],
-                    "creationTime": log_group.get('creationTime'),
-                    "retentionInDays": log_group.get('retentionInDays'),
-                    "storedBytes": log_group.get('storedBytes', 0)
+                    "name": log_group["logGroupName"],
+                    "creationTime": log_group.get("creationTime"),
+                    "retentionInDays": log_group.get("retentionInDays"),
+                    "storedBytes": log_group.get("storedBytes", 0),
                 }
             else:
                 return {
                     "exists": False,
-                    "message": f"Log group '{log_group_name}' does not exist"
+                    "message": f"Log group '{log_group_name}' does not exist",
                 }
-                
+
         except ClientError as e:
             logger.error(f"Error checking log group: {str(e)}")
             return {
                 "exists": False,
-                "message": f"Error checking log group: {e.response['Error']['Message']}"
+                "message": f"Error checking log group: {e.response['Error']['Message']}",
+            }
+
+    async def get_environment_logs(
+        self, project_name: str, environment_name: str, limit: int = 100, hours_back: int = 1
+    ):
+        """Get logs from CloudWatch for a specific environment"""
+        log_group_name = f"/ecs/{project_name}-{environment_name}"
+        
+        logger.info(f"Fetching logs from log group: {log_group_name}")
+        
+        try:
+            from datetime import datetime, timedelta
+            from botocore.exceptions import ClientError
+
+            # Calculate time range
+            end_time = datetime.now()
+            start_time = end_time - timedelta(hours=hours_back)
+
+            start_timestamp = int(start_time.timestamp() * 1000)
+            end_timestamp = int(end_time.timestamp() * 1000)
+
+            logger.info(
+                f"Querying logs from {start_time.isoformat()} to {end_time.isoformat()}"
+            )
+
+            # Check if log group exists first
+            try:
+                self.logs_client.describe_log_groups(
+                    logGroupNamePrefix=log_group_name, limit=1
+                )
+            except ClientError as e:
+                if e.response["Error"]["Code"] == "ResourceNotFoundException":
+                    return {
+                        "logs": [],
+                        "message": f"No log group found for environment '{environment_name}' in project '{project_name}'. Make sure the environment is deployed and has generated logs.",
+                        "logGroupName": log_group_name,
+                        "totalStreams": 0,
+                    }
+                raise
+
+            # Get log streams for this log group
+            all_streams = []
+            next_token = None
+
+            while True:
+                params = {
+                    "logGroupName": log_group_name,
+                    "orderBy": "LastEventTime",
+                    "descending": True,
+                    "limit": 50,
+                }
+                if next_token:
+                    params["nextToken"] = next_token
+
+                streams_response = self.logs_client.describe_log_streams(**params)
+                all_streams.extend(streams_response.get("logStreams", []))
+
+                next_token = streams_response.get("nextToken")
+                if not next_token or len(all_streams) >= 50:
+                    break
+
+            log_streams = all_streams[:10]  # Use top 10 most recent streams
+            logger.info(
+                f"Found {len(log_streams)} total log streams, using top 10 most recent"
+            )
+
+            if not log_streams:
+                return {
+                    "logs": [],
+                    "message": f"No log streams found in log group '{log_group_name}'",
+                    "logGroupName": log_group_name,
+                    "totalStreams": 0,
+                }
+
+            # Get log events from all streams within time range
+            all_log_events = []
+
+            for stream in log_streams:
+                stream_name = stream["logStreamName"]
+                logger.info(f"Fetching logs from stream: {stream_name}")
+
+                try:
+                    events_response = self.logs_client.get_log_events(
+                        logGroupName=log_group_name,
+                        logStreamName=stream_name,
+                        startTime=start_timestamp,
+                        endTime=end_timestamp,
+                        limit=limit // len(log_streams),  # Distribute limit across streams
+                    )
+
+                    stream_events = events_response.get("events", [])
+                    
+                    # Add stream name to each event for context
+                    for event in stream_events:
+                        event["streamName"] = stream_name
+                        all_log_events.append(event)
+                        
+                    logger.info(f"Retrieved {len(stream_events)} events from stream {stream_name}")
+
+                except ClientError as stream_error:
+                    logger.warning(f"Error reading from stream {stream_name}: {stream_error}")
+                    continue
+
+            # Sort all events by timestamp (most recent first)
+            all_log_events.sort(key=lambda x: x["timestamp"], reverse=True)
+
+            # Limit to requested number of events
+            limited_events = all_log_events[:limit]
+
+            logger.info(f"Total events retrieved: {len(limited_events)}")
+
+            return {
+                "logs": [
+                    {
+                        "timestamp": event["timestamp"],
+                        "message": event["message"],
+                        "streamName": event.get("streamName", "unknown"),
+                    }
+                    for event in limited_events
+                ],
+                "logGroupName": log_group_name,
+                "totalStreams": len(log_streams),
+                "message": f"Retrieved {len(limited_events)} log entries from the last {hours_back} hour(s)",
+            }
+
+        except ClientError as e:
+            logger.error(f"Error fetching environment logs: {str(e)}")
+            return {
+                "logs": [],
+                "message": f"Error fetching logs: {e.response['Error']['Message']}",
+                "logGroupName": log_group_name,
+                "totalStreams": 0,
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error fetching environment logs: {str(e)}")
+            return {
+                "logs": [],
+                "message": f"Unexpected error: {str(e)}",
+                "logGroupName": log_group_name,
+                "totalStreams": 0,
             }
 
 

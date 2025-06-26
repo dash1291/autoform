@@ -1,5 +1,5 @@
 import { useJwtStore } from './auth-client'
-import { Project, Team, TeamMember, EnvironmentVariable, Deployment } from '../types'
+import { Project, Team, TeamMember, EnvironmentVariable, Deployment, Environment } from '../types'
 
 class ApiClient {
   private baseUrl: string
@@ -145,27 +145,66 @@ class ApiClient {
   }
 
   // Environment variables endpoints
-  async getEnvironmentVariables(projectId: string): Promise<Array<Omit<EnvironmentVariable, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }>> {
-    return this.request<Array<Omit<EnvironmentVariable, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }>>(`/projects/${projectId}/environment-variables/`)
+  async getEnvironmentVariables(environmentId: string): Promise<Array<Omit<EnvironmentVariable, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }>> {
+    return this.request<Array<Omit<EnvironmentVariable, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }>>(`/environments/${environmentId}/environment-variables/`)
   }
 
-  async createEnvironmentVariable(projectId: string, envVar: any): Promise<EnvironmentVariable> {
-    return this.request<EnvironmentVariable>(`/projects/${projectId}/environment-variables/`, {
+  async createEnvironmentVariable(environmentId: string, envVar: any): Promise<EnvironmentVariable> {
+    return this.request<EnvironmentVariable>(`/environments/${environmentId}/environment-variables/`, {
       method: 'POST',
       body: JSON.stringify(envVar),
     })
   }
 
-  async updateEnvironmentVariable(projectId: string, envVarId: string, envVar: any): Promise<EnvironmentVariable> {
-    return this.request<EnvironmentVariable>(`/projects/${projectId}/environment-variables/${envVarId}`, {
+  async updateEnvironmentVariable(environmentId: string, envVarId: string, envVar: any): Promise<EnvironmentVariable> {
+    return this.request<EnvironmentVariable>(`/environments/${environmentId}/environment-variables/${envVarId}`, {
       method: 'PUT',
       body: JSON.stringify(envVar),
     })
   }
 
-  async deleteEnvironmentVariable(projectId: string, envVarId: string): Promise<{ message: string }> {
-    return this.request<{ message: string }>(`/projects/${projectId}/environment-variables/${envVarId}`, {
+  async deleteEnvironmentVariable(environmentId: string, envVarId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/environments/${environmentId}/environment-variables/${envVarId}`, {
       method: 'DELETE',
+    })
+  }
+
+  // Environment endpoints
+  async getProjectEnvironments(projectId: string): Promise<Environment[]> {
+    return this.request<Environment[]>(`/environments/projects/${projectId}/environments`)
+  }
+
+  async createEnvironment(projectId: string, environmentData: any): Promise<{ message: string; id: string; name: string }> {
+    return this.request<{ message: string; id: string; name: string }>(`/environments/projects/${projectId}/environments`, {
+      method: 'POST',
+      body: JSON.stringify(environmentData),
+    })
+  }
+
+  async getEnvironment(environmentId: string): Promise<Environment> {
+    return this.request<Environment>(`/environments/environments/${environmentId}`)
+  }
+
+  async updateEnvironment(environmentId: string, environmentData: any): Promise<{ message: string; id: string; name: string }> {
+    return this.request<{ message: string; id: string; name: string }>(`/environments/environments/${environmentId}`, {
+      method: 'PUT',
+      body: JSON.stringify(environmentData),
+    })
+  }
+
+  async deleteEnvironment(environmentId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/environments/environments/${environmentId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async getAvailableAwsConfigs(environmentId: string): Promise<{ teamConfigs: Array<{ id: string; name: string; region: string; type: string }> }> {
+    return this.request<{ teamConfigs: Array<{ id: string; name: string; region: string; type: string }> }>(`/environments/environments/${environmentId}/available-aws-configs`)
+  }
+
+  async deployEnvironment(environmentId: string): Promise<{ message: string; deploymentId: string }> {
+    return this.request<{ message: string; deploymentId: string }>(`/deployments/environments/${environmentId}/deploy`, {
+      method: 'POST',
     })
   }
 
@@ -353,7 +392,7 @@ class ApiClient {
     }>(`/teams/${teamId}/aws-config`)
   }
 
-  async createTeamAwsConfig(teamId: string, awsConfig: { 
+  async createSingleTeamAwsConfig(teamId: string, awsConfig: { 
     awsAccessKeyId: string
     awsSecretAccessKey: string
     awsRegion: string 
@@ -364,14 +403,68 @@ class ApiClient {
     })
   }
 
-  async deleteTeamAwsConfig(teamId: string) {
+  async deleteSingleTeamAwsConfig(teamId: string) {
     return this.request(`/teams/${teamId}/aws-config`, {
       method: 'DELETE',
     })
   }
 
-  async testTeamAwsConfig(teamId: string) {
-    return this.request(`/teams/${teamId}/aws-config/test`, {
+
+  async getTeamAwsConfigs(teamId: string): Promise<Array<{ 
+    id: string; 
+    name: string; 
+    awsRegion: string; 
+    isActive: boolean;
+    awsAccessKeyId: string;
+    awsSecretAccessKey: string;
+    createdAt: string;
+    updatedAt: string;
+  }>> {
+    return this.request<Array<{ 
+      id: string; 
+      name: string; 
+      awsRegion: string; 
+      isActive: boolean;
+      awsAccessKeyId: string;
+      awsSecretAccessKey: string;
+      createdAt: string;
+      updatedAt: string;
+    }>>(`/teams/${teamId}/aws-configs`)
+  }
+
+  async createTeamAwsConfig(teamId: string, awsConfig: { 
+    name: string
+    awsAccessKeyId: string
+    awsSecretAccessKey: string
+    awsRegion: string 
+  }) {
+    return this.request(`/teams/${teamId}/aws-configs`, {
+      method: 'POST',
+      body: JSON.stringify(awsConfig),
+    })
+  }
+
+  async updateTeamAwsConfig(teamId: string, configId: string, awsConfig: { 
+    name?: string
+    awsAccessKeyId?: string
+    awsSecretAccessKey?: string
+    awsRegion?: string
+    isActive?: boolean
+  }) {
+    return this.request(`/teams/${teamId}/aws-configs/${configId}`, {
+      method: 'PUT',
+      body: JSON.stringify(awsConfig),
+    })
+  }
+
+  async deleteTeamAwsConfig(teamId: string, configId: string) {
+    return this.request(`/teams/${teamId}/aws-configs/${configId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async testTeamAwsConfig(teamId: string, configId: string) {
+    return this.request(`/teams/${teamId}/aws-configs/${configId}/test`, {
       method: 'POST',
     })
   }
@@ -413,6 +506,22 @@ class ApiClient {
   // Test AWS credentials (works for both team and personal)
   async testAwsCredentials(credentialType: string = 'auto') {
     return this.request(`/aws/credentials-check?credential_type=${credentialType}`)
+  }
+
+  // Environment-specific endpoints
+  async getEnvironmentLogs(environmentId: string, limit: number = 100, hoursBack: number = 1) {
+    return this.request(`/projects/environments/${environmentId}/logs?limit=${limit}&hours_back=${hoursBack}`)
+  }
+
+  async checkEnvironmentExecAvailability(environmentId: string) {
+    return this.request(`/projects/environments/${environmentId}/exec`)
+  }
+
+  async executeEnvironmentCommand(environmentId: string, command: string) {
+    return this.request(`/projects/environments/${environmentId}/exec/command`, {
+      method: 'POST',
+      body: JSON.stringify({ command }),
+    })
   }
 }
 

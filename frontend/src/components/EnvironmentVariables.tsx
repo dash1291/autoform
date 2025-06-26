@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { apiClient } from '@/lib/api'
 
 interface EnvironmentVariablesProps {
-  projectId: string
+  environmentId: string
 }
 
 interface EnvVarState {
@@ -26,7 +26,7 @@ type EnvVarResponse = Omit<EnvironmentVariable, 'createdAt' | 'updatedAt'> & {
   updatedAt: string;
 };
 
-export default function EnvironmentVariables({ projectId }: EnvironmentVariablesProps) {
+export default function EnvironmentVariables({ environmentId }: EnvironmentVariablesProps) {
   const [envVars, setEnvVars] = useState<EnvironmentVariable[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -45,12 +45,13 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
 
   useEffect(() => {
     fetchEnvironmentVariables()
-  }, [projectId])
+  }, [environmentId])
 
   const isEnvironmentVariable = (envVar: any): envVar is EnvironmentVariable => {
     return (
       typeof envVar === 'object' &&
       typeof envVar.id === 'string' &&
+      typeof envVar.environmentId === 'string' &&
       typeof envVar.projectId === 'string' &&
       typeof envVar.key === 'string' &&
       (typeof envVar.value === 'string' || envVar.value === undefined) &&
@@ -66,7 +67,7 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
     setError(null)
     
     try {
-      const data = await apiClient.getEnvironmentVariables(projectId)
+      const data = await apiClient.getEnvironmentVariables(environmentId)
       
       // Transform the API response
       const transformedVars = data.map((envVar) => ({
@@ -99,7 +100,7 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
     }
 
     try {
-      await apiClient.createEnvironmentVariable(projectId, newVar)
+      await apiClient.createEnvironmentVariable(environmentId, newVar)
       
       await fetchEnvironmentVariables()
       setNewVar({ key: '', value: '', isSecret: false })
@@ -143,7 +144,7 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
         throw new Error('Environment variable not found')
       }
       
-      await apiClient.updateEnvironmentVariable(projectId, envVar.id, editVar)
+      await apiClient.updateEnvironmentVariable(environmentId, envVar.id, editVar)
       
       await fetchEnvironmentVariables()
       setEditingVar(null)
@@ -172,7 +173,7 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
         throw new Error('Environment variable not found')
       }
       
-      await apiClient.deleteEnvironmentVariable(projectId, envVar.id)
+      await apiClient.deleteEnvironmentVariable(environmentId, envVar.id)
       
       await fetchEnvironmentVariables()
     } catch (err) {
@@ -189,14 +190,6 @@ export default function EnvironmentVariables({ projectId }: EnvironmentVariables
   return (
     <div className="space-y-6">
       {/* Header with Add Button */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h3 className="text-lg font-medium text-gray-900">Environment Variables</h3>
-          <p className="text-sm text-gray-500">
-            Configure environment variables and secrets for your application. Secrets are stored securely in AWS Secrets Manager.
-          </p>
-        </div>
-      </div>
       <Button onClick={() => setIsAdding(true)}>
         Add Variable
       </Button>

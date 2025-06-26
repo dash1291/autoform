@@ -23,10 +23,20 @@ export interface Project {
   id: string
   name: string
   gitRepoUrl: string
-  branch: string
-  userId: string
-  teamId?: string
-  status: ProjectStatus
+  teamId: string
+  autoDeployEnabled: boolean
+  webhookId?: string
+  webhookConfigured: boolean
+  team?: {
+    id: string
+    name: string
+  }
+  createdAt: Date
+  updatedAt: Date
+  // Legacy fields for backward compatibility (these are now in Environment model)
+  branch?: string
+  userId?: string
+  status?: ProjectStatus
   ecsClusterArn?: string
   ecsServiceArn?: string
   albArn?: string
@@ -35,20 +45,12 @@ export interface Project {
   existingVpcId?: string
   existingSubnetIds?: string
   existingClusterArn?: string
-  cpu: number
-  memory: number
-  diskSize: number
+  cpu?: number
+  memory?: number
+  diskSize?: number
   subdirectory?: string
-  port: number
-  healthCheckPath: string
-  autoDeployEnabled: boolean
-  webhookConfigured: boolean
-  team?: {
-    id: string
-    name: string
-  }
-  createdAt: Date
-  updatedAt: Date
+  port?: number
+  healthCheckPath?: string
 }
 
 export enum ProjectStatus {
@@ -63,6 +65,7 @@ export enum ProjectStatus {
 export interface Deployment {
   id: string
   projectId: string
+  environmentId?: string
   status: DeploymentStatus
   imageTag: string
   commitSha: string
@@ -70,6 +73,10 @@ export interface Deployment {
   details?: string
   createdAt: Date
   updatedAt: Date
+  environment?: {
+    id: string
+    name: string
+  }
 }
 
 export enum DeploymentStatus {
@@ -84,6 +91,7 @@ export enum DeploymentStatus {
 
 export interface EnvironmentVariable {
   id: string
+  environmentId: string
   projectId: string
   key: string
   value?: string
@@ -124,5 +132,48 @@ export interface Team {
   members?: TeamMember[]
   memberCount?: number
   userRole?: TeamMemberRole
+}
+
+export interface Environment {
+  id: string
+  name: string
+  projectId?: string
+  projectName?: string
+  branch: string
+  status: ProjectStatus
+  domain?: string
+  cpu: number
+  memory: number
+  diskSize?: number
+  port: number
+  healthCheckPath: string
+  subdirectory?: string
+  existingVpcId?: string
+  existingSubnetIds?: string
+  existingClusterArn?: string
+  secretsArn?: string
+  ecsClusterArn?: string
+  ecsServiceArn?: string
+  albArn?: string
+  awsConfig: {
+    id: string
+    name: string
+    region: string
+    type: string
+  }
+  latestDeployment?: {
+    id: string
+    status: DeploymentStatus
+    createdAt: Date
+  }
+  deployments?: Array<{
+    id: string
+    status: DeploymentStatus
+    imageTag: string
+    commitSha: string
+    createdAt: Date
+  }>
+  createdAt: Date
+  updatedAt: Date
 }
 

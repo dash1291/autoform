@@ -6,11 +6,11 @@ from .encryption_service import encryption_service
 
 __all__ = [
     "DeploymentService",
-    "DeploymentConfig", 
+    "DeploymentConfig",
     "DeploymentManager",
     "deployment_manager",
     "CloudWatchLogsService",
     "cloudwatch_service",
     "GitHubWebhookService",
-    "encryption_service"
+    "encryption_service",
 ]

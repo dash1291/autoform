@@ -1,6 +1,16 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
+from enum import Enum
+
+
+class EnvironmentStatus(str, Enum):
+    CREATED = "CREATED"
+    PROVISIONING = "PROVISIONING"
+    DEPLOYING = "DEPLOYING"
+    DEPLOYED = "DEPLOYED"
+    FAILED = "FAILED"
+    DELETING = "DELETING"
 
 
 class EnvironmentVariableBase(BaseModel):
@@ -30,6 +40,7 @@ class EnvironmentVariableUpdate(BaseModel):
 
 class EnvironmentVariable(EnvironmentVariableBase):
     id: str
+    environment_id: str = Field(alias="environmentId")
     project_id: str = Field(alias="projectId")
     secret_key: Optional[str] = Field(None, alias="secretKey")
     created_at: datetime = Field(alias="createdAt")

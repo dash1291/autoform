@@ -21,10 +21,10 @@ interface LogsResponse {
 }
 
 interface LogsViewerProps {
-  projectId: string
+  environmentId: string
 }
 
-export default function LogsViewer({ projectId }: LogsViewerProps) {
+export default function LogsViewer({ environmentId }: LogsViewerProps) {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -38,7 +38,7 @@ export default function LogsViewer({ projectId }: LogsViewerProps) {
     setError(null)
     
     try {
-      const data: LogsResponse = await apiClient.getProjectLogs(projectId, limit, hoursBack)
+      const data = await apiClient.getEnvironmentLogs(environmentId, limit, hoursBack) as LogsResponse
       
       setLogs(data.logs || [])
       
@@ -55,14 +55,14 @@ export default function LogsViewer({ projectId }: LogsViewerProps) {
 
   useEffect(() => {
     fetchLogs()
-  }, [projectId, limit, hoursBack])
+  }, [environmentId, limit, hoursBack])
 
   useEffect(() => {
     if (!autoRefresh) return
 
     const interval = setInterval(fetchLogs, 5000) // Refresh every 5 seconds
     return () => clearInterval(interval)
-  }, [autoRefresh, projectId, limit, hoursBack])
+  }, [autoRefresh, environmentId, limit, hoursBack])
 
   const formatLogMessage = (message: string) => {
     // Basic formatting for common log patterns
