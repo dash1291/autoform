@@ -843,9 +843,13 @@ phases:
 
         # Fetch environment to get network configuration (for existing VPC/subnets/cluster only)
         if config.environment_id:
+            if deployment_id:
+                await self.log_to_database(deployment_id, "🔍 Fetching environment network configuration...")
             environment_network = await self.get_environment_network_config(config.environment_id)
         else:
             # Fallback to project configuration for backward compatibility
+            if deployment_id:
+                await self.log_to_database(deployment_id, "🔍 Fetching project network configuration...")
             environment_network = await self.get_project_network_config(config.project_id)
 
         infrastructure_args = ECSInfrastructureArgs(
@@ -1295,7 +1299,10 @@ phases:
     async def get_environment_network_config(self, environment_id: str) -> Dict:
         """Get environment network configuration"""
         try:
-            environment = await prisma.environment.find_unique(where={"id": environment_id})
+            environment = await prisma.environment.find_unique(
+                where={"id": environment_id},
+                include={"project": True}
+            )
 
             if not environment:
                 return {
@@ -1312,13 +1319,16 @@ phases:
             # Parse existing subnet IDs if they exist
             existing_subnet_ids = None
             if environment.existingSubnetIds:
+                logger.info(f"🔍 Raw subnet IDs from DB: '{environment.existingSubnetIds}' (type: {type(environment.existingSubnetIds)})")
                 try:
                     existing_subnet_ids = json.loads(environment.existingSubnetIds)
-                except json.JSONDecodeError:
-                    logger.warning(
-                        f"Failed to parse existing subnet IDs: {environment.existingSubnetIds}"
+                    logger.info(f"✅ Parsed subnet IDs successfully: {existing_subnet_ids}")
+                except json.JSONDecodeError as e:
+                    logger.error(
+                        f"❌ Failed to parse existing subnet IDs: '{environment.existingSubnetIds}' - Error: {e}"
                     )
 
+            logger.info(f"🌐 Network config result: VPC='{environment.existingVpcId}', Subnets={existing_subnet_ids}")
             return {
                 "existing_vpc_id": environment.existingVpcId,
                 "existing_subnet_ids": existing_subnet_ids,
@@ -1326,21 +1336,12 @@ phases:
                 "cpu": environment.cpu or 256,
                 "memory": environment.memory or 512,
                 "disk_size": environment.diskSize or 21,
-                "port": environment.port or 3000,
-                "health_check_path": environment.healthCheckPath or "/",
+                "port": environment.project.port if environment.project else 3000,
+                "health_check_path": environment.project.healthCheckPath if environment.project else "/",
             }
         except Exception as error:
             logger.error(f"Error fetching environment configuration: {error}")
-            return {
-                "existing_vpc_id": None,
-                "existing_subnet_ids": None,
-                "existing_cluster_arn": None,
-                "cpu": 256,
-                "memory": 512,
-                "disk_size": 21,
-                "port": 3000,
-                "health_check_path": "/",
-            }
+            raise Exception(f"Failed to fetch environment configuration: {error}. Cannot proceed with deployment.")
 
     async def get_project_network_config(self, project_id: str) -> Dict:
         """Get project network configuration (deprecated - use get_environment_network_config)"""
@@ -1381,13 +1382,4 @@ phases:
             }
         except Exception as error:
             logger.error(f"Error fetching project configuration: {error}")
-            return {
-                "existing_vpc_id": None,
-                "existing_subnet_ids": None,
-                "existing_cluster_arn": None,
-                "cpu": 256,
-                "memory": 512,
-                "disk_size": 21,
-                "port": 3000,
-                "health_check_path": "/",
-            }
+            raise Exception(f"Failed to fetch project configuration: {error}. Cannot proceed with deployment.")

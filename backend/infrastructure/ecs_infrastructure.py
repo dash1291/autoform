@@ -45,6 +45,7 @@ class ECSInfrastructure:
         """Create or update the complete ECS infrastructure"""
         try:
             logger.info("Starting infrastructure setup...")
+            logger.info(f"🔍 ECS Infrastructure Args - existing_vpc_id: '{self.args.existing_vpc_id}', existing_subnet_ids: {self.args.existing_subnet_ids}")
 
             # Initialize VPC service
             self.vpc_service = VPCService(
@@ -109,6 +110,7 @@ class ECSInfrastructure:
                 service_arn=self.ecs_service.service_arn,
                 load_balancer_arn=self.load_balancer_service.load_balancer_arn,
                 load_balancer_dns=self.load_balancer_service.load_balancer_dns,
+                load_balancer_name=self.load_balancer_service.load_balancer_name,
                 vpc_id=self.vpc_service.vpc_id,
                 subnet_ids=self.vpc_service.subnet_ids,
             )

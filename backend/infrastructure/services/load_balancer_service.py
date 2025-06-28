@@ -51,6 +51,7 @@ class LoadBalancerService:
     async def _create_or_find_load_balancer(self) -> dict:
         """Create or find Application Load Balancer"""
         lb_name = self.project_name
+        self.load_balancer_name = lb_name
 
         try:
             # Check if load balancer already exists

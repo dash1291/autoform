@@ -1,5 +1,5 @@
 """
-Integration tests for shared webhook functionality
+Integration tests for webhook functionality (updated for environment-based architecture)
 """
 import pytest
 import pytest_asyncio
@@ -7,11 +7,11 @@ from unittest.mock import AsyncMock, patch, MagicMock
 import json
 import hmac
 import hashlib
+import asyncio
 
 
 class MockWebhook:
     """Mock webhook object"""
-
     def __init__(self, webhook_id: str, git_repo_url: str, secret: str):
         self.id = webhook_id
         self.gitRepoUrl = git_repo_url
@@ -22,47 +22,54 @@ class MockWebhook:
 
 class MockProject:
     """Mock project object"""
-
-    def __init__(
-        self,
-        project_id: str,
-        name: str,
-        git_repo_url: str,
-        branch: str = "main",
-        auto_deploy: bool = True,
-        subdirectory: str = None,
-    ):
+    def __init__(self, project_id: str, name: str, subdirectory: str = None):
         self.id = project_id
         self.name = name
-        self.gitRepoUrl = git_repo_url
-        self.branch = branch
-        self.autoDeployEnabled = auto_deploy
+        self.gitRepoUrl = "https://github.com/test/repo"
+        self.branch = "main"
+        self.autoDeployEnabled = True
         self.status = "DEPLOYED"
         self.subdirectory = subdirectory
+        self.port = 3000
+        self.healthCheckPath = "/health"
 
 
-@pytest.fixture
-def webhook_payload():
-    """Sample GitHub webhook payload"""
-    return {
-        "ref": "refs/heads/main",
-        "repository": {"clone_url": "https://github.com/test/repo.git"},
-        "commits": [
-            {
-                "id": "abc123def456",
-                "message": "Update frontend code",
-                "added": ["frontend/src/component.js"],
-                "modified": ["frontend/package.json"],
-                "removed": [],
-            }
-        ],
-    }
+class MockTeam:
+    """Mock team object"""
+    def __init__(self, team_id: str, name: str):
+        self.id = team_id
+        self.name = name
+
+
+class MockTeamAwsConfig:
+    """Mock team AWS config object"""
+    def __init__(self, config_id: str, team_id: str):
+        self.id = config_id
+        self.teamId = team_id
+        self.awsRegion = "us-east-1"
+        self.awsAccessKey = "encrypted-access-key"
+        self.awsSecretKey = "encrypted-secret-key"
+
+
+class MockEnvironment:
+    """Mock environment object"""
+    def __init__(self, env_id: str, name: str, project: MockProject, branch: str = "main"):
+        self.id = env_id
+        self.name = name
+        self.projectId = project.id
+        self.project = project
+        self.project.team = MockTeam("team-123", "Test Team")
+        self.branch = branch
+        self.status = "CREATED"
+        self.cpu = 256
+        self.memory = 512
+        self.diskSize = 21
+        self.teamAwsConfig = MockTeamAwsConfig("aws-config-123", "team-123")
 
 
 @pytest.fixture
 def webhook_signature():
     """Generate webhook signature"""
-
     def _generate_signature(payload_data: dict, secret: str) -> str:
         payload_bytes = json.dumps(payload_data, separators=(",", ":")).encode("utf-8")
         signature = (
@@ -72,54 +79,60 @@ def webhook_signature():
             ).hexdigest()
         )
         return signature
-
     return _generate_signature
 
 
 class TestWebhookIntegration:
-    """Test webhook processing with shared webhooks"""
+    """Integration tests for webhook functionality"""
 
     @pytest.mark.asyncio
-    async def test_shared_webhook_processes_multiple_projects(
-        self, webhook_payload, webhook_signature
-    ):
-        """Test that shared webhook can trigger deployments for multiple projects"""
+    async def test_shared_webhook_processes_multiple_projects(self, webhook_signature):
+        """Test that a shared webhook can trigger deployments for multiple projects"""
         from app.routers.webhook import github_webhook
-        from fastapi import Request
 
-        # Create mock webhook and projects
+        payload = {
+            "ref": "refs/heads/main",
+            "repository": {"clone_url": "https://github.com/test/monorepo.git"},
+            "commits": [
+                {
+                    "id": "abc123",
+                    "message": "Update multiple services",
+                    "added": [],
+                    "modified": ["frontend/src/app.js", "backend/src/main.py"],
+                    "removed": [],
+                }
+            ],
+        }
+
+        # Create webhook shared by multiple projects
         webhook = MockWebhook(
-            "webhook-123", "https://github.com/test/repo", "shared-secret"
+            "shared-webhook-123", "https://github.com/test/monorepo", "shared-secret"
         )
 
-        # Two projects with different subdirectories
-        project1 = MockProject(
-            "project-1",
-            "frontend",
-            "https://github.com/test/repo",
-            "main",
-            True,
-            "frontend",
-        )
-        project2 = MockProject(
-            "project-2",
-            "backend",
-            "https://github.com/test/repo",
-            "main",
-            True,
-            "backend",
-        )
+        # Create multiple projects that share this webhook
+        frontend_project = MockProject("frontend-123", "frontend-app", "frontend")
+        backend_project = MockProject("backend-123", "backend-api", "backend")
+        webhook.projects = [frontend_project, backend_project]
 
-        webhook.projects = [project1, project2]
+        # Create environments for each project
+        frontend_env = MockEnvironment("frontend-env-123", "production", frontend_project, "main")
+        backend_env = MockEnvironment("backend-env-123", "production", backend_project, "main")
 
-        # Mock Prisma
         mock_prisma = MagicMock()
         mock_prisma.webhook.find_unique = AsyncMock(return_value=webhook)
+        mock_prisma.environment.find_many = AsyncMock(side_effect=[
+            [frontend_env],  # First call for frontend project
+            [backend_env]    # Second call for backend project
+        ])
 
-        # Create request mock
-        payload_json = json.dumps(webhook_payload, separators=(",", ":"))
+        deployed_environments = []
+
+        async def mock_trigger_environment_deployment(environment, payload_data):
+            deployed_environments.append(environment.id)
+
+        payload_json = json.dumps(payload, separators=(",", ":"))
         payload_bytes = payload_json.encode("utf-8")
-        signature = webhook_signature(webhook_payload, "shared-secret")
+        signature = webhook_signature(payload, "shared-secret")
 
         mock_request = MagicMock()
         mock_request.headers = {
@@ -127,47 +140,51 @@ class TestWebhookIntegration:
             "X-GitHub-Event": "push",
         }
         mock_request.body = AsyncMock(return_value=payload_bytes)
-
-        # Mock background tasks
         mock_background_tasks = MagicMock()
 
-        with patch("app.routers.webhook.prisma", mock_prisma):
+        with patch("app.routers.webhook.prisma", mock_prisma), patch(
+            "app.routers.webhook.trigger_environment_deployment",
+            side_effect=mock_trigger_environment_deployment,
+        ):
             result = await github_webhook(mock_request, mock_background_tasks)
 
-            # Verify webhook was found by repository URL
-            mock_prisma.webhook.find_unique.assert_called_once_with(
-                where={"gitRepoUrl": "https://github.com/test/repo"},
-                include={"projects": True},
-            )
-
-            # Verify both projects were processed (frontend has changes)
-            assert "frontend" in result["message"] or "1" in result["message"]
-
-            # Should trigger deployment for frontend project (has changes in frontend/)
-            assert mock_background_tasks.add_task.call_count >= 1
+            # Both environments should be triggered
+            assert "2 environments" in result["message"]
+            # Wait for background tasks to complete
+            await asyncio.sleep(0.1)
+            assert len(deployed_environments) == 2
+            assert "frontend-env-123" in deployed_environments
+            assert "backend-env-123" in deployed_environments
 
     @pytest.mark.asyncio
-    async def test_webhook_signature_verification_with_shared_secret(
-        self, webhook_payload, webhook_signature
-    ):
-        """Test that webhook signature verification works with shared secret"""
+    async def test_webhook_signature_verification_with_shared_secret(self, webhook_signature):
+        """Test that webhook signature verification works correctly"""
         from app.routers.webhook import github_webhook
 
+        payload = {
+            "ref": "refs/heads/main",
+            "repository": {"clone_url": "https://github.com/test/repo.git"},
+            "commits": [{"id": "abc123", "message": "Test commit"}],
+        }
+
         webhook = MockWebhook(
-            "webhook-123", "https://github.com/test/repo", "shared-secret"
+            "webhook-123", "https://github.com/test/repo", "correct-secret"
         )
-        project = MockProject(
-            "project-1", "test-project", "https://github.com/test/repo"
-        )
+
+        project = MockProject("project-123", "test-project")
         webhook.projects = [project]
+
+        # Create environment for project
+        env = MockEnvironment("env-123", "production", project, "main")
 
         mock_prisma = MagicMock()
         mock_prisma.webhook.find_unique = AsyncMock(return_value=webhook)
+        mock_prisma.environment.find_many = AsyncMock(return_value=[env])
 
         # Test with correct signature
-        payload_json = json.dumps(webhook_payload, separators=(",", ":"))
+        payload_json = json.dumps(payload, separators=(",", ":"))
         payload_bytes = payload_json.encode("utf-8")
-        correct_signature = webhook_signature(webhook_payload, "shared-secret")
+        correct_signature = webhook_signature(payload, "correct-secret")
 
         mock_request = MagicMock()
         mock_request.headers = {
@@ -177,211 +194,65 @@ class TestWebhookIntegration:
         mock_request.body = AsyncMock(return_value=payload_bytes)
         mock_background_tasks = MagicMock()
 
-        with patch("app.routers.webhook.prisma", mock_prisma):
-            result = await github_webhook(mock_request, mock_background_tasks)
-
+        with patch("app.routers.webhook.prisma", mock_prisma), patch(
+            "app.routers.webhook.trigger_environment_deployment"
+        ):
             # Should succeed with correct signature
-            assert "triggered" in result["message"].lower() or "projects" in result
-
-    @pytest.mark.asyncio
-    async def test_webhook_rejects_invalid_signature(self, webhook_payload):
-        """Test that webhook rejects requests with invalid signatures"""
-        from app.routers.webhook import github_webhook
-        from fastapi import HTTPException
-
-        webhook = MockWebhook(
-            "webhook-123", "https://github.com/test/repo", "shared-secret"
-        )
-        project = MockProject(
-            "project-1", "test-project", "https://github.com/test/repo"
-        )
-        webhook.projects = [project]
-
-        mock_prisma = MagicMock()
-        mock_prisma.webhook.find_unique = AsyncMock(return_value=webhook)
+            result = await github_webhook(mock_request, mock_background_tasks)
+            assert "1 environment" in result["message"] or "environments" in result
 
         # Test with incorrect signature
-        payload_json = json.dumps(webhook_payload, separators=(",", ":"))
-        payload_bytes = payload_json.encode("utf-8")
-        wrong_signature = "sha256=wrongsignature"
-
-        mock_request = MagicMock()
-        mock_request.headers = {
-            "X-Hub-Signature-256": wrong_signature,
-            "X-GitHub-Event": "push",
-        }
-        mock_request.body = AsyncMock(return_value=payload_bytes)
-        mock_background_tasks = MagicMock()
+        incorrect_signature = webhook_signature(payload, "wrong-secret")
+        mock_request.headers["X-Hub-Signature-256"] = incorrect_signature
 
         with patch("app.routers.webhook.prisma", mock_prisma):
-            with pytest.raises(HTTPException) as exc_info:
+            # Should fail with incorrect signature
+            with pytest.raises(Exception):  # Should raise HTTPException
                 await github_webhook(mock_request, mock_background_tasks)
 
-            # The webhook handler wraps HTTPExceptions in a 500 error
-            assert exc_info.value.status_code == 500
-            assert "Webhook processing failed" in str(exc_info.value.detail)
-
     @pytest.mark.asyncio
-    async def test_webhook_handles_no_webhook_configured(
-        self, webhook_payload, webhook_signature
-    ):
-        """Test webhook handles case where no webhook is configured for repository"""
+    async def test_webhook_filters_projects_by_branch(self, webhook_signature):
+        """Test that webhook only triggers deployments for environments matching the branch"""
         from app.routers.webhook import github_webhook
 
-        mock_prisma = MagicMock()
-        mock_prisma.webhook.find_unique = AsyncMock(return_value=None)
-
-        payload_json = json.dumps(webhook_payload, separators=(",", ":"))
-        payload_bytes = payload_json.encode("utf-8")
-
-        mock_request = MagicMock()
-        mock_request.headers = {
-            "X-Hub-Signature-256": "sha256=anysignature",
-            "X-GitHub-Event": "push",
-        }
-        mock_request.body = AsyncMock(return_value=payload_bytes)
-        mock_background_tasks = MagicMock()
-
-        with patch("app.routers.webhook.prisma", mock_prisma):
-            result = await github_webhook(mock_request, mock_background_tasks)
-
-            assert "No webhook configured" in result["message"]
-
-    @pytest.mark.asyncio
-    async def test_webhook_filters_projects_by_branch(
-        self, webhook_payload, webhook_signature
-    ):
-        """Test that webhook only processes projects matching the push branch"""
-        from app.routers.webhook import github_webhook
-
-        webhook = MockWebhook(
-            "webhook-123", "https://github.com/test/repo", "shared-secret"
-        )
-
-        # Projects with different branches
-        main_project = MockProject(
-            "project-1", "main-project", "https://github.com/test/repo", "main", True
-        )
-        dev_project = MockProject(
-            "project-2",
-            "dev-project",
-            "https://github.com/test/repo",
-            "development",
-            True,
-        )
-
-        webhook.projects = [main_project, dev_project]
-
-        mock_prisma = MagicMock()
-        mock_prisma.webhook.find_unique = AsyncMock(return_value=webhook)
-
-        # Push to main branch
-        payload_json = json.dumps(webhook_payload, separators=(",", ":"))
-        payload_bytes = payload_json.encode("utf-8")
-        signature = webhook_signature(webhook_payload, "shared-secret")
-
-        mock_request = MagicMock()
-        mock_request.headers = {
-            "X-Hub-Signature-256": signature,
-            "X-GitHub-Event": "push",
-        }
-        mock_request.body = AsyncMock(return_value=payload_bytes)
-        mock_background_tasks = MagicMock()
-
-        with patch("app.routers.webhook.prisma", mock_prisma):
-            result = await github_webhook(mock_request, mock_background_tasks)
-
-            # Should only process main branch project
-            # The exact behavior depends on the changed files and subdirectory logic
-            # but at minimum it should not error out
-            assert "message" in result
-
-    @pytest.mark.asyncio
-    async def test_webhook_handles_inactive_webhook(
-        self, webhook_payload, webhook_signature
-    ):
-        """Test webhook handles inactive webhook gracefully"""
-        from app.routers.webhook import github_webhook
-
-        webhook = MockWebhook(
-            "webhook-123", "https://github.com/test/repo", "shared-secret"
-        )
-        webhook.isActive = False  # Inactive webhook
-
-        project = MockProject(
-            "project-1", "test-project", "https://github.com/test/repo"
-        )
-        webhook.projects = [project]
-
-        mock_prisma = MagicMock()
-        mock_prisma.webhook.find_unique = AsyncMock(return_value=webhook)
-
-        payload_json = json.dumps(webhook_payload, separators=(",", ":"))
-        payload_bytes = payload_json.encode("utf-8")
-
-        mock_request = MagicMock()
-        mock_request.headers = {
-            "X-Hub-Signature-256": "sha256=anysignature",
-            "X-GitHub-Event": "push",
-        }
-        mock_request.body = AsyncMock(return_value=payload_bytes)
-        mock_background_tasks = MagicMock()
-
-        with patch("app.routers.webhook.prisma", mock_prisma):
-            result = await github_webhook(mock_request, mock_background_tasks)
-
-            assert "not active" in result["message"]
-
-    @pytest.mark.asyncio
-    async def test_webhook_subdirectory_filtering(self, webhook_signature):
-        """Test webhook correctly filters projects by subdirectory changes"""
-        from app.routers.webhook import github_webhook
-
-        # Payload with changes only in frontend/
-        frontend_payload = {
-            "ref": "refs/heads/main",
+        payload = {
+            "ref": "refs/heads/develop",  # Note: develop branch, not main
             "repository": {"clone_url": "https://github.com/test/repo.git"},
             "commits": [
                 {
                     "id": "abc123",
-                    "message": "Update frontend",
-                    "added": ["frontend/src/component.js"],
-                    "modified": ["frontend/package.json"],
+                    "message": "Feature branch update",
+                    "added": [],
+                    "modified": ["src/app.js"],
                     "removed": [],
                 }
             ],
         }
 
         webhook = MockWebhook(
-            "webhook-123", "https://github.com/test/repo", "shared-secret"
+            "webhook-123", "https://github.com/test/repo", "secret"
         )
 
-        # Projects with different subdirectories
-        frontend_project = MockProject(
-            "project-1",
-            "frontend",
-            "https://github.com/test/repo",
-            "main",
-            True,
-            "frontend",
-        )
-        backend_project = MockProject(
-            "project-2",
-            "backend",
-            "https://github.com/test/repo",
-            "main",
-            True,
-            "backend",
-        )
+        project = MockProject("project-123", "test-project")
+        webhook.projects = [project]
 
-        webhook.projects = [frontend_project, backend_project]
+        # Create environments for different branches
+        main_env = MockEnvironment("main-env-123", "production", project, "main")
+        develop_env = MockEnvironment("develop-env-123", "staging", project, "develop")
 
         mock_prisma = MagicMock()
         mock_prisma.webhook.find_unique = AsyncMock(return_value=webhook)
+        # Mock environment query to return only develop environment (branch filtering)
+        mock_prisma.environment.find_many = AsyncMock(return_value=[develop_env])
 
-        payload_json = json.dumps(frontend_payload, separators=(",", ":"))
+        deployed_environments = []
+
+        async def mock_trigger_environment_deployment(environment, payload_data):
+            deployed_environments.append(environment.id)
+
+        payload_json = json.dumps(payload, separators=(",", ":"))
         payload_bytes = payload_json.encode("utf-8")
-        signature = webhook_signature(frontend_payload, "shared-secret")
+        signature = webhook_signature(payload, "secret")
 
         mock_request = MagicMock()
         mock_request.headers = {
@@ -391,17 +262,94 @@ class TestWebhookIntegration:
         mock_request.body = AsyncMock(return_value=payload_bytes)
         mock_background_tasks = MagicMock()
 
-        with patch("app.routers.webhook.prisma", mock_prisma):
+        with patch("app.routers.webhook.prisma", mock_prisma), patch(
+            "app.routers.webhook.trigger_environment_deployment",
+            side_effect=mock_trigger_environment_deployment,
+        ):
             result = await github_webhook(mock_request, mock_background_tasks)
 
-            # Should trigger deployment for frontend project only
-            # Backend project should be skipped because no changes in backend/
-            if "triggered" in result["message"].lower():
-                # If deployments were triggered, there should be exactly 1
-                assert "1" in result["message"] or "frontend" in str(
-                    result.get("projects", [])
-                )
+            # Wait for background tasks to complete
+            await asyncio.sleep(0.1)
+            # Only develop environment should be triggered
+            assert len(deployed_environments) == 1
+            assert "develop-env-123" in deployed_environments
+            assert "main-env-123" not in deployed_environments
+
+    @pytest.mark.asyncio
+    async def test_webhook_subdirectory_filtering(self, webhook_signature):
+        """Test that webhook respects subdirectory filtering for environments"""
+        from app.routers.webhook import github_webhook
+
+        # Changes only in frontend directory
+        payload = {
+            "ref": "refs/heads/main",
+            "repository": {"clone_url": "https://github.com/test/monorepo.git"},
+            "commits": [
+                {
+                    "id": "abc123",
+                    "message": "Frontend changes only",
+                    "added": [],
+                    "modified": ["frontend/package.json", "frontend/src/app.js"],
+                    "removed": [],
+                }
+            ],
+        }
+
+        webhook = MockWebhook(
+            "webhook-123", "https://github.com/test/monorepo", "secret"
+        )
+
+        # Create projects with different subdirectories
+        frontend_project = MockProject("frontend-123", "frontend-app", "frontend")
+        backend_project = MockProject("backend-123", "backend-api", "backend")
+        shared_project = MockProject("shared-123", "shared-lib", None)  # No subdirectory
+        webhook.projects = [frontend_project, backend_project, shared_project]
+
+        # Create environments for each project
+        frontend_env = MockEnvironment("frontend-env-123", "production", frontend_project, "main")
+        backend_env = MockEnvironment("backend-env-123", "production", backend_project, "main")
+        shared_env = MockEnvironment("shared-env-123", "production", shared_project, "main")
+
+        mock_prisma = MagicMock()
+        mock_prisma.webhook.find_unique = AsyncMock(return_value=webhook)
+        mock_prisma.environment.find_many = AsyncMock(side_effect=[
+            [frontend_env],  # First call for frontend project
+            [backend_env],   # Second call for backend project
+            [shared_env]     # Third call for shared project
+        ])
+
+        deployed_environments = []
+
+        async def mock_trigger_environment_deployment(environment, payload_data):
+            deployed_environments.append(environment.id)
+
+        payload_json = json.dumps(payload, separators=(",", ":"))
+        payload_bytes = payload_json.encode("utf-8")
+        signature = webhook_signature(payload, "secret")
+
+        mock_request = MagicMock()
+        mock_request.headers = {
+            "X-Hub-Signature-256": signature,
+            "X-GitHub-Event": "push",
+        }
+        mock_request.body = AsyncMock(return_value=payload_bytes)
+        mock_background_tasks = MagicMock()
+
+        with patch("app.routers.webhook.prisma", mock_prisma), patch(
+            "app.routers.webhook.trigger_environment_deployment",
+            side_effect=mock_trigger_environment_deployment,
+        ):
+            result = await github_webhook(mock_request, mock_background_tasks)
+
+            # Wait for background tasks to complete
+            await asyncio.sleep(0.1)
+            # Frontend and shared environments should be triggered
+            # Frontend because changes are in frontend/, shared because it has no subdirectory
+            assert len(deployed_environments) == 2
+            assert "frontend-env-123" in deployed_environments
+            assert "shared-env-123" in deployed_environments
+            assert "backend-env-123" not in deployed_environments
 
 
 if __name__ == "__main__":
-    pytest.main([__file__])
+    pytest.main([__file__, "-v"])

@@ -23,6 +23,7 @@ from app.routers import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+MAX_WORKERS = 10
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -31,9 +32,9 @@ async def lifespan(app: FastAPI):
 
     # Configure increased thread pool for background tasks
     loop = asyncio.get_event_loop()
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS)
     loop.set_default_executor(executor)
-    logger.info(f"Thread pool configured with 20 max workers")
+    logger.info(f'Thread pool configured with {MAX_WORKERS} max workers')
 
     # Initialize database connection
     from core.database import prisma

@@ -33,10 +33,19 @@ class VPCService:
 
     async def initialize(self):
         """Initialize VPC resources"""
-        if self.existing_vpc_id and self.existing_subnet_ids:
+        logger.info(f"🔍 VPC Service Initialize - existing_vpc_id: '{self.existing_vpc_id}', existing_subnet_ids: {self.existing_subnet_ids}")
+        if self.existing_vpc_id:
             logger.info(f"Using existing VPC: {self.existing_vpc_id}")
             self.vpc_id = self.existing_vpc_id
-            self.subnet_ids = self.existing_subnet_ids
+            
+            if self.existing_subnet_ids:
+                # Use provided subnets
+                logger.info(f"Using existing subnets: {self.existing_subnet_ids}")
+                self.subnet_ids = self.existing_subnet_ids
+            else:
+                # Create subnets in the existing VPC
+                logger.info(f"Creating subnets in existing VPC: {self.existing_vpc_id}")
+                self.subnet_ids = await self._create_subnets()
         else:
             # Create new VPC and subnets for this project
             logger.info(f"Creating new VPC for project: {self.project_name}")

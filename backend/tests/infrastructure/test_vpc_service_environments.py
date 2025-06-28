@@ -57,8 +57,8 @@ class TestVPCServiceEnvironmentBehavior:
             assert vpc_service.security_group_ids.ecs_security_group_id is not None
 
     @pytest.mark.asyncio
-    async def test_only_vpc_provided_creates_new_resources(self, mock_aws_services, ec2_client):
-        """Test the bug case: when only VPC is provided (no subnets), it creates new VPC"""
+    async def test_existing_vpc_only_uses_vpc_creates_subnets(self, mock_aws_services, ec2_client):
+        """Test correct behavior: when only VPC is provided (no subnets), use existing VPC and create subnets"""
         ec2 = ec2_client
         
         # Create a VPC
@@ -66,21 +66,31 @@ class TestVPCServiceEnvironmentBehavior:
         existing_vpc_id = vpc_response["Vpc"]["VpcId"]
         
         vpc_service = VPCService(
-            project_name="test-bug-case",
+            project_name="test-existing-vpc-only",
             environment_variables=[],
             region="us-east-1",
             existing_vpc_id=existing_vpc_id,
-            existing_subnet_ids=None  # This is the bug case!
+            existing_subnet_ids=None  # No specific subnets provided
         )
         
-        await vpc_service.initialize()
-        
-        # Bug behavior: it creates a new VPC instead of using existing
-        assert vpc_service.vpc_id != existing_vpc_id
-        assert vpc_service.vpc_id != ""
-        
-        # It also creates new subnets
-        assert len(vpc_service.subnet_ids) == 2
+        # Spy on creation methods
+        with patch.object(vpc_service, '_create_vpc') as mock_create_vpc, \
+             patch.object(vpc_service, '_create_subnets') as mock_create_subnets:
+            
+            # Mock subnet creation to return test subnet IDs
+            mock_create_subnets.return_value = ["subnet-new-1", "subnet-new-2"]
+            
+            await vpc_service.initialize()
+            
+            # Should use the existing VPC
+            assert vpc_service.vpc_id == existing_vpc_id
+            
+            # Should NOT create a new VPC
+            mock_create_vpc.assert_not_called()
+            
+            # Should create subnets in the existing VPC
+            mock_create_subnets.assert_called_once()
+            assert vpc_service.subnet_ids == ["subnet-new-1", "subnet-new-2"]
 
     @pytest.mark.asyncio
     async def test_no_existing_resources_creates_all(self, mock_aws_services):
