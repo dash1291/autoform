@@ -247,6 +247,10 @@ class ApiClient {
     return this.request<any>(`/projects/${projectId}/service-status`)
   }
 
+  async getEnvironmentServiceStatus(environmentId: string): Promise<any> {
+    return this.request<any>(`/environments/${environmentId}/service-status`)
+  }
+
   // Shell execution endpoints
   async checkExecAvailability(projectId: string): Promise<{ available: boolean; status: string; reason?: string; clusterArn?: string; taskArn?: string; containerName?: string; region?: string }> {
     return this.request<{ available: boolean; status: string; reason?: string; clusterArn?: string; taskArn?: string; containerName?: string; region?: string }>(`/projects/${projectId}/exec`)

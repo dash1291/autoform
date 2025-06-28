@@ -60,11 +60,32 @@ class LoadBalancerService:
             if response["LoadBalancers"] and len(response["LoadBalancers"]) > 0:
                 lb = response["LoadBalancers"][0]
                 logger.info(f"Found existing load balancer: {lb['LoadBalancerArn']}")
+                
+                # Log the subnets the existing load balancer is using
+                existing_lb_subnets = [az['SubnetId'] for az in lb.get('AvailabilityZones', [])]
+                logger.warning(f"⚠️  Existing load balancer is using subnets: {existing_lb_subnets}")
+                logger.warning(f"⚠️  Requested subnets were: {self.subnet_ids}")
+                
+                if set(existing_lb_subnets) != set(self.subnet_ids):
+                    logger.error(f"❌ SUBNET MISMATCH: Existing load balancer is in different subnets than requested!")
+                    logger.error(f"   Existing ALB subnets: {existing_lb_subnets}")
+                    logger.error(f"   Requested subnets: {self.subnet_ids}")
+                    raise Exception(
+                        f"Existing load balancer '{lb_name}' is in different subnets than requested. "
+                        f"ALB is in subnets {existing_lb_subnets} but ECS will use {self.subnet_ids}. "
+                        f"This will cause networking issues. Please delete the existing load balancer or use the same subnets."
+                    )
+                
                 return {"arn": lb["LoadBalancerArn"], "dns": lb["DNSName"]}
-        except Exception:
+        except self.elbv2.exceptions.LoadBalancerNotFoundException:
             logger.info("No existing load balancer found, creating new one")
+        except Exception as e:
+            if "different subnets than requested" in str(e):
+                raise  # Re-raise our subnet mismatch error
+            logger.info(f"Error checking for existing load balancer: {e}")
 
         # Create new load balancer
+        logger.info(f"🔍 Creating load balancer '{lb_name}' with subnets: {self.subnet_ids}")
         response = self.elbv2.create_load_balancer(
             Name=lb_name,
             Subnets=self.subnet_ids,
@@ -80,6 +101,7 @@ class LoadBalancerService:
     async def _create_target_group(self) -> str:
         """Create Target Group for the load balancer"""
         tg_name = f"{self.project_name}-tg"
+        tg_name_to_create = tg_name
 
         try:
             # Check if target group already exists
@@ -90,19 +112,31 @@ class LoadBalancerService:
                 logger.info(
                     f"Found existing target group: {existing_tg['TargetGroupArn']}"
                 )
-
-                # Update the target group attributes to ensure correct health check settings
-                await self._update_target_group_attributes(
-                    existing_tg["TargetGroupArn"]
-                )
-
-                return existing_tg["TargetGroupArn"]
+                
+                # Check if the target group is in the same VPC
+                existing_tg_vpc = existing_tg.get('VpcId')
+                logger.info(f"🔍 Existing target group VPC: {existing_tg_vpc}, Expected VPC: {self.vpc_id}")
+                
+                if existing_tg_vpc != self.vpc_id:
+                    logger.warning(f"⚠️  Existing target group is in different VPC ({existing_tg_vpc}) than expected ({self.vpc_id})")
+                    logger.info("Creating new target group in the correct VPC with a different name")
+                    # Generate a unique name by adding a suffix
+                    import time
+                    tg_name_to_create = f"{tg_name}-{int(time.time())}"
+                    logger.info(f"Using target group name: {tg_name_to_create}")
+                    # Don't return, let it fall through to create a new one
+                else:
+                    # Update the target group attributes to ensure correct health check settings
+                    await self._update_target_group_attributes(
+                        existing_tg["TargetGroupArn"]
+                    )
+                    return existing_tg["TargetGroupArn"]
         except Exception:
             logger.info("No existing target group found, creating new one")
 
         # Create new target group
         response = self.elbv2.create_target_group(
-            Name=tg_name,
+            Name=tg_name_to_create,
             Port=self.container_port,
             Protocol="HTTP",
             VpcId=self.vpc_id,

@@ -37,6 +37,7 @@ export default function ProjectDetail() {
   const [selectedEnvironmentForVars, setSelectedEnvironmentForVars] = useState<string | null>(null)
   const [serviceStatus, setServiceStatus] = useState<any>(null)
   const [awsRegion, setAwsRegion] = useState<string | null>(null)
+  const [environmentStatuses, setEnvironmentStatuses] = useState<Record<string, any>>({})
   const [deploymentModalOpen, setDeploymentModalOpen] = useState(false)
 
   useEffect(() => {
@@ -67,6 +68,15 @@ export default function ProjectDetail() {
       return () => clearInterval(interval)
     }
   }, [project?.ecsServiceArn])
+
+  // Refresh environment statuses periodically
+  useEffect(() => {
+    if (environments.length > 0) {
+      // Refresh environment statuses every 30 seconds
+      const interval = setInterval(() => fetchEnvironmentStatuses(environments), 30000)
+      return () => clearInterval(interval)
+    }
+  }, [environments])
 
   // Poll for live logs when there's an active deployment
   useEffect(() => {
@@ -133,8 +143,30 @@ export default function ProjectDetail() {
       if (!selectedEnvironmentForVars && data.length > 0) {
         setSelectedEnvironmentForVars(data[0].id)
       }
+      // Fetch service status for each environment
+      fetchEnvironmentStatuses(data)
     } catch (err) {
       console.error('Failed to fetch environments:', err)
+    }
+  }
+
+  const fetchEnvironmentStatuses = async (envs: Environment[]) => {
+    try {
+      const statusPromises = envs.map(async (env) => {
+        try {
+          const status = await apiClient.getEnvironmentServiceStatus(env.id)
+          return { [env.id]: status }
+        } catch (err) {
+          console.error(`Failed to fetch status for environment ${env.id}:`, err)
+          return { [env.id]: { status: 'ERROR', message: 'Failed to fetch status' } }
+        }
+      })
+      
+      const statuses = await Promise.all(statusPromises)
+      const statusMap = statuses.reduce((acc, status) => ({ ...acc, ...status }), {})
+      setEnvironmentStatuses(statusMap)
+    } catch (err) {
+      console.error('Failed to fetch environment statuses:', err)
     }
   }
 
@@ -336,80 +368,101 @@ export default function ProjectDetail() {
         <div className="space-y-6">
           {activeTab === 'overview' && (
             <>
-              {/* Status Card */}
+              {/* Environment Status Cards */}
               <div className="bg-white shadow rounded-lg p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Project Status</h2>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Environment Status</h2>
+                {environments.length === 0 ? (
+                  <div className="text-center py-8 bg-gray-50 rounded-lg">
+                    <p className="text-gray-500">No environments configured for this project.</p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      Create an environment in the Settings tab to start deploying.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {environments.map((env) => {
+                      const envStatus = environmentStatuses[env.id]
+                      return (
+                        <div key={env.id} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <h3 className="font-medium text-gray-900">{env.name}</h3>
+                              <p className="text-sm text-gray-500">{env.branch}</p>
+                            </div>
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              envStatus?.status === 'HEALTHY' ? 'bg-green-100 text-green-800' :
+                              envStatus?.status === 'CRASH_LOOP' ? 'bg-red-100 text-red-800' :
+                              envStatus?.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' :
+                              envStatus?.status === 'DEGRADED' ? 'bg-orange-100 text-orange-800' :
+                              envStatus?.status === 'NO_RUNNING_TASKS' ? 'bg-gray-100 text-gray-800' :
+                              envStatus?.status === 'NOT_DEPLOYED' ? 'bg-gray-100 text-gray-600' :
+                              envStatus?.status === 'ERROR' ? 'bg-red-100 text-red-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {envStatus?.status || 'Loading...'}
+                            </span>
+                          </div>
+                          
+                          {envStatus && (
+                            <div className="space-y-2">
+                              <p className="text-sm text-gray-600">{envStatus.message}</p>
+                              
+                              {envStatus.service && (
+                                <div className="text-xs text-gray-500">
+                                  Tasks: {envStatus.service.runningCount}/{envStatus.service.desiredCount} running
+                                  {envStatus.service.pendingCount > 0 && ` (${envStatus.service.pendingCount} pending)`}
+                                </div>
+                              )}
+                              
+                              {env.domain && (
+                                <div className="mt-2">
+                                  <a
+                                    href={`http://${env.domain}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:text-blue-700 underline"
+                                  >
+                                    {env.domain}
+                                  </a>
+                                </div>
+                              )}
+                              
+                              {envStatus.crashLoopDetected && (
+                                <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+                                  ⚠️ Crash loop detected
+                                </div>
+                              )}
+                              
+                              {envStatus.failureReasons && envStatus.failureReasons.length > 0 && (
+                                <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded">
+                                  <p className="text-xs font-medium text-yellow-800">Issues:</p>
+                                  <ul className="text-xs text-yellow-700 mt-1 space-y-1">
+                                    {envStatus.failureReasons.slice(0, 2).map((reason: string, index: number) => (
+                                      <li key={index}>• {reason}</li>
+                                    ))}
+                                    {envStatus.failureReasons.length > 2 && (
+                                      <li>• +{envStatus.failureReasons.length - 2} more issues</li>
+                                    )}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Project Information */}
+              <div className="bg-white shadow rounded-lg p-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Project Information</h2>
                 <div className="space-y-4">
                   <div>
-                    <span className="text-sm font-medium text-gray-500">Current Status</span>
-                    <div className="mt-1 flex items-center space-x-3">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        serviceStatus?.status === 'HEALTHY' ? 'bg-green-100 text-green-800' :
-                        serviceStatus?.status === 'CRASH_LOOP' ? 'bg-red-100 text-red-800' :
-                        serviceStatus?.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' :
-                        serviceStatus?.status === 'DEGRADED' ? 'bg-orange-100 text-orange-800' :
-                        serviceStatus?.status === 'NO_RUNNING_TASKS' ? 'bg-gray-100 text-gray-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {serviceStatus?.status || 'Not Deployed'}
-                      </span>
-                      {serviceStatus && (
-                        <span className="text-sm text-gray-600">
-                          {serviceStatus.message}
-                        </span>
-                      )}
-                    </div>
-                    {serviceStatus?.service && (
-                      <div className="mt-2 text-sm text-gray-600">
-                        Tasks: {serviceStatus.service.runningCount}/{serviceStatus.service.desiredCount} running
-                        {serviceStatus.service.pendingCount > 0 && ` (${serviceStatus.service.pendingCount} pending)`}
-                      </div>
-                    )}
-                    {serviceStatus?.crashLoopDetected && (
-                      <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
-                        <p className="text-sm text-red-800">
-                          ⚠️ Container crash loop detected. Check the logs for errors.
-                        </p>
-                      </div>
-                    )}
-                    {serviceStatus?.failureReasons && serviceStatus.failureReasons.length > 0 && (
-                      <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                        <div className="flex items-start">
-                          <div className="flex-shrink-0">
-                            <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                          <div className="ml-3">
-                            <h4 className="text-sm font-medium text-yellow-800">AWS Messages</h4>
-                            <div className="mt-1 text-sm text-yellow-700">
-                              <ul className="list-disc list-inside space-y-1">
-                                {serviceStatus.failureReasons.map((reason: string, index: number) => (
-                                  <li key={index}>{reason}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                    <span className="text-sm font-medium text-gray-500">Repository</span>
+                    <div className="mt-1 text-sm text-gray-900">{project.gitRepoUrl}</div>
                   </div>
-                  
-                  {project.domain && (
-                    <div>
-                      <span className="text-sm font-medium text-gray-500">Application URL</span>
-                      <div className="mt-1">
-                        <a
-                          href={`http://${project.domain}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-700"
-                        >
-                          {project.domain}
-                        </a>
-                      </div>
-                    </div>
-                  )}
                   
                   <div>
                     <span className="text-sm font-medium text-gray-500">Created</span>

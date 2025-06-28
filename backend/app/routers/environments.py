@@ -502,3 +502,219 @@ async def get_available_aws_configs(
         )
 
     return available_configs
+
+
+@router.get("/{environment_id}/service-status")
+async def get_environment_service_status(
+    environment_id: str, current_user: User = Depends(get_current_user)
+):
+    """Get the actual ECS service status and health for a specific environment"""
+    environment = await prisma.environment.find_first(
+        where={
+            "id": environment_id,
+            "project": {
+                "team": {
+                    "OR": [
+                        {"ownerId": current_user.id},
+                        {"members": {"some": {"userId": current_user.id}}}
+                    ]
+                }
+            }
+        },
+        include={
+            "project": {"include": {"team": True}},
+            "teamAwsConfig": True
+        }
+    )
+
+    if not environment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Environment not found"
+        )
+
+    # Check if environment has been deployed
+    if not environment.ecsServiceArn or not environment.ecsClusterArn:
+        return {
+            "status": "NOT_DEPLOYED",
+            "message": "Environment has not been deployed yet",
+            "service": None,
+            "failureReasons": [],
+            "crashLoopDetected": False,
+        }
+
+    try:
+        # Import here to avoid circular import
+        from services.deployment import DeploymentService
+        from services.encryption_service import encryption_service
+        
+        # Get team AWS credentials for this environment
+        team_aws_config = environment.teamAwsConfig
+        if not team_aws_config:
+            return {
+                "status": "ERROR",
+                "message": "No AWS credentials configured for this environment",
+                "service": None,
+                "failureReasons": ["No AWS credentials configured"],
+                "crashLoopDetected": False,
+            }
+
+        # Decrypt credentials
+        access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
+        secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
+        aws_credentials = {"access_key": access_key, "secret_key": secret_key}
+        
+        # Create deployment service to check status
+        deployment_service = DeploymentService(
+            region=team_aws_config.awsRegion, 
+            aws_credentials=aws_credentials
+        )
+
+        # Get service status
+        service_arn = environment.ecsServiceArn
+        cluster_arn = environment.ecsClusterArn
+        
+        # Extract service name and cluster name from ARNs
+        service_name = service_arn.split("/")[-1]
+        cluster_name = cluster_arn.split("/")[-1]
+
+        # Use the same logic as project service status
+        import boto3
+        from utils.aws_client import create_client
+
+        ecs_client = create_client("ecs", team_aws_config.awsRegion, aws_credentials)
+
+        # Get service details
+        response = ecs_client.describe_services(
+            cluster=cluster_name, services=[service_name]
+        )
+
+        if not response["services"]:
+            return {
+                "status": "NOT_FOUND",
+                "message": "ECS service not found",
+                "service": None,
+                "failureReasons": ["ECS service not found in cluster"],
+                "crashLoopDetected": False,
+            }
+
+        service = response["services"][0]
+        service_status = service.get("status", "UNKNOWN")
+        running_count = service.get("runningCount", 0)
+        desired_count = service.get("desiredCount", 0)
+        pending_count = service.get("pendingCount", 0)
+
+        # Get deployments info
+        deployments = service.get("deployments", [])
+        active_deployment = None
+        for deployment in deployments:
+            if deployment["status"] == "PRIMARY":
+                active_deployment = deployment
+                break
+
+        # Check for recent events (last 10)
+        events = service.get("events", [])[:10]
+
+        # Determine health status
+        healthy = (
+            service_status == "ACTIVE"
+            and running_count == desired_count
+            and running_count > 0
+            and pending_count == 0
+        )
+
+        # Check for deployment issues
+        deployment_status = "STABLE"
+        deployment_in_progress = False
+
+        if active_deployment:
+            rollout_state = active_deployment.get("rolloutState", "")
+            deployment_running_count = active_deployment.get("runningCount", 0)
+            deployment_desired_count = active_deployment.get("desiredCount", 0)
+
+            if rollout_state == "IN_PROGRESS":
+                deployment_status = "IN_PROGRESS"
+                deployment_in_progress = True
+            elif deployment_running_count < deployment_desired_count:
+                deployment_status = "IN_PROGRESS"
+                deployment_in_progress = True
+            elif rollout_state == "COMPLETED":
+                deployment_status = "STABLE"
+            else:
+                if rollout_state in ["PENDING", "IN_PROGRESS"]:
+                    deployment_status = "IN_PROGRESS"
+                    deployment_in_progress = True
+
+        # Check for crash loops and failure reasons
+        crash_loop_detected = False
+        failure_reasons = []
+
+        if events:
+            # Look for repeated task stopped messages
+            stopped_events = [
+                e for e in events[:5] if "has stopped" in e.get("message", "")
+            ]
+            if len(stopped_events) >= 3:
+                crash_loop_detected = True
+
+            # Extract failure reasons from recent events
+            if not healthy or deployment_in_progress:
+                for event in events[:10]:
+                    message = event.get("message", "").lower()
+
+                    if "health check" in message and ("failed" in message or "failing" in message):
+                        failure_reasons.append("Health check is failing - check your health check endpoint")
+                    elif "task stopped" in message and "health check" in message:
+                        failure_reasons.append("Tasks are being stopped due to failed health checks")
+                    elif "port" in message and ("bind" in message or "already in use" in message):
+                        failure_reasons.append("Port binding issue - check if the port is already in use")
+                    elif "memory" in message and ("limit" in message or "oom" in message or "killed" in message):
+                        failure_reasons.append("Container running out of memory - consider increasing memory allocation")
+
+        # Remove duplicates
+        failure_reasons = list(set(failure_reasons))
+
+        # Determine overall status
+        if crash_loop_detected:
+            overall_status = "CRASH_LOOP"
+            status_message = f"Service is in a crash loop (running: {running_count}/{desired_count})"
+        elif deployment_in_progress:
+            overall_status = "IN_PROGRESS"
+            status_message = f"Deployment in progress (running: {running_count}/{desired_count})"
+        elif healthy:
+            overall_status = "HEALTHY"
+            status_message = f"Service is healthy (running: {running_count}/{desired_count})"
+        elif running_count == 0:
+            overall_status = "NO_RUNNING_TASKS"
+            status_message = "No tasks are running"
+        elif running_count < desired_count:
+            overall_status = "DEGRADED"
+            status_message = f"Service is degraded (running: {running_count}/{desired_count})"
+        else:
+            overall_status = "UNKNOWN"
+            status_message = f"Service status unclear (running: {running_count}/{desired_count})"
+
+        return {
+            "status": overall_status,
+            "message": status_message,
+            "service": {
+                "serviceName": service_name,
+                "clusterName": cluster_name,
+                "runningCount": running_count,
+                "desiredCount": desired_count,
+                "pendingCount": pending_count,
+                "taskDefinition": service.get("taskDefinition", ""),
+                "deploymentStatus": deployment_status,
+            },
+            "failureReasons": failure_reasons,
+            "crashLoopDetected": crash_loop_detected,
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting environment service status: {e}")
+        return {
+            "status": "ERROR",
+            "message": f"Failed to get service status: {str(e)}",
+            "service": None,
+            "failureReasons": [f"API Error: {str(e)}"],
+            "crashLoopDetected": False,
+        }
