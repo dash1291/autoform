@@ -48,8 +48,8 @@ class MockTeamAwsConfig:
         self.id = config_id
         self.teamId = team_id
         self.awsRegion = "us-east-1"
-        self.awsAccessKey = "encrypted-access-key"
-        self.awsSecretKey = "encrypted-secret-key"
+        self.awsAccessKeyId = "encrypted-access-key"
+        self.awsSecretAccessKey = "encrypted-secret-key"
 
 
 class MockEnvironment:

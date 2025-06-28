@@ -17,6 +17,7 @@ from infrastructure.types import (
 from infrastructure import ECSInfrastructure
 from core.database import prisma
 from services.encryption_service import encryption_service
+from services.deployment_manager import deployment_manager
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,23 @@ class DeploymentService:
         except Exception as error:
             logger.error(f"Failed to log to database: {error}")
 
+    async def check_if_aborted(self, deployment_id: Optional[str], update_db: bool = True) -> bool:
+        """Check if deployment has been aborted"""
+        if deployment_id and deployment_manager.is_deployment_aborted(deployment_id):
+            if update_db:
+                await self.log_to_database(deployment_id, "❌ Deployment aborted by user")
+                # Update deployment status to failed (only do this once)
+                try:
+                    await prisma.deployment.update(
+                        where={"id": deployment_id}, 
+                        data={"status": "FAILED"}
+                    )
+                except Exception:
+                    # Status may have already been updated, ignore this error
+                    pass
+            return True
+        return False
+
     async def execute_with_logging(
         self,
         command: str,
@@ -102,6 +120,10 @@ class DeploymentService:
         cwd: Optional[str] = None,
     ) -> str:
         """Execute command with logging"""
+        # Check if deployment was aborted before executing command (without updating DB to prevent thrashing)
+        if await self.check_if_aborted(deployment_id, update_db=False):
+            raise Exception("Deployment aborted by user")
+            
         if deployment_id:
             await self.log_to_database(deployment_id, f"Executing: {command}")
 
@@ -184,6 +206,7 @@ class DeploymentService:
                 
             # Register deployment for tracking
             if deployment_id:
+                deployment_manager.register_deployment(config.project_id, deployment_id)
                 await self.log_to_database(
                     deployment_id, "🚀 Starting deployment process..."
                 )
@@ -191,6 +214,11 @@ class DeploymentService:
             # Step 1: Clone repository
             if deployment_id:
                 await self.log_to_database(deployment_id, "📥 Cloning repository...")
+            
+            # Check if aborted before cloning
+            if await self.check_if_aborted(deployment_id):
+                raise Exception("Deployment aborted by user")
+                
             clone_dir = await self.clone_repository(
                 config.git_repo_url,
                 config.branch,
@@ -204,6 +232,11 @@ class DeploymentService:
                 await self.log_to_database(
                     deployment_id, "🐳 Building and pushing Docker image..."
                 )
+            
+            # Check if aborted before building
+            if await self.check_if_aborted(deployment_id):
+                raise Exception("Deployment aborted by user")
+                
             image_uri = await self.build_and_push_image(
                 config.project_name,
                 config.commit_sha,
@@ -218,6 +251,11 @@ class DeploymentService:
                 await self.log_to_database(
                     deployment_id, "☁️ Provisioning AWS infrastructure..."
                 )
+            
+            # Check if aborted before infrastructure deployment
+            if await self.check_if_aborted(deployment_id):
+                raise Exception("Deployment aborted by user")
+                
             result = await self.deploy_infrastructure(config, image_uri, deployment_id)
 
             # Wait for service to become healthy before marking as completed
@@ -247,6 +285,9 @@ class DeploymentService:
                         where={"id": deployment_id}, data={"status": "SUCCESS"}
                     )
 
+                    # Complete deployment tracking
+                    deployment_manager.complete_deployment(config.project_id)
+
                     # Update environment status to deployed
                     if deployment.environmentId:
                         await prisma.environment.update(
@@ -262,6 +303,9 @@ class DeploymentService:
                     deployment = await prisma.deployment.update(
                         where={"id": deployment_id}, data={"status": "FAILED"}
                     )
+
+                    # Complete deployment tracking (even if failed)
+                    deployment_manager.complete_deployment(config.project_id)
 
                     # Update environment status to failed
                     if deployment.environmentId:
@@ -284,6 +328,9 @@ class DeploymentService:
                 deployment = await prisma.deployment.update(
                     where={"id": deployment_id}, data={"status": "FAILED"}
                 )
+
+                # Complete deployment tracking (even if failed/aborted)
+                deployment_manager.complete_deployment(config.project_id)
 
                 # Update environment status to failed
                 if deployment.environmentId:
@@ -647,6 +694,10 @@ phases:
         MAX_WAIT_SECONDS = 30 * 60  # 30 minutes maximum
 
         while True:
+            # Check if deployment was aborted (without updating DB to prevent thrashing in the build loop)
+            if await self.check_if_aborted(deployment_id, update_db=False):
+                raise Exception("Deployment aborted by user")
+            
             # Check timeout
             elapsed_time = time.time() - start_time
             if elapsed_time > MAX_WAIT_SECONDS:
@@ -995,6 +1046,10 @@ phases:
             )
 
             while True:
+                # Check if deployment was aborted (without updating DB to prevent thrashing in the wait loop)
+                if await self.check_if_aborted(deployment_id, update_db=False):
+                    return False
+                    
                 elapsed = asyncio.get_event_loop().time() - start_time
 
                 if elapsed > max_wait_seconds:

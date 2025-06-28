@@ -368,8 +368,8 @@ async def trigger_environment_deployment(environment, webhook_payload: Dict[str,
             return
 
         # Decrypt team credentials
-        access_key = encryption_service.decrypt(team_aws_config.awsAccessKey)
-        secret_key = encryption_service.decrypt(team_aws_config.awsSecretKey)
+        access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
+        secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
         aws_credentials = {"access_key": access_key, "secret_key": secret_key}
         aws_region = team_aws_config.awsRegion
 
