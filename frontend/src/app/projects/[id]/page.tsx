@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Clock, GitCommit, Server } from 'lucide-react'
 import { useAuth } from '@/lib/auth-client'
 import { apiClient } from '@/lib/api'
+import TabNavButton from '@/components/TabNavButton'
 
 export default function ProjectDetail() {
   const { isAuthenticated, isLoading: authLoading } = useAuth()
@@ -250,8 +251,8 @@ export default function ProjectDetail() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Please sign in</h1>
-          <p className="text-gray-600">You need to be signed in to view this project.</p>
+        <h1 className="text-xl font-semibold mb-4">Please sign in</h1>
+        <p className="text-muted-foreground">You need to be signed in to view this project.</p>
         </div>
       </div>
     )
@@ -260,7 +261,7 @@ export default function ProjectDetail() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     )
   }
@@ -269,11 +270,11 @@ export default function ProjectDetail() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Project Not Found</h1>
-          <p className="text-gray-600 mb-4">{error || 'The project you are looking for does not exist.'}</p>
+          <h1 className="text-2xl font-bold text-foreground mb-4">Project Not Found</h1>
+          <p className="text-muted-foreground mb-4">{error || 'The project you are looking for does not exist.'}</p>
           <Link
             href="/dashboard"
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary transition-colors"
           >
             Back to Dashboard
           </Link>
@@ -283,7 +284,7 @@ export default function ProjectDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
@@ -291,12 +292,12 @@ export default function ProjectDetail() {
             <div>
               <Link
                 href="/dashboard"
-                className="text-blue-600 hover:text-blue-700 text-sm mb-2 inline-block"
+                className="text-muted-foreground text-xs hover:text-foreground mb-2 inline-block"
               >
                 ← Back to Dashboard
               </Link>
-              <h1 className="text-3xl font-bold text-gray-900">{project.name}</h1>
-              <p className="text-gray-600">{project.gitRepoUrl}</p>
+              <h1 className="text-xl font-normal">{project.name}</h1>
+              <p className="text-sm">{project.gitRepoUrl}</p>
             </div>
             {/* Status is now at environment level */}
           </div>
@@ -304,63 +305,38 @@ export default function ProjectDetail() {
 
         {/* Tabs */}
         <div className="mb-6">
-          <div className="border-b border-gray-200">
+          <div className="border-b pb-0.5">
             <nav className="-mb-px flex space-x-8">
-              <Button
-                variant="ghost"
+              <TabNavButton
+                active={activeTab === 'overview'}
                 onClick={() => setActiveTab('overview')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
-                  activeTab === 'overview'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                }`}
               >
                 Overview
-              </Button>
-              <Button
-                variant="ghost"
+              </TabNavButton>
+              <TabNavButton
+                active={activeTab === 'deployments'}
                 onClick={() => setActiveTab('deployments')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
-                  activeTab === 'deployments'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                }`}
               >
                 Deployments ({deployments.length})
-              </Button>
-              <Button
-                variant="ghost"
+              </TabNavButton>
+              <TabNavButton
+                active={activeTab === 'logs'}
                 onClick={() => setActiveTab('logs')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
-                  activeTab === 'logs'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                }`}
               >
                 Application Logs
-              </Button>
-              <Button
-                variant="ghost"
+              </TabNavButton>
+              <TabNavButton
+                active={activeTab === 'shell'}
                 onClick={() => setActiveTab('shell')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
-                  activeTab === 'shell'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                }`}
               >
                 Shell Access
-              </Button>
-              <Button
-                variant="ghost"
+              </TabNavButton>
+              <TabNavButton
+                active={activeTab === 'settings'}
                 onClick={() => setActiveTab('settings')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
-                  activeTab === 'settings'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                }`}
               >
                 Settings
-              </Button>
+              </TabNavButton>
             </nav>
           </div>
         </div>
@@ -369,12 +345,12 @@ export default function ProjectDetail() {
           {activeTab === 'overview' && (
             <>
               {/* Environment Status Cards */}
-              <div className="bg-white shadow rounded-lg p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Environment Status</h2>
+              <div className="shadow rounded-lg p-6">
+                <h2 className="text-lg mb-4">Environment Status</h2>
                 {environments.length === 0 ? (
-                  <div className="text-center py-8 bg-gray-50 rounded-lg">
-                    <p className="text-gray-500">No environments configured for this project.</p>
-                    <p className="text-sm text-gray-400 mt-1">
+                  <div className="py-8 rounded-lg">
+                    <p>No environments configured for this project.</p>
+                    <p className="text-sm text-muted-foreground mt-1">
                       Create an environment in the Settings tab to start deploying.
                     </p>
                   </div>
@@ -383,21 +359,21 @@ export default function ProjectDetail() {
                     {environments.map((env) => {
                       const envStatus = environmentStatuses[env.id]
                       return (
-                        <div key={env.id} className="border border-gray-200 rounded-lg p-4">
+                        <div key={env.id} className="border border-border rounded-lg p-4">
                           <div className="flex items-center justify-between mb-3">
                             <div>
-                              <h3 className="font-medium text-gray-900">{env.name}</h3>
-                              <p className="text-sm text-gray-500">{env.branch}</p>
+                              <h3 className="font-medium text-foreground">{env.name}</h3>
+                              <p className="text-sm text-muted-foreground">{env.branch}</p>
                             </div>
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              envStatus?.status === 'HEALTHY' ? 'bg-green-100 text-green-800' :
-                              envStatus?.status === 'CRASH_LOOP' ? 'bg-red-100 text-red-800' :
-                              envStatus?.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' :
-                              envStatus?.status === 'DEGRADED' ? 'bg-orange-100 text-orange-800' :
-                              envStatus?.status === 'NO_RUNNING_TASKS' ? 'bg-gray-100 text-gray-800' :
-                              envStatus?.status === 'NOT_DEPLOYED' ? 'bg-gray-100 text-gray-600' :
-                              envStatus?.status === 'ERROR' ? 'bg-red-100 text-red-800' :
-                              'bg-gray-100 text-gray-800'
+                              envStatus?.status === 'HEALTHY' ? 'bg-primary/20 text-green-400' :
+                              envStatus?.status === 'CRASH_LOOP' ? 'bg-destructive/20 text-destructive' :
+                              envStatus?.status === 'IN_PROGRESS' ? 'bg-primary/20 text-primary' :
+                              envStatus?.status === 'DEGRADED' ? 'bg-accent/20 text-accent-foreground' :
+                              envStatus?.status === 'NO_RUNNING_TASKS' ? 'bg-primary text-foreground' :
+                              envStatus?.status === 'NOT_DEPLOYED' ? 'bg-primary text-muted-foreground' :
+                              envStatus?.status === 'ERROR' ? 'bg-destructive/20 text-destructive' :
+                              'bg-muted text-foreground'
                             }`}>
                               {envStatus?.status || 'Loading...'}
                             </span>
@@ -405,10 +381,10 @@ export default function ProjectDetail() {
                           
                           {envStatus && (
                             <div className="space-y-2">
-                              <p className="text-sm text-gray-600">{envStatus.message}</p>
+                              <p className="text-sm text-muted-foreground">{envStatus.message}</p>
                               
                               {envStatus.service && (
-                                <div className="text-xs text-gray-500">
+                                <div className="text-xs text-muted-foreground">
                                   Tasks: {envStatus.service.runningCount}/{envStatus.service.desiredCount} running
                                   {envStatus.service.pendingCount > 0 && ` (${envStatus.service.pendingCount} pending)`}
                                 </div>
@@ -420,7 +396,7 @@ export default function ProjectDetail() {
                                     href={`http://${env.domain}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-xs text-blue-600 hover:text-blue-700 underline"
+                                    className="text-xs text-muted-foreground hover:text-foreground underline"
                                   >
                                     {env.domain}
                                   </a>
@@ -428,15 +404,15 @@ export default function ProjectDetail() {
                               )}
                               
                               {envStatus.crashLoopDetected && (
-                                <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+                                <div className="mt-2 p-2 bg-destructive/20 border border-destructive rounded text-xs text-destructive">
                                   ⚠️ Crash loop detected
                                 </div>
                               )}
                               
                               {envStatus.failureReasons && envStatus.failureReasons.length > 0 && (
-                                <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded">
-                                  <p className="text-xs font-medium text-yellow-800">Issues:</p>
-                                  <ul className="text-xs text-yellow-700 mt-1 space-y-1">
+                                <div className="mt-2 p-2 bg-accent/20 border border-accent rounded">
+                                  <p className="text-xs font-medium text-accent-foreground">Issues:</p>
+                                  <ul className="text-xs text-accent-foreground mt-1 space-y-1">
                                     {envStatus.failureReasons.slice(0, 2).map((reason: string, index: number) => (
                                       <li key={index}>• {reason}</li>
                                     ))}
@@ -456,24 +432,24 @@ export default function ProjectDetail() {
               </div>
 
               {/* Project Information */}
-              <div className="bg-white shadow rounded-lg p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Project Information</h2>
+              <div className="shadow rounded-lg p-6">
+                <h2 className="text-lg text-foreground mb-4">Project Information</h2>
                 <div className="space-y-4">
                   <div>
-                    <span className="text-sm font-medium text-gray-500">Repository</span>
-                    <div className="mt-1 text-sm text-gray-900">{project.gitRepoUrl}</div>
+                    <span className="text-sm font-medium text-muted-foreground">Repository</span>
+                    <div className="mt-1 text-sm text-foreground">{project.gitRepoUrl}</div>
                   </div>
                   
                   <div>
-                    <span className="text-sm font-medium text-gray-500">Created</span>
-                    <div className="mt-1 text-sm text-gray-900">
+                    <span className="text-sm font-medium text-muted-foreground">Created</span>
+                    <div className="mt-1 text-sm text-foreground">
                       {new Date(project.createdAt).toLocaleString()}
                     </div>
                   </div>
                   
                   <div>
-                    <span className="text-sm font-medium text-gray-500">Last Updated</span>
-                    <div className="mt-1 text-sm text-gray-900">
+                    <span className="text-sm font-medium text-muted-foreground">Last Updated</span>
+                    <div className="mt-1 text-sm text-foreground">
                       {new Date(project.updatedAt).toLocaleString()}
                     </div>
                   </div>
@@ -482,14 +458,14 @@ export default function ProjectDetail() {
 
               {/* Live Deployment Logs */}
               {activeDeploymentId && liveLogs && (
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                <div className="shadow rounded-lg p-6">
+                  <h2 className="text-xl font-semibold text-foreground mb-4">
                     🔴 Live Deployment Logs
                   </h2>
-                  <div className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-y-auto max-h-96 font-mono text-sm">
+                  <div className="bg-foreground text-primary p-4 rounded-lg overflow-y-auto max-h-96 font-mono text-sm">
                     <pre className="whitespace-pre-wrap break-words">{liveLogs}</pre>
                   </div>
-                  <p className="text-sm text-gray-500 mt-2">
+                  <p className="text-sm text-muted-foreground mt-2">
                     Logs update automatically every 2 seconds
                   </p>
                 </div>
@@ -497,36 +473,35 @@ export default function ProjectDetail() {
             </>
           )}
 
-         
           {activeTab === 'deployments' && (
-            <div className="bg-white shadow rounded-lg p-6">
+            <div className="shadow rounded-lg p-6">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">Deployment History</h2>
-                <Button onClick={handleDeploy}>
+                <h2 className="text-lg text-foreground">Deployment History</h2>
+                <Button size="sm" onClick={handleDeploy}>
                   Deploy
                 </Button>
               </div>
               {deployments.length === 0 ? (
-                <p className="text-gray-500">No deployments yet.</p>
+                <p className="text-muted-foreground">No deployments yet.</p>
               ) : (
                 <div className="space-y-4">
                   {deployments.map((deployment) => (
-                    <div key={deployment.id} className="border border-gray-200 rounded-lg p-4">
+                    <div key={deployment.id} className="border border-border rounded-lg p-4">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            deployment.status === 'SUCCESS' ? 'bg-green-100 text-green-800' :
-                            deployment.status === 'FAILED' ? 'bg-red-100 text-red-800' :
-                            'bg-yellow-100 text-yellow-800'
+                        <div className="flex text-sm items-center space-x-3">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded ${
+                            deployment.status === 'SUCCESS' ? 'bg-primary text-foreground' :
+                            deployment.status === 'FAILED' ? 'bg-destructive' :
+                            'bg-accent/20 text-accent-foreground'
                           }`}>
                             {deployment.status}
                           </span>
                           <div className="flex items-center space-x-1">
-                            <Server className="h-3 w-3 text-gray-400" />
+                            <Server className="h-3 w-3 text-muted-foreground" />
                             <span>{deployment.environment?.name || 'Unknown'}</span>
                           </div>
                           <div className="flex items-center space-x-1">
-                            <GitCommit className="h-3 w-3 text-gray-500" />
+                            <GitCommit className="h-3 w-3 text-muted-foreground" />
                             {deployment.commitSha ? (
                               (() => {
                                 // Extract owner and repo from project.gitRepoUrl
@@ -544,21 +519,21 @@ export default function ProjectDetail() {
                                     href={commitUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-sm bg-gray-100 px-2 py-1 rounded hover:underline"
+                                    className="text-sm bg-muted px-2 py-1 rounded hover:underline"
                                   >
                                     {deployment.commitSha.substring(0, 8)}
                                   </a>
                                 ) : (
-                                  <code className="text-sm bg-gray-100 px-2 py-1 rounded">{deployment.commitSha.substring(0, 8)}</code>
+                                  <code className="text-sm bg-muted px-2 py-1 rounded">{deployment.commitSha.substring(0, 8)}</code>
                                 )
                               })()
                             ) : (
-                              <code className="text-sm bg-gray-100 px-2 py-1 rounded">N/A</code>
+                              <code className="text-sm bg-muted px-2 py-1 rounded">N/A</code>
                             )}
                           </div>
                           <div className="flex items-center space-x-1">
-                            <Clock className="h-3 w-3 text-gray-500" />
-                            <span className="text-sm text-gray-600">
+                            <Clock className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">
                               {new Date(deployment.createdAt).toLocaleDateString('en-US', {
                                 month: 'short',
                                 day: 'numeric',
@@ -584,16 +559,16 @@ export default function ProjectDetail() {
                       {deployment.logs && deployment.logs.trim() !== '' ? (
                         <div className="mt-3 border-t pt-3">
                           <details className="text-sm">
-                            <summary className="cursor-pointer text-gray-600 hover:text-gray-800 font-medium">
+                            <summary className="cursor-pointer text-muted-foreground hover:text-foreground font-medium">
                             View Deployment Logs
                             </summary>
-                            <pre className="mt-2 bg-gray-900 text-gray-100 p-3 rounded text-xs overflow-y-auto max-h-48 whitespace-pre-wrap break-words font-mono">
+                            <pre className="mt-2 bg-gray-900 text-foreground p-3 rounded text-xs overflow-y-auto max-h-48 whitespace-pre-wrap break-words font-mono">
                               {deployment.logs}
                             </pre>
                           </details>
                         </div>
                       ) : (
-                        <div className="mt-3 text-sm text-gray-500">
+                        <div className="mt-3 text-sm text-muted-foreground">
                           <em>No logs available for this deployment</em>
                         </div>
                       )}
@@ -605,11 +580,11 @@ export default function ProjectDetail() {
           )}
 
           {activeTab === 'logs' && (
-            <div className="bg-white shadow rounded-lg p-6">
+            <div className="shadow rounded-lg p-6">
               <div className="flex justify-between items-center mb-4">
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900">Application Logs</h2>
-                  <p className="text-sm text-gray-500">
+                  <h2 className="text-lg text-foreground">Application Logs</h2>
+                  <p className="text-sm text-muted-foreground">
                     View real-time application logs from your deployed environments.
                   </p>
                 </div>
@@ -649,70 +624,67 @@ export default function ProjectDetail() {
                   </Button>
                 </div>
               </div>
-              
               {selectedEnvironmentForVars ? (
                 <LogsViewer environmentId={selectedEnvironmentForVars} />
               ) : environments.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <p className="text-gray-500">No environments found.</p>
-                  <p className="text-sm text-gray-400 mt-1">
+                <div className="text-center py-12 bg-primary rounded-lg">
+                  <p className="text-muted-foreground">No environments found.</p>
+                  <p className="text-sm text-muted-foreground mt-1">
                     Create an environment first in the &quot;Deployment Environments&quot; tab.
                   </p>
                 </div>
               ) : (
-                <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <p className="text-gray-500">Select an environment to view its logs.</p>
+                <div className="text-center py-12 bg-muted rounded-lg">
+                  <p className="text-muted-foreground">Select an environment to view its logs.</p>
                 </div>
               )}
             </div>
           )}
 
           {activeTab === 'settings' && (
-            <div className="bg-white shadow rounded-lg overflow-hidden">
+            <div className="shadow rounded-lg overflow-hidden">
               <div className="flex">
                 {/* Vertical sidebar navigation */}
-                <div className="w-64 bg-gray-50 border-r border-gray-200">
+                <div className="w-64 border-r">
                   <nav className="p-4 space-y-2">
                     <Button
-                      variant={activeSettingsTab === 'repository' ? 'secondary' : 'ghost'}
+                      variant={'ghost'}
                       onClick={() => setActiveSettingsTab('repository')}
-                      className="w-full justify-start text-sm font-medium"
+                      className={`${activeSettingsTab === 'repository' ? 'text-foreground' : 'text-muted-foreground'} hover:text-foreground w-full justify-start text-sm`}
                     >
                       Git Repository
                     </Button>
                     <Button
-                      variant={activeSettingsTab === 'repository' ? 'secondary' : 'ghost'}
+                      variant={'ghost'}
                       onClick={() => setActiveSettingsTab('environments')}
-                      className="w-full justify-start text-sm font-medium"
+                      className={`${activeSettingsTab === 'environments' ? 'text-foreground' : 'text-muted-foreground'} hover:text-foreground w-full justify-start text-sm`}
                     >
                       Deployment Environments
                     </Button>
-                    
                     <Button
-                      variant={activeSettingsTab === 'environment' ? 'secondary' : 'ghost'}
+                      variant={'ghost'}
                       onClick={() => setActiveSettingsTab('environment')}
-                      className="w-full justify-start text-sm font-medium"
+                      className={`${activeSettingsTab === 'environment' ? 'text-foreground' : 'text-muted-foreground'} hover:text-foreground w-full justify-start text-sm`}
                     >
                       Environment Variables
                     </Button>
                     <Button
-                      variant={activeSettingsTab === 'resources' ? 'secondary' : 'ghost'}
+                      variant={'ghost'}
                       onClick={() => setActiveSettingsTab('resources')}
-                      className="w-full justify-start text-sm font-medium"
+                      className={`${activeSettingsTab === 'resources' ? 'text-foreground' : 'text-muted-foreground'} hover:text-foreground w-full justify-start text-sm`}
                     >
                       AWS Resources
                     </Button>
                   </nav>
                 </div>
-
                 {/* Content area */}
                 <div className="flex-1 p-6">
                   {activeSettingsTab === 'environment' && (
                     <div className="space-y-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="text-lg font-medium text-gray-900">Environment Variables</h3>
-                          <p className="text-sm text-gray-500">
+                          <h3 className="text-lg font-medium text-foreground">Environment Variables</h3>
+                          <p className="text-sm text-muted-foreground">
                             Manage environment-specific variables and secrets for your application.
                           </p>
                         </div>
@@ -734,52 +706,47 @@ export default function ProjectDetail() {
                           </Select>
                         </div>
                       </div>
-                      
                       {selectedEnvironmentForVars ? (
                         <EnvironmentVariables environmentId={selectedEnvironmentForVars} />
                       ) : environments.length === 0 ? (
-                        <div className="text-center py-12 bg-gray-50 rounded-lg">
-                          <p className="text-gray-500">No environments found.</p>
-                          <p className="text-sm text-gray-400 mt-1">
+                        <div className="text-center py-12 rounded-lg">
+                          <p className="text-muted-foreground">No environments found.</p>
+                          <p className="text-sm text-muted-foreground mt-1">
                             Create an environment first in the &quot;Deployment Environments&quot; tab.
                           </p>
                         </div>
                       ) : (
-                        <div className="text-center py-12 bg-gray-50 rounded-lg">
-                          <p className="text-gray-500">Select an environment to manage its variables.</p>
+                        <div className="text-center py-12 bg-muted rounded-lg">
+                          <p className="text-muted-foreground">Select an environment to manage its variables.</p>
                         </div>
                       )}
                     </div>
                   )}
-
                   {activeSettingsTab === 'environments' && (
-                    <div className="bg-white rounded-lg">
-                      <EnvironmentManagement 
-                        projectId={project?.id || ''} 
+                    <div className="rounded-lg">
+                      <EnvironmentManagement
+                        projectId={project?.id || ''}
                         teamId={project?.teamId}
                         onEnvironmentSelect={(env) => {
                           setSelectedEnvironment(env)
-                          // You could also switch to a deployment tab for that environment
                         }}
                         onEnvironmentChange={fetchEnvironments}
                       />
                     </div>
                   )}
-
                   {activeSettingsTab === 'repository' && (
-                    <RepositoryConfiguration 
-                      projectId={params.id as string} 
+                    <RepositoryConfiguration
+                      projectId={params.id as string}
                       project={project}
                       onUpdate={fetchProject}
                     />
                   )}
-
                   {activeSettingsTab === 'resources' && (
                     <div className="space-y-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="text-lg font-medium text-gray-900">AWS Resources</h3>
-                          <p className="text-sm text-gray-500">
+                          <h3 className="text-lg font-medium text-foreground">AWS Resources</h3>
+                          <p className="text-sm text-muted-foreground">
                             View environment-specific AWS resources and infrastructure.
                           </p>
                         </div>
@@ -801,95 +768,87 @@ export default function ProjectDetail() {
                           </Select>
                         </div>
                       </div>
-
                       {selectedEnvironmentForVars ? (
                         <div className="space-y-6">
-                          <ResourceConfiguration 
-                            projectId={params.id as string} 
+                          <ResourceConfiguration
+                            projectId={params.id as string}
                             environmentId={selectedEnvironmentForVars}
                             project={project}
                             onUpdate={fetchProject}
                           />
-     
-                          <NetworkConfiguration 
-                            projectId={params.id as string} 
+                          <NetworkConfiguration
+                            projectId={params.id as string}
                             environmentId={selectedEnvironmentForVars}
                             project={project}
                             onUpdate={fetchProject}
                           />
-
-                          <div className="bg-white border border-gray-200 rounded-lg p-6">
-                            <h2 className="text-xl font-semibold text-gray-900 mb-4">Other Resources</h2>
+                          <div className="border border-border rounded-lg p-6">
+                            <h2 className="text-xl font-semibold text-foreground mb-4">Other Resources</h2>
                             {(() => {
                               const selectedEnv = environments.find(e => e.id === selectedEnvironmentForVars)
                               return selectedEnv ? (
                                 <div className="space-y-3">
                                   {selectedEnv.ecsServiceArn && (
-                                    <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                                    <div className="flex items-center justify-between py-2 px-3 bg-muted rounded-lg">
                                       <div>
-                                        <span className="text-sm font-medium text-gray-900">ECS Service</span>
-                                        <p className="text-xs text-gray-500 truncate max-w-full">{selectedEnv.ecsServiceArn}</p>
+                                        <span className="text-sm font-medium text-foreground">ECS Service</span>
+                                        <p className="text-xs text-muted-foreground truncate max-w-full">{selectedEnv.ecsServiceArn}</p>
                                       </div>
                                     </div>
                                   )}
-                                  
                                   {selectedEnv.ecsClusterArn && (
-                                    <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                                    <div className="flex items-center justify-between py-2 px-3 bg-muted rounded-lg">
                                       <div>
-                                        <span className="text-sm font-medium text-gray-900">ECS Cluster</span>
-                                        <p className="text-xs text-gray-500 truncate max-w-full">{selectedEnv.ecsClusterArn}</p>
+                                        <span className="text-sm font-medium text-foreground">ECS Cluster</span>
+                                        <p className="text-xs text-muted-foreground truncate max-w-full">{selectedEnv.ecsClusterArn}</p>
                                       </div>
                                     </div>
                                   )}
-
                                   {selectedEnv.albArn && (
-                                    <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                                    <div className="flex items-center justify-between py-2 px-3 bg-muted rounded-lg">
                                       <div>
-                                        <span className="text-sm font-medium text-gray-900">Load Balancer</span>
-                                        <p className="text-xs text-gray-500 truncate max-w-full">{selectedEnv.albArn}</p>
+                                        <span className="text-sm font-medium text-foreground">Load Balancer</span>
+                                        <p className="text-xs text-muted-foreground truncate max-w-full">{selectedEnv.albArn}</p>
                                       </div>
                                     </div>
                                   )}
-                                  
-                                  <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                                  <div className="flex items-center justify-between py-2 px-3 bg-muted rounded-lg">
                                     <div>
-                                      <span className="text-sm font-medium text-gray-900">Logs</span>
-                                      <p className="text-xs text-gray-500">/ecs/{project.name}-{selectedEnv.name}</p>
+                                      <span className="text-sm font-medium text-foreground">Logs</span>
+                                      <p className="text-xs text-muted-foreground">/ecs/{project.name}-{selectedEnv.name}</p>
                                     </div>
                                   </div>
-                                  
-                                  <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                                  <div className="flex items-center justify-between py-2 px-3 bg-muted rounded-lg">
                                     <div>
-                                      <span className="text-sm font-medium text-gray-900">Container Registry</span>
-                                      <p className="text-xs text-gray-500">{project.name.toLowerCase().replace(/[^a-z0-9-_]/g, '-')}-{selectedEnv.name.toLowerCase()}</p>
+                                      <span className="text-sm font-medium text-foreground">Container Registry</span>
+                                      <p className="text-xs text-muted-foreground">{project.name.toLowerCase().replace(/[^a-z0-9-_]/g, '-')}-{selectedEnv.name.toLowerCase()}</p>
                                     </div>
                                   </div>
-
-                                  <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                                  <div className="flex items-center justify-between py-2 px-3 bg-muted rounded-lg">
                                     <div>
-                                      <span className="text-sm font-medium text-gray-900">AWS Region</span>
-                                      <p className="text-xs text-gray-500">{selectedEnv.awsConfig.region}</p>
+                                      <span className="text-sm font-medium text-foreground">AWS Region</span>
+                                      <p className="text-xs text-muted-foreground">{selectedEnv.awsConfig.region}</p>
                                     </div>
                                   </div>
                                 </div>
                               ) : (
                                 <div className="text-center py-4">
-                                  <p className="text-sm text-gray-500">Environment not found</p>
+                                  <p className="text-sm text-muted-foreground">Environment not found</p>
                                 </div>
                               )
                             })()}
                           </div>
                         </div>
                       ) : environments.length === 0 ? (
-                        <div className="text-center py-12 bg-gray-50 rounded-lg">
-                          <p className="text-gray-500">No environments found.</p>
-                          <p className="text-sm text-gray-400 mt-1">
+                        <div className="text-center py-12 rounded-lg">
+                          <p className="text-muted-foreground">No environments found.</p>
+                          <p className="text-sm text-muted-foreground mt-1">
                             Create an environment first in the &quot;Deployment Environments&quot; tab.
                           </p>
                         </div>
                       ) : (
-                        <div className="text-center py-12 bg-gray-50 rounded-lg">
-                          <p className="text-gray-500">Select an environment to view its AWS resources.</p>
+                        <div className="text-center py-12 bg-muted rounded-lg">
+                          <p className="text-muted-foreground">Select an environment to view its AWS resources.</p>
                         </div>
                       )}
                     </div>
@@ -900,11 +859,11 @@ export default function ProjectDetail() {
           )}
 
           {activeTab === 'shell' && (
-            <div className="bg-white shadow rounded-lg p-6">
+            <div className="shadow rounded-lg p-6">
               <div className="flex justify-between items-center mb-4">
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900">Shell Access</h2>
-                  <p className="text-sm text-gray-500">
+                  <h2 className="text-lg text-foreground">Shell Access</h2>
+                  <p className="text-sm text-muted-foreground">
                     Execute commands directly in your deployed application containers.
                   </p>
                 </div>
@@ -926,36 +885,34 @@ export default function ProjectDetail() {
                   </Select>
                 </div>
               </div>
-              
               {selectedEnvironmentForVars ? (
-                <SimpleShell 
-                  environmentId={selectedEnvironmentForVars} 
-                  isActive={activeTab === 'shell'} 
+                <SimpleShell
+                  environmentId={selectedEnvironmentForVars}
+                  isActive={activeTab === 'shell'}
                 />
               ) : environments.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <p className="text-gray-500">No environments found.</p>
-                  <p className="text-sm text-gray-400 mt-1">
+                <div className="text-center py-12 rounded-lg">
+                  <p className="text-muted-foreground">No environments found.</p>
+                  <p className="text-sm text-muted-foreground mt-1">
                     Create an environment first in the &quot;Deployment Environments&quot; tab.
                   </p>
                 </div>
               ) : (
-                <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <p className="text-gray-500">Select an environment to access its shell.</p>
+                <div className="text-center py-12 bg-muted rounded-lg">
+                  <p className="text-muted-foreground">Select an environment to access its shell.</p>
                 </div>
               )}
             </div>
           )}
         </div>
-
-        {/* Deployment Modal */}
-        <DeploymentModal
-          projectId={project?.id || ''}
-          isOpen={deploymentModalOpen}
-          onClose={() => setDeploymentModalOpen(false)}
-          onDeploymentStarted={handleDeploymentStarted}
-        />
       </div>
+      {/* Deployment Modal */}
+      <DeploymentModal
+        projectId={project?.id || ''}
+        isOpen={deploymentModalOpen}
+        onClose={() => setDeploymentModalOpen(false)}
+        onDeploymentStarted={handleDeploymentStarted}
+      />
     </div>
   )
 }

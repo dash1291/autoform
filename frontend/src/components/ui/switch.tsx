@@ -28,7 +28,7 @@ export function Switch({ checked, onCheckedChange, disabled = false, className =
     >
       <span
         className={`
-          inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out
+          inline-block h-4 w-4 transform rounded-full bg-primary transition duration-200 ease-in-out
           ${checked ? 'translate-x-6' : 'translate-x-1'}
         `}
       />

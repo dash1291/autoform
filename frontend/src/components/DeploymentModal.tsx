@@ -116,11 +116,11 @@ export default function DeploymentModal({ projectId, isOpen, onClose, onDeployme
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div className="bg-background rounded shadow-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">Deploy Project</h2>
-            <p className="text-gray-600 mt-1">Select an environment to deploy to</p>
+            <h2 className="text-lg">Deploy Project</h2>
+            <p className="mt-1 text-muted-foreground text-sm">Select an environment to deploy to</p>
           </div>
           <Button variant="outline" size="sm" onClick={onClose}>
             <X className="h-4 w-4" />
@@ -196,8 +196,8 @@ export default function DeploymentModal({ projectId, isOpen, onClose, onDeployme
                           <div className="mt-4 pt-4 border-t">
                             <div className="flex items-center justify-between">
                               <div>
-                              <span className="text-sm font-medium text-gray-700">Latest Deployment</span>
-                              <span className="text-xs text-gray-500 ml-2 mt-1">
+                              <span className="text-sm font-medium text-muted-foreground">Latest Deployment</span>
+                              <span className="text-xs ml-2 mt-1">
                                 {new Date(environment.latestDeployment.createdAt).toLocaleString()}
                               </span>
                               </div>

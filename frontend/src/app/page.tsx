@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/lib/auth-client'
 import { signIn } from 'next-auth/react'
-import { Github, Zap, Users, Cloud } from 'lucide-react'
+import { Github, Zap, Users, Copy, Cloud, Trees } from 'lucide-react'
 
 export default function Home() {
   const { isAuthenticated, isLoading } = useAuth()
@@ -31,40 +31,34 @@ export default function Home() {
     <main className="min-h-screen bg-gradient-to-br">
       {/* Hero Section */}
       <div className="container w-full md:w-3/4 mx-auto px-4 py-16">
-        <div className="text-center mb-16">
-          <h1 className="text-5xl font-bold text-gray-900 mb-6">
-            Autoform
-          </h1>
-          <p className="text-2xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            Deploy your applications to AWS ECS with ease. From GitHub to production in minutes.
-          </p>
+        <div className="text-center mb-16 mt-16">
+          <div className="text-3xl font-light font-montserrat text-foreground mb-10 max-w-3xl mx-auto">
+            <p>
+              Deploy your applications to AWS ECS with ease.
+            </p>
+            <p className="mt-2">
+              From GitHub to production in minutes.
+            </p>
+          </div>
           <div className="space-x-4">
             <Button 
               onClick={handleGetStarted}
               size="lg"
-              className="bg-primary hover:bg-primary/90"
+              className="bg-background text-foreground"
             >
-              <Github className="mr-2 h-5 w-5" />
               Get Started
-            </Button>
-            <Button
-              onClick={() => signIn('github')}
-              variant="outline"
-              size="lg"
-            >
-              Login
             </Button>
           </div>
         </div>
 
         {/* Features Section */}
         <div className="mb-16">
-          <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
+          <h2 className="text-3xl font-bold text-center text-foreground mb-12">
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            <Card className="bg-white/50 border-0 border-r border-gray-100">
+            <Card className="border-0 border-r">
               <CardHeader>
-                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
+                <div className="w-12 h-12 bg-orange-50 rounded-lg flex items-center justify-center mb-4">
                   <Cloud className="h-6 w-6 text-orange-600" />
                 </div>
                 <CardTitle>AWS Native</CardTitle>
@@ -74,27 +68,27 @@ export default function Home() {
               </CardHeader>
             </Card>
 
-            <Card className="bg-white/50 border-0 border-r border-gray-100">
+            <Card className="border-0 border-r">
               <CardHeader>
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
                   <Zap className="h-6 w-6 text-blue-600" />
                 </div>
-                <CardTitle>Fast Deployments</CardTitle>
+                <CardTitle>Fast Automated Deployments</CardTitle>
                 <CardDescription>
-                  Connect your GitHub repo and deploy to AWS ECS in minutes.
+                  Connect your GitHub repo and deploy to AWS ECS on every push
                 </CardDescription>
               </CardHeader>
             </Card>
 
 
-            <Card className="bg-white/50 border-0">
+            <Card className="border-0">
               <CardHeader>
                 <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
-                  <Users className="h-6 w-6 text-purple-600" />
+                  <Copy className="h-6 w-6 text-purple-600" />
                 </div>
-                <CardTitle>Team Collaboration</CardTitle>
+                <CardTitle>Environments</CardTitle>
                 <CardDescription>
-                  Work with your team seamlessly. Share projects, manage permissions, and deploy together.
+                  Seemlessly deploy your application in different environments for testing
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -102,19 +96,18 @@ export default function Home() {
         </div>
 
         {/* Call to Action */}
-        <div className="text-center bg-white rounded p-8 border-t w-full border-gray-100 mx-auto">
-          <h3 className="text-2xl font-bold text-gray-900 mb-4">
+        <div className="text-center text-foreground rounded p-8 border-t w-full border-border mx-auto">
+          <h3 className="text-lg font-semibold mb-4">
             Ready to Deploy?
           </h3>
-          <p className="text-gray-600 mb-6">
+          <p className="mb-6 text-sm">
             Get started with Autoform now and deploy your application to AWS ECS in minutes.
           </p>
           <Button 
             onClick={handleGetStarted}
             size="lg"
-            className="bg-primary hover:bg-primary/90"
-          >
-            <Github className="mr-2 h-5 w-5" />
+            className="bg-background text-foreground"
+            >
             Start Deploying Now
           </Button>
         </div>

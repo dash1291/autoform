@@ -9,7 +9,7 @@ export default function Navbar() {
   const { user, isAuthenticated, isLoading } = useAuth()
 
   return (
-    <nav className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+    <nav className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-gray-700">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
@@ -25,12 +25,12 @@ export default function Navbar() {
               <>
                 <div className="flex items-center space-x-3">
                   <Link href="/dashboard">
-                    <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
+                    <Button variant="ghost" className="text-foreground hover:text-foreground">
                       Projects
                     </Button>
                   </Link>
                   <Link href="/docs">
-                    <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
+                    <Button variant="ghost" className="text-foreground hover:text-foreground">
                       Documentation
                     </Button>
                   </Link>
@@ -54,7 +54,7 @@ export default function Navbar() {
             ) : (
               <Button 
                 onClick={() => signIn('github')}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                className="bg-primary"
               >
                 Sign in with GitHub
               </Button>

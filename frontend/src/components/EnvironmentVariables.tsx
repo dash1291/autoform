@@ -190,7 +190,7 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
   return (
     <div className="space-y-6">
       {/* Header with Add Button */}
-      <Button onClick={() => setIsAdding(true)}>
+      <Button size="sm" onClick={() => setIsAdding(true)}>
         Add Variable
       </Button>
       {/* Error Message */}
@@ -202,8 +202,8 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
 
       {/* Add Variable Form */}
       {isAdding && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <h4 className="text-md font-medium text-gray-900 mb-4">Add Environment Variable</h4>
+        <div className="border border-gray-700 rounded-lg p-4">
+          <h4 className="text-sm mb-4">Add Environment Variable</h4>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -215,7 +215,7 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
                 value={newVar.key}
                 onChange={(e) => setNewVar({ ...newVar, key: e.target.value.toUpperCase() })}
                 placeholder="API_KEY"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-background border border-gray-700 text-sm rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               {newVar.key && !validateKey(newVar.key) && (
                 <p className="text-xs text-red-600 mt-1">
@@ -233,7 +233,7 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
                 value={newVar.value}
                 onChange={(e) => setNewVar({ ...newVar, value: e.target.value })}
                 placeholder={Boolean(newVar.isSecret) ? "Enter secret value" : "Enter value"}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-background border text-sm border-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -244,7 +244,7 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
               id="isSecret"
               checked={Boolean(newVar.isSecret)}
               onChange={(e) => setNewVar({ ...newVar, isSecret: Boolean(e.target.checked) })}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-700 rounded"
             />
             <label htmlFor="isSecret" className="ml-2 block text-sm text-gray-700">
               This is a secret (will be stored in AWS Secrets Manager)
@@ -279,17 +279,17 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
           <p className="text-gray-500 mt-2">Loading environment variables...</p>
         </div>
       ) : envVars.length === 0 ? (
-        <div className="text-center py-8 bg-gray-50 rounded-lg">
+        <div className="text-center py-8 rounded-lg">
           <p className="text-gray-500">No environment variables configured.</p>
           <p className="text-sm text-gray-400 mt-1">
             Add environment variables to configure your application.
           </p>
         </div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="border border-gray-700 rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px] table-fixed divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+            <table className="w-full min-w-[800px] table-fixed divide-y divide-gray-700">
+            <thead>
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
                   Variable Name
@@ -305,9 +305,9 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-700">
               {envVars.map((envVar) => (
-                <tr key={envVar.id} className="hover:bg-gray-50">
+                <tr key={envVar.id}>
                   {editingVar === envVar.key ? (
                     // Edit mode
                     <>
@@ -317,7 +317,7 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
                           value={editVar.key}
                           onChange={(e) => setEditVar({ ...editVar, key: e.target.value.toUpperCase() })}
                           disabled
-                          className="text-sm font-mono bg-gray-100 px-2 py-1 rounded border border-gray-300 w-full cursor-not-allowed"
+                          className="text-sm font-mono px-2 py-1 rounded border bg-primary border-gray-700 w-full cursor-not-allowed"
                         />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -326,7 +326,7 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
                             type="checkbox"
                             checked={Boolean(editVar.isSecret)}
                             onChange={(e) => setEditVar({ ...editVar, isSecret: e.target.checked })}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-2"
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-700 rounded mr-2"
                           />
                           <span className="text-xs">Secret</span>
                         </div>
@@ -337,7 +337,7 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
                           value={editVar.value}
                           onChange={(e) => setEditVar({ ...editVar, value: e.target.value })}
                           placeholder={Boolean(editVar.isSecret) ? "Enter new secret value" : "Enter value"}
-                          className="text-sm bg-gray-50 px-2 py-1 rounded border border-gray-300 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="text-sm bg-background px-2 py-1 rounded border border-gray-700 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -363,7 +363,7 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
                     // View mode
                     <>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <code className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">
+                        <code className="text-sm font-mono px-2 py-1 rounded">
                           {envVar.key}
                         </code>
                       </td>
@@ -381,7 +381,7 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
                           <span className="text-gray-400">••••••••</span>
                         ) : (
                           <div className="truncate">
-                            <code className="bg-gray-100 px-2 py-1 rounded text-xs">
+                            <code className="bg-background px-2 py-1 rounded text-xs">
                               {envVar.value || '(empty)'}
                             </code>
                           </div>

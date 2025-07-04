@@ -24,7 +24,7 @@ export default function UserSettings() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Please sign in</h1>
+          <h1 className="text-xl font-semibold mb-4">Please sign in</h1>
           <p className="text-gray-600">You need to be signed in to view settings.</p>
         </div>
       </div>

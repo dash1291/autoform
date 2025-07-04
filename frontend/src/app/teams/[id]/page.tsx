@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Users, Mail, Settings, Trash2, UserMinus, Crown, Shield, User } from 'lucide-react'
 import TeamAwsConfiguration from '@/components/TeamAwsConfiguration'
+import TabNavButton from '@/components/TabNavButton'
+import { FormInput } from '@/components/ui/FormInput'
 
 export default function TeamDetail() {
   const { isAuthenticated, isLoading: authLoading } = useAuth()
@@ -107,7 +109,7 @@ export default function TeamDetail() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Please sign in</h1>
+          <h1 className="text-xl font-semibold mb-4">Please sign in</h1>
           <p className="text-gray-600">You need to be signed in to view team details.</p>
         </div>
       </div>
@@ -154,22 +156,19 @@ export default function TeamDetail() {
   const canManageMembers = isOwner || team.userRole === TeamMemberRole.ADMIN
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">{team.name}</h1>
+              <h1 className="text-lg">{team.name}</h1>
               {team.description && (
-                <p className="text-gray-600 mt-2">{team.description}</p>
+                <p className="mt-2">{team.description}</p>
               )}
             </div>
             <div className="flex items-center space-x-2">
-              <Badge variant="outline" className={getRoleBadgeColor(team.userRole!)}>
-                {getRoleIcon(team.userRole!)}
-                <span className="ml-1">{team.userRole}</span>
-              </Badge>
               <Button
+                size="sm"
                 variant="outline"
                 onClick={() => router.push('/dashboard')}
               >
@@ -181,43 +180,28 @@ export default function TeamDetail() {
 
         {/* Tabs */}
         <div className="mb-6">
-          <div className="border-b border-gray-200">
+          <div className="border-b border-gray-700">
             <nav className="-mb-px flex space-x-8">
               {isOwner && (
-                <Button
-                  variant="ghost"
+                <TabNavButton
+                  active={activeTab === 'team-settings'}
                   onClick={() => setActiveTab('team-settings')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
-                    activeTab === 'team-settings'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                  }`}
                 >
                   Team Settings
-                </Button>
+                </TabNavButton>
               )}
-              <Button
-                variant="ghost"
+              <TabNavButton
+                active={activeTab === 'members'}
                 onClick={() => setActiveTab('members')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
-                  activeTab === 'members'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                }`}
               >
                 Members
-              </Button>
-              <Button
-                variant="ghost"
+              </TabNavButton>
+              <TabNavButton
+                active={activeTab === 'settings'}
                 onClick={() => setActiveTab('settings')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm rounded-none ${
-                  activeTab === 'settings'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                }`}
               >
                 AWS Settings
-              </Button>
+              </TabNavButton>
             </nav>
           </div>
         </div>
@@ -261,9 +245,6 @@ export default function TeamDetail() {
             <Card>
               <CardHeader>
                 <CardTitle>Team Settings</CardTitle>
-                <CardDescription>
-                  Manage team configuration and danger zone
-                </CardDescription>
               </CardHeader>
               <CardContent>
                 <TeamSettings team={team} />
@@ -291,7 +272,7 @@ function MembersList({
     return (
       <div className="text-center py-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-        <p className="text-gray-600 mt-2">Loading members...</p>
+        <p className="mt-2">Loading members...</p>
       </div>
     )
   }
@@ -299,9 +280,9 @@ function MembersList({
   if (members.length === 0) {
     return (
       <div className="text-center py-8">
-        <Users className="mx-auto h-12 w-12 text-gray-400" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No members yet</h3>
-        <p className="text-gray-600">Invite team members to start collaborating.</p>
+        <Users className="mx-auto h-12 w-12" />
+        <h3 className="text-lg mb-2">No members yet</h3>
+        <p className="text-sm">Invite team members to start collaborating.</p>
       </div>
     )
   }
@@ -393,24 +374,17 @@ function AddMemberButton({ onAddMember }: { onAddMember: (githubUsername: string
     return (
       <div className="space-y-4">
         <form onSubmit={handleSubmit} className="space-y-4">
+          <FormInput
+            id="github-username"
+            label="GitHub Username"
+            value={githubUsername}
+            onChange={(value) => setGithubUsername(value as string)}
+            placeholder="username"
+            helpText="Enter the GitHub username (without @)"
+            required
+          />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              GitHub Username
-            </label>
-            <input
-              type="text"
-              value={githubUsername}
-              onChange={(e) => setGithubUsername(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="username"
-              required
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Enter the GitHub username (without @)
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font mb-2">
               Role
             </label>
             <Select value={role} onValueChange={(value) => setRole(value as TeamMemberRole)}>
@@ -424,10 +398,10 @@ function AddMemberButton({ onAddMember }: { onAddMember: (githubUsername: string
             </Select>
           </div>
           <div className="flex space-x-2">
-            <Button type="submit" disabled={isAdding || !githubUsername.trim()}>
+            <Button size="sm" type="submit" disabled={isAdding || !githubUsername.trim()}>
               {isAdding ? 'Adding...' : 'Add Member'}
             </Button>
-            <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+            <Button size="sm" type="button" variant="outline" onClick={() => setShowForm(false)}>
               Cancel
             </Button>
           </div>
@@ -437,7 +411,7 @@ function AddMemberButton({ onAddMember }: { onAddMember: (githubUsername: string
   }
 
   return (
-    <Button onClick={() => setShowForm(true)}>
+    <Button size="sm" onClick={() => setShowForm(true)}>
       <Users className="h-4 w-4 mr-2" />
       Add Member
     </Button>
@@ -476,10 +450,6 @@ function TeamSettings({ team }: { team: Team }) {
   return (
     <div className="space-y-8">
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium text-gray-900">Team Information</h3>
-        </div>
-        
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
             <p className="text-red-800 text-sm">{error}</p>
@@ -487,26 +457,22 @@ function TeamSettings({ team }: { team: Team }) {
         )}
         
         <div className="space-y-4">
+          <FormInput
+            id="team-name"
+            label="Team Name"
+            value={editName}
+            onChange={(value) => setEditName(value as string)}
+            placeholder="Enter team name"
+            required
+          />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Team Name
-            </label>
-            <input
-              type="text"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter team name"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font mb-2">
               Description
             </label>
             <textarea
               value={editDescription}
               onChange={(e) => setEditDescription(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              className="w-full text-sm px-3 py-3 border bg-primary border-gray-700 rounded focus:ring-blue-500 focus:border-blue-500"
               rows={3}
               placeholder="Enter team description (optional)"
             />
@@ -526,16 +492,16 @@ function TeamSettings({ team }: { team: Team }) {
 
 
       <div className="border-t pt-6">
-        <h3 className="text-lg font-medium text-red-900 mb-4">Danger Zone</h3>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <h3 className="text-lg font-medium text-destructive mb-4">Danger Zone</h3>
+        <div className="border border-destructive rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div>
-              <h4 className="text-sm font-medium text-red-900">Delete Team</h4>
-              <p className="text-sm text-red-700 mt-1">
+              <h4 className="text-sm font-medium text-destructive">Delete Team</h4>
+              <p className="text-sm text-destructive mt-1">
                 This action cannot be undone. All team projects will become personal projects.
               </p>
             </div>
-            <Button variant="outline" className="text-red-600 border-red-300 hover:bg-red-50">
+            <Button variant="outline" className="text-destructive border-destructive hover:bg-destructive hover:text-foreground">
               <Trash2 className="h-4 w-4 mr-2" />
               Delete Team
             </Button>

@@ -236,8 +236,8 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
 
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">AWS Configurations</h2>
-          <p className="text-gray-600 mt-1">
+          <h2 className="text-lg">AWS Configurations</h2>
+          <p className="text-gray-600 text-sm mt-0.5">
             Manage multiple AWS credential sets for different environments
           </p>
         </div>
@@ -249,8 +249,8 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
               <ExternalLink className="h-3 w-3 ml-1" />
             </a>
           </Button>
-          <Button onClick={openCreateForm}>
-            <Plus className="h-4 w-4 mr-2" />
+          <Button size="sm" onClick={openCreateForm}>
+            <Plus className="h-3 w-3 mr-2" />
             Add Configuration
           </Button>
         </div>
@@ -262,12 +262,6 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
             <CardTitle>
               {editingConfig ? 'Edit AWS Configuration' : 'Add AWS Configuration'}
             </CardTitle>
-            <CardDescription>
-              {editingConfig 
-                ? 'Update your AWS credentials and settings'
-                : 'Add a new set of AWS credentials for your team'
-              }
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -276,7 +270,7 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
                 <Input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g., Production, Staging, Development"
                   required
                   className="mt-1"
@@ -299,7 +293,7 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
                   className="mt-1"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Your AWS Access Key ID (starts with AKIA)
+                  Your AWS Access Key ID
                 </p>
               </div>
 
@@ -379,11 +373,10 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="flex items-center">
-                      <Shield className="h-5 w-5 mr-2 text-green-600" />
+                    <CardTitle className="flex text-sm items-center">
                       {config.name}
                     </CardTitle>
-                    <CardDescription className="mt-1">
+                    <CardDescription className="mt-1 text-xs">
                       Region: {getRegionLabel(config.awsRegion)} • Access Key: {config.awsAccessKeyId}
                     </CardDescription>
                   </div>
@@ -413,7 +406,7 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
                       size="sm"
                       onClick={() => handleDelete(config)}
                       disabled={isDeleting === config.id}
-                      className="text-red-600 border-red-300 hover:bg-red-50"
+                      className="text-destructive border-destructive hover:bg-destructive"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                       {isDeleting === config.id ? 'Deleting...' : 'Delete'}
@@ -423,15 +416,11 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
               </CardHeader>
               {testResult && testResult.configId === config.id && (
                 <CardContent>
-                  <div className={`p-4 rounded-lg border ${
-                    testResult.permissionIssue 
-                      ? 'bg-yellow-50 border-yellow-200' 
-                      : 'bg-green-50 border-green-200'
-                  }`}>
+                  <div className={`bg-background border-gray-700 p-4 rounded border`}>
                     <h4 className={`text-sm font-medium mb-2 ${
-                      testResult.permissionIssue 
-                        ? 'text-yellow-900' 
-                        : 'text-green-900'
+                      testResult.permissionIssue
+                        ? 'text-yellow-300' 
+                        : 'text-green-300'
                     }`}>
                       {testResult.permissionIssue 
                         ? '⚠️ Credentials Valid, Limited Permissions' 
@@ -440,8 +429,8 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
                     </h4>
                     <div className={`text-sm space-y-1 ${
                       testResult.permissionIssue 
-                        ? 'text-yellow-700' 
-                        : 'text-green-700'
+                        ? 'text-yellow-300' 
+                        : 'text-green-300'
                     }`}>
                       {testResult.permissionIssue ? (
                         <p>{testResult.message}</p>

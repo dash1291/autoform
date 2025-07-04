@@ -156,7 +156,7 @@ export default function SimpleShell({ environmentId, isActive = false }: SimpleS
 
       {/* Command Execution Interface */}
       {execStatus?.available && (
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <div className="border border-gray-700 rounded p-4">
           {shellCommand ? (
             <>
               <div className="mb-2">
@@ -172,17 +172,17 @@ export default function SimpleShell({ environmentId, isActive = false }: SimpleS
                   onClick={() => navigator.clipboard.writeText(shellCommand.command)}
                   variant="outline"
                   size="sm"
-                  className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
+                  className=""
                 >
                   Copy Command
                 </Button>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-gray-500 mt-2 h-full inline-block">
                   Run this command in your terminal (requires AWS CLI configured)
                 </span>
               </div>
             </>
           ) : isGenerating ? (
-            <div className="bg-gray-50 p-8 rounded-lg text-center">
+            <div className="p-8 rounded-lg text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
               <p className="text-gray-500 mb-2">Generating shell command...</p>
               <p className="text-sm text-gray-400">
@@ -190,7 +190,7 @@ export default function SimpleShell({ environmentId, isActive = false }: SimpleS
               </p>
             </div>
           ) : (
-            <div className="bg-gray-50 p-8 rounded-lg text-center">
+            <div className="p-8 rounded-lg text-center">
               <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 002 2v14a2 2 0 002 2z" />
               </svg>

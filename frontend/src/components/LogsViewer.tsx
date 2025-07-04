@@ -85,9 +85,10 @@ export default function LogsViewer({ environmentId }: LogsViewerProps) {
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between bg-gray-50 p-4 rounded-lg">
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between bg-background p-4 rounded-lg">
         <div className="flex flex-wrap gap-4 items-center">
           <Button
+            size="sm"
             onClick={fetchLogs}
             disabled={loading}
           >
@@ -101,7 +102,7 @@ export default function LogsViewer({ environmentId }: LogsViewerProps) {
               onChange={(e) => setAutoRefresh(e.target.checked)}
               className="rounded"
             />
-            <span className="text-sm text-gray-700">Auto-refresh (5s)</span>
+            <span className="text-sm text-foreground">Auto-refresh (5s)</span>
           </label>
           
           <Select 

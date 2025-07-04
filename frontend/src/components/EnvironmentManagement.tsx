@@ -308,9 +308,9 @@ export default function EnvironmentManagement({ projectId, teamId, onEnvironment
 
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Deployment Environments</h2>
+          <h2 className="text-lg">Deployment Environments</h2>
         </div>
-        <Button onClick={openCreateForm}>
+        <Button size="sm" onClick={openCreateForm}>
           <Plus className="h-4 w-4 mr-2" />
           Add Environment
         </Button>
@@ -478,7 +478,7 @@ export default function EnvironmentManagement({ projectId, teamId, onEnvironment
                 {environment.latestDeployment && (
                   <div className="mt-4 pt-4 border-t">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700">Latest Deployment</span>
+                      <span className="text-sm font-medium">Latest Deployment</span>
                       <Badge className={getDeploymentStatusColor(environment.latestDeployment.status)}>
                         {environment.latestDeployment.status.toLowerCase()}
                       </Badge>
