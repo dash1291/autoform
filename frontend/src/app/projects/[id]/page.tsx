@@ -455,21 +455,6 @@ export default function ProjectDetail() {
                   </div>
                 </div>
               </div>
-
-              {/* Live Deployment Logs */}
-              {activeDeploymentId && liveLogs && (
-                <div className="shadow rounded-lg p-6">
-                  <h2 className="text-xl font-semibold text-foreground mb-4">
-                    🔴 Live Deployment Logs
-                  </h2>
-                  <div className="bg-foreground text-primary p-4 rounded-lg overflow-y-auto max-h-96 font-mono text-sm">
-                    <pre className="whitespace-pre-wrap break-words">{liveLogs}</pre>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Logs update automatically every 2 seconds
-                  </p>
-                </div>
-              )}
             </>
           )}
 

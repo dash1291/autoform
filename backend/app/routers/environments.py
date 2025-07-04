@@ -363,7 +363,8 @@ async def update_environment(
                     detail="Team AWS configuration not found",
                 )
 
-            update_data["teamAwsConfigId"] = aws_config_id
+            # Update the team AWS config relation
+            update_data["teamAwsConfig"] = {"connect": {"id": aws_config_id}}
 
         else:
             raise HTTPException(
@@ -377,9 +378,6 @@ async def update_environment(
         "cpu",
         "memory",
         "diskSize",
-        "port",
-        "healthCheckPath",
-        "subdirectory",
         "existingVpcId",
         "existingSubnetIds",
         "existingClusterArn",

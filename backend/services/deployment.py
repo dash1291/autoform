@@ -18,6 +18,7 @@ from infrastructure import ECSInfrastructure
 from core.database import prisma
 from services.encryption_service import encryption_service
 from services.deployment_manager import deployment_manager
+from services.buildpack_service import BuildpackService
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +199,8 @@ class DeploymentService:
     ) -> ECSInfrastructureOutput:
         """Deploy project to AWS infrastructure"""
         clone_dir: Optional[str] = None
+        # Store config for use in other methods
+        self.config = config
 
         try:
             # Ensure database connection for background task
@@ -395,19 +398,27 @@ class DeploymentService:
                     f"Checked out branch: {branch} (commit: {commit_sha})",
                 )
 
-            # Check for Dockerfile
+            # Check for Dockerfile or buildpack usage
             if deployment_id:
-                await self.log_to_database(deployment_id, "Checking for Dockerfile...")
+                await self.log_to_database(deployment_id, "Checking build configuration...")
 
-            dockerfile_path = os.path.join(clone_dir, "Dockerfile")
-            if not os.path.exists(dockerfile_path):
-                error_message = "Dockerfile not found in repository. Please add a Dockerfile to your project."
-                raise Exception(error_message)
+            # Determine the actual build path
+            build_path = clone_dir
+            if hasattr(self, 'config') and self.config and self.config.subdirectory:
+                build_path = os.path.join(clone_dir, self.config.subdirectory)
 
-            if deployment_id:
-                await self.log_to_database(
-                    deployment_id, "✅ Found Dockerfile in repository"
-                )
+            use_buildpack = BuildpackService.should_use_buildpack(clone_dir, getattr(self.config, 'subdirectory', None) if hasattr(self, 'config') else None)
+            
+            if use_buildpack:
+                if deployment_id:
+                    await self.log_to_database(
+                        deployment_id, "📦 No Dockerfile found. Will use Cloud Native Buildpacks for automatic build configuration."
+                    )
+            else:
+                if deployment_id:
+                    await self.log_to_database(
+                        deployment_id, "✅ Found Dockerfile in repository"
+                    )
 
             return clone_dir
 
@@ -572,12 +583,52 @@ class DeploymentService:
         # Debug: Log the build args
         print(f"Build args: '{build_args}'")
 
+        # Check if we should use buildpack
+        use_buildpack = BuildpackService.should_use_buildpack(clone_dir, subdirectory)
+        
+        # Get builder - always use Google Cloud buildpacks
+        builder = BuildpackService.get_builder()
+
         # Create buildspec content
         ecr_registry = await self.get_ecr_registry()
         account_id = await self.get_account_id()
 
         # Build the buildspec as a proper YAML structure
-        buildspec_content = f"""version: 0.2
+        if use_buildpack:
+            # Buildpack-based build
+            if deployment_id:
+                await self.log_to_database(
+                    deployment_id, f"🏗️ Using Cloud Native Buildpack builder: {builder}"
+                )
+            
+            buildspec_content = f"""version: 0.2
+phases:
+  install:
+    runtime-versions:
+      docker: 20
+    commands:
+      - echo Installing pack CLI...
+      - |
+        curl -sSL "https://github.com/buildpacks/pack/releases/download/v0.33.2/pack-v0.33.2-linux.tgz" | tar -C /usr/local/bin/ --no-same-owner -xzv pack
+      - pack version
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region {self.region} | docker login --username AWS --password-stdin {ecr_registry}
+      - echo Checking for Docker Hub credentials...
+      - |
+        if aws secretsmanager describe-secret --secret-id dockerhub-credentials --region {self.region} >/dev/null 2>&1; then
+          echo "Docker Hub credentials found, logging in..."
+          DOCKERHUB_USERNAME=$(aws secretsmanager get-secret-value --secret-id dockerhub-credentials --region {self.region} --query SecretString --output text | jq -r .username)
+          DOCKERHUB_PASSWORD=$(aws secretsmanager get-secret-value --secret-id dockerhub-credentials --region {self.region} --query SecretString --output text | jq -r .password)
+          echo "$DOCKERHUB_PASSWORD" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+          echo "Docker Hub login successful"
+        else
+          echo "No Docker Hub credentials found, proceeding without authentication"
+        fi"""
+        else:
+            # Dockerfile-based build
+            buildspec_content = f"""version: 0.2
 phases:
   pre_build:
     commands:
@@ -600,7 +651,50 @@ phases:
       - echo Changing to subdirectory {subdirectory}
       - cd {subdirectory}"""
 
-        buildspec_content += f"""
+        if use_buildpack:
+            # Convert build args to pack env format
+            pack_env_args = ""
+            if environment_variables:
+                for env_var in environment_variables:
+                    if env_var.value:  # Only non-secret vars with values
+                        # Escape single quotes in the value
+                        escaped_value = env_var.value.replace("'", "'\"'\"'")
+                        pack_env_args += f" --env {env_var.key}='{escaped_value}'"
+            
+            # Add buildpack-specific env vars
+            buildpack_env = BuildpackService.get_pack_build_command(
+                f"{ecr_registry}/{repository_name}:{commit_sha}",
+                builder,
+                ".",
+                {}  # We'll handle env vars separately
+            )
+            
+            buildspec_content += f"""
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building with Cloud Native Buildpack...
+      - |
+        # Pull builder image for cache
+        docker pull {builder} || echo "Could not pull builder image"
+      - |
+        # Build with pack
+        pack build {ecr_registry}/{repository_name}:{commit_sha} \\
+          --builder {builder} \\
+          --trust-builder \\
+          --publish{pack_env_args}
+      - |
+        # Also tag as latest
+        docker pull {ecr_registry}/{repository_name}:{commit_sha}
+        docker tag {ecr_registry}/{repository_name}:{commit_sha} {ecr_registry}/{repository_name}:latest
+        docker push {ecr_registry}/{repository_name}:latest
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Image published to {ecr_registry}/{repository_name}:{commit_sha}"""
+        else:
+            # Dockerfile build
+            buildspec_content += f"""
   build:
     commands:
       - echo Build started on `date`

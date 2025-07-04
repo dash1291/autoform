@@ -100,7 +100,12 @@ class LoadBalancerService:
 
     async def _create_target_group(self) -> str:
         """Create Target Group for the load balancer"""
-        tg_name = f"{self.project_name}-tg"
+        # Apply name shortening logic to keep under 32 character limit
+        tg_name = self.project_name
+        if len(tg_name) > 32:
+            tg_name = tg_name[:32]
+            logger.info(f"Target group name truncated to: {tg_name}")
+        
         tg_name_to_create = tg_name
 
         try:
@@ -119,11 +124,7 @@ class LoadBalancerService:
                 
                 if existing_tg_vpc != self.vpc_id:
                     logger.warning(f"⚠️  Existing target group is in different VPC ({existing_tg_vpc}) than expected ({self.vpc_id})")
-                    logger.info("Creating new target group in the correct VPC with a different name")
-                    # Generate a unique name by adding a suffix
-                    import time
-                    tg_name_to_create = f"{tg_name}-{int(time.time())}"
-                    logger.info(f"Using target group name: {tg_name_to_create}")
+                    logger.info("Creating new target group in the correct VPC")
                     # Don't return, let it fall through to create a new one
                 else:
                     # Update the target group attributes to ensure correct health check settings
@@ -150,7 +151,7 @@ class LoadBalancerService:
             HealthyThresholdCount=2,
             UnhealthyThresholdCount=2,
             Matcher={"HttpCode": "200"},
-            Tags=[{"Key": "Name", "Value": tg_name}],
+            Tags=[{"Key": "Name", "Value": tg_name_to_create}],
         )
 
         target_group = response["TargetGroups"][0]
