@@ -112,7 +112,18 @@ export default function Dashboard() {
             <CardHeader>
               <h2 className="text-lg font-medium mb-4">Projects</h2>
               <div className="flex justify-between items-center">
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2">
+                  {/* New Project Button */}
+                  {selectedTeam && (
+                    <Link href={`/projects/new?team=${selectedTeam}`}>
+                      <Button size="sm">
+                        <Plus className="h-4 w-4" />
+                        New Project
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+                <div className="flex items-center space-x-2">
                   {/* Team Switcher */}
                   {teams.length > 0 && (
                     <div className="flex items-center space-x-2">
@@ -133,33 +144,17 @@ export default function Dashboard() {
                       </Select>
                     </div>
                   )}
-                   {/* Team Management Button */}
-                   {selectedTeamData && (
+                  {selectedTeamData && (
                     <Button
                       size="sm"
                       onClick={() => window.location.href = `/teams/${selectedTeam}`}
                     >
-                      <Settings className="h-4 w-4 mr-2" />
+                      <Settings className="h-4 w-4" />
                       Team Settings
                     </Button>
                   )}
-                  
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                 
                   {/* Create Team Button */}
                   <CreateTeamButton onTeamCreated={fetchTeams} />
-                  
-                  {/* New Project Button */}
-                  {selectedTeam && (
-                    <Link href={`/projects/new?team=${selectedTeam}`}>
-                      <Button size="sm">
-                        <Plus className="h-4 w-4 mr-2" />
-                        New Project
-                      </Button>
-                    </Link>
-                  )}
                 </div>
               </div>
             </CardHeader>
@@ -311,7 +306,7 @@ function CreateTeamButton({ onTeamCreated }: { onTeamCreated: () => void }) {
 
   return (
     <Button size="sm" onClick={() => window.location.href = '/teams/new'}>
-      <Plus className="h-4 w-4 mr-2" />
+      <Plus className="h-4 w-4" />
       New Team
     </Button>
   )
