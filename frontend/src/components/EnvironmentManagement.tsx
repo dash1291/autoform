@@ -403,15 +403,10 @@ export default function EnvironmentManagement({ projectId, teamId, onEnvironment
       {environments.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <Server className="h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Environments</h3>
-            <p className="text-gray-500 text-center mb-6 max-w-md">
-              Create your first environment to start deploying your application to different stages like production, staging, or development.
+            <h3 className="text-lg mb-2">No Environments</h3>
+            <p className="text-muted-foreground text-sm text-center mb-6 max-w-md">
+              Create an environment to start deploying your application to different stages like production, staging, or development.
             </p>
-            <Button onClick={openCreateForm}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Your First Environment
-            </Button>
           </CardContent>
         </Card>
       ) : (

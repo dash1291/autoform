@@ -69,7 +69,7 @@ export default function NewTeamPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <Button
@@ -82,9 +82,9 @@ export default function NewTeamPage() {
           </Button>
           <div className="text-center">
             <div className="text-blue-600 mb-4">
-              <Users className="mx-auto h-12 w-12" />
+              <Users className="mx-auto h-6 w-6" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900">Create New Team</h1>
+            <h1 className="text-xl text-foreground">Create New Team</h1>
           </div>
         </div>
 
@@ -97,8 +97,8 @@ export default function NewTeamPage() {
           </CardHeader>
           <CardContent>
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">
-                <p className="text-red-800 text-sm">{error}</p>
+              <div className="border border-destructive rounded-lg p-3 mb-6">
+                <p className="text-destructive text-sm">{error}</p>
               </div>
             )}
 

@@ -10,6 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/lib/auth-client'
 import { apiClient } from '@/lib/api'
 import { Team } from '@/types'
+import { CheckCircle } from "lucide-react";
+
+import { FormInput } from '@/components/ui/FormInput'
 
 export default function NewProject() {
   const { isAuthenticated, isLoading: authLoading } = useAuth()
@@ -154,32 +157,33 @@ export default function NewProject() {
   // Show environment creation step after project is created
   if (projectCreated) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Project Created Successfully!</h1>
-            <p className="text-gray-600 mt-2">
+            <h1 className="text-lg">Project Created Successfully!</h1>
+            <p className="text-muted-foreground mt-2">
               Your project "{projectCreated.name}" has been created. Now let's set up your first environment.
             </p>
           </div>
-          <div className="bg-white shadow rounded-lg p-6">
+          <div className="shadow rounded-lg py-6">
             <div className="mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Create Your First Environment</h2>
-              <p className="text-gray-600">
+              <CheckCircle className="h-4 w-4 mr-1" />
+              <h2 className="text-md mb-2">Create Your First Environment</h2>
+              <p className="text-sm text-muted-foreground">
                 Environments allow you to deploy your application to different stages like production, staging, or development.
               </p>
             </div>
             <div className="space-y-4">
               <Button 
                 onClick={() => router.push(`/projects/${projectCreated.id}?tab=environments`)}
-                className="w-full"
+                className=""
               >
                 Set Up Environment
               </Button>
               <Button 
                 variant="outline" 
                 onClick={() => router.push('/dashboard')}
-                className="w-full"
+                className="ml-2"
               >
                 Skip for Now (Go to Dashboard)
               </Button>
@@ -191,33 +195,28 @@ export default function NewProject() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Create New Project</h1>
+        <div className="mb-4 mt-4 w-full text-center">
+          <h1 className="text-lg">Create New Project</h1>
         </div>
-        <div className="bg-white shadow rounded-lg p-6">
+        <div className="shadow rounded-lg p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                Project Name
-              </label>
-              <input
-                type="text"
+              <FormInput
                 id="name"
+                label="Project Name"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                onChange={(value) => setFormData({ ...formData, name: value as string })}
                 placeholder="my-awesome-app"
                 required
+                helpText="This will be used as the container name and resource prefix"
+                type="text"
               />
-              <p className="text-sm text-gray-500 mt-1">
-                This will be used as the container name and resource prefix
-              </p>
             </div>
 
             <div>
-              <label htmlFor="team" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="team" className="block text-sm mb-2">
                 Team <span className="text-red-500">*</span>
               </label>
               {teams.length === 0 && !teamsLoading ? (
@@ -253,7 +252,7 @@ export default function NewProject() {
                   </SelectContent>
                 </Select>
               )}
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-xs mt-1 text-muted-foreground">
                 {teamsLoading 
                   ? 'Loading teams...' 
                   : teams.length > 0 
@@ -264,82 +263,70 @@ export default function NewProject() {
             </div>
 
             <div>
-              <label htmlFor="gitRepoUrl" className="block text-sm font-medium text-gray-700 mb-2">
-                Git Repository URL
-              </label>
-              <div className="relative">
-                <input
-                  type="url"
-                  id="gitRepoUrl"
-                  value={formData.gitRepoUrl}
-                  onChange={(e) => {
-                    setFormData({ ...formData, gitRepoUrl: e.target.value })
-                    setRepoInfo(null) // Clear previous validation
-                  }}
-                  onBlur={(e) => validateRepository(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="https://github.com/username/repository"
-                  required
-                />
-                {validating && (
-                  <div className="absolute right-3 top-3">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                  </div>
-                )}
-              </div>
-              
-              {repoInfo && (
-                <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex items-center">
-                    <span className="text-green-600 text-sm font-medium">✅ Repository validated</span>
-                    {repoInfo.private && (
-                      <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">Private</span>
+              <FormInput
+                id="gitRepoUrl"
+                label="Git Repository URL"
+                helpText='Can be public or private repository. Private repos use your GitHub authentication.'
+                value={formData.gitRepoUrl}
+                onChange={(value) => {
+                  setFormData({ ...formData, gitRepoUrl: value as string })
+                  setRepoInfo(null)
+                }}
+                placeholder="https://github.com/username/repository"
+                required
+                type="url"
+                rightElement={validating ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                ) : undefined}
+                bottomElement={
+                  <>
+                    {repoInfo && (
+                      <div className="mt-2 p-3 bg-popover border border-gray-700 rounded">
+                        <div className="flex items-center">
+                          <span className="text-success-foreground text-sm">✅ Repository validated</span>
+                          {repoInfo.private && (
+                            <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">Private</span>
+                          )}
+                        </div>
+                        <p className="text-sm mt-1">
+                          <strong>{repoInfo.fullName}</strong>
+                        </p>
+                      </div>
                     )}
-                  </div>
-                  <p className="text-sm text-gray-600 mt-1">
-                    <strong>{repoInfo.fullName}</strong>
-                    {repoInfo.description && ` - ${repoInfo.description}`}
-                  </p>
-                </div>
-              )}
-              
-              <div className="flex items-center justify-between mt-1">
-                <p className="text-sm text-gray-500">
-                  Can be public or private repository. Private repos use your GitHub authentication.
-                </p>
-                {formData.gitRepoUrl && !repoInfo && (
-                  <button
-                    type="button"
-                    onClick={() => validateRepository(formData.gitRepoUrl)}
-                    disabled={validating}
-                    className="text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50"
-                  >
-                    {validating ? 'Validating...' : 'Save'}
-                  </button>
-                )}
-              </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-sm text-gray-500">
+                      </p>
+                      {formData.gitRepoUrl && !repoInfo && (
+                        <button
+                          type="button"
+                          onClick={() => validateRepository(formData.gitRepoUrl)}
+                          disabled={validating}
+                          className="text-sm text-blue-400 hover:text-blue-700 disabled:opacity-50"
+                        >
+                          {validating ? 'Validating...' : 'Save'}
+                        </button>
+                      )}
+                    </div>
+                  </>
+                }
+              />
             </div>
 
             <div>
-              <label htmlFor="subdirectory" className="block text-sm font-medium text-gray-700 mb-2">
-                Subdirectory (Optional)
-              </label>
-              <input
-                type="text"
+              <FormInput
                 id="subdirectory"
+                label="Subdirectory (Optional)"
                 value={formData.subdirectory}
-                onChange={(e) => setFormData({ ...formData, subdirectory: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                onChange={(value) => setFormData({ ...formData, subdirectory: value as string })}
                 placeholder="e.g., backend or apps/api"
+                helpText="Specify a subdirectory if your application code is not in the repository root"
+                type="text"
               />
-              <p className="text-sm text-gray-500 mt-1">
-                Specify a subdirectory if your application code is not in the repository root
-              </p>
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-red-800">{error}</p>
+              <div className="bg-popover border border-destructive rounded-lg p-4">
+                <p className="text-destructive">{error}</p>
               </div>
             )}
 

@@ -366,7 +366,7 @@ export default function ProjectDetail() {
                               <p className="text-sm text-muted-foreground">{env.branch}</p>
                             </div>
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              envStatus?.status === 'HEALTHY' ? 'bg-primary/20 text-green-400' :
+                              envStatus?.status === 'HEALTHY' ? 'text-success-foreground' :
                               envStatus?.status === 'CRASH_LOOP' ? 'bg-destructive/20 text-destructive' :
                               envStatus?.status === 'IN_PROGRESS' ? 'bg-primary/20 text-primary' :
                               envStatus?.status === 'DEGRADED' ? 'bg-accent/20 text-accent-foreground' :
@@ -482,7 +482,7 @@ export default function ProjectDetail() {
                 </Button>
               </div>
               {deployments.length === 0 ? (
-                <p className="text-muted-foreground">No deployments yet.</p>
+                <p className="text-muted-foreground text-sm">No deployments yet</p>
               ) : (
                 <div className="space-y-4">
                   {deployments.map((deployment) => (
@@ -490,7 +490,7 @@ export default function ProjectDetail() {
                       <div className="flex items-center justify-between">
                         <div className="flex text-sm items-center space-x-3">
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded ${
-                            deployment.status === 'SUCCESS' ? 'bg-primary text-foreground' :
+                            deployment.status === 'SUCCESS' ? 'bg-success text-success-foreground':
                             deployment.status === 'FAILED' ? 'bg-destructive' :
                             'bg-accent/20 text-accent-foreground'
                           }`}>

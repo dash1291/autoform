@@ -355,15 +355,11 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
       {configs.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <Key className="h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No AWS Configurations</h3>
+            <Key className="h-8 w-8 text-gray-400 mb-4" />
+            <h3 className="text-lg mb-2">No AWS Configurations</h3>
             <p className="text-gray-500 text-center mb-6 max-w-md">
-              Add your first AWS configuration to enable team deployments and infrastructure management.
+              Add your AWS configuration to enable deployments and infrastructure management.
             </p>
-            <Button onClick={openCreateForm}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Your First Configuration
-            </Button>
           </CardContent>
         </Card>
       ) : (

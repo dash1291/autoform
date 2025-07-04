@@ -368,7 +368,7 @@ export default function RepositoryConfiguration({ projectId, project, onUpdate }
         <div className="mb-4 w-full flex">
           <div className="flex-1">
             <h3 className="text-lg font-semibold">Automatic Deployments</h3>
-            <p className="text-sm mt-1">
+            <p className="text-sm mt-1 text-muted-foreground">
               Deploy environments automatically when commits are pushed to the configured branches.
             </p>
           </div>

@@ -162,9 +162,6 @@ export default function TeamDetail() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-lg">{team.name}</h1>
-              {team.description && (
-                <p className="mt-2">{team.description}</p>
-              )}
             </div>
             <div className="flex items-center space-x-2">
               <Button
@@ -280,7 +277,7 @@ function MembersList({
   if (members.length === 0) {
     return (
       <div className="text-center py-8">
-        <Users className="mx-auto h-12 w-12" />
+        <Users className="mx-auto h-8 w-8" />
         <h3 className="text-lg mb-2">No members yet</h3>
         <p className="text-sm">Invite team members to start collaborating.</p>
       </div>
@@ -472,7 +469,7 @@ function TeamSettings({ team }: { team: Team }) {
             <textarea
               value={editDescription}
               onChange={(e) => setEditDescription(e.target.value)}
-              className="w-full text-sm px-3 py-3 border bg-primary border-gray-700 rounded focus:ring-blue-500 focus:border-blue-500"
+              className="w-full text-sm px-3 py-3 border bg-popover border-gray-700 rounded focus:ring-blue-500 focus:border-blue-500"
               rows={3}
               placeholder="Enter team description (optional)"
             />

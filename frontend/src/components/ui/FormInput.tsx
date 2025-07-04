@@ -36,7 +36,7 @@ export function FormInput({
     onChange(newValue)
   }
 
-  const defaultInputClasses = inputClassName || 'bg-background border-gray-700'
+  const defaultInputClasses = inputClassName || 'bg-popover border-gray-700'
 
   return (
     <div className={className}>
@@ -62,7 +62,7 @@ export function FormInput({
       </div>
       {bottomElement}
       {helpText && (
-        <p className="text-xs mt-1">{helpText}</p>
+        <p className="text-xs text-muted-foreground mt-1">{helpText}</p>
       )}
     </div>
   )

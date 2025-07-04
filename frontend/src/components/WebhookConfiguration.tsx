@@ -169,7 +169,7 @@ export default function WebhookConfiguration({ projectId, project, onUpdate }: W
               <Webhook className="h-5 w-5 text-gray-500" />
               <h3 className="font-medium text-gray-900">GitHub Webhook</h3>
               {webhookConfigured && (
-                <span className="flex items-center text-sm text-green-600">
+                <span className="flex items-center text-sm text-success-foreground">
                   <CheckCircle className="h-4 w-4 mr-1" />
                   Configured
                 </span>
