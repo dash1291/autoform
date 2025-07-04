@@ -293,7 +293,7 @@ export default function NetworkConfiguration({ projectId, environmentId, project
                 )}
               </div>
             ) : !formData.existingVpcId ? (
-              <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
+              <div className="w-full px-3 text-sm py-1.5 border border-gray-700 rounded-lg bg-popoever">
                 Select a VPC first to see available subnets
               </div>
             ) : availableSubnets.length === 0 ? (
@@ -410,12 +410,14 @@ export default function NetworkConfiguration({ projectId, environmentId, project
           {!isReadOnly && (
             <div className="flex space-x-3 pt-4">
               <Button
+                size="sm"
                 type="submit"
                 disabled={loading}
               >
                 {loading ? 'Saving...' : 'Save Configuration'}
               </Button>
               <Button
+                size="sm"
                 type="button"
                 onClick={handleClear}
                 disabled={loading}

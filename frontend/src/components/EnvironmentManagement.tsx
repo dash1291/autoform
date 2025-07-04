@@ -385,10 +385,11 @@ export default function EnvironmentManagement({ projectId, teamId, onEnvironment
               </div>
 
               <div className="flex justify-end space-x-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+                <Button size="sm" type="button" variant="outline" onClick={() => setShowForm(false)}>
                   Cancel
                 </Button>
                 <Button
+                  size="sm"
                   type="submit"
                   disabled={isSubmitting || !formData.name || !formData.branch || !formData.awsConfigId}
                 >
@@ -461,7 +462,7 @@ export default function EnvironmentManagement({ projectId, teamId, onEnvironment
                         handleDelete(environment)
                       }}
                       disabled={isDeleting === environment.id}
-                      className="text-red-600 border-red-300 hover:bg-red-50"
+                      className="text-destructive border-destructive hover:text-foreground hover:bg-destructive"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                       {isDeleting === environment.id ? 'Deleting...' : 'Delete'}

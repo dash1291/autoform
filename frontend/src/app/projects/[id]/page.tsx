@@ -783,7 +783,7 @@ export default function ProjectDetail() {
                             onUpdate={fetchProject}
                           />
                           <div className="border border-border rounded-lg p-6">
-                            <h2 className="text-xl font-semibold text-foreground mb-4">Other Resources</h2>
+                            <h2 className="text-md text-foreground mb-4">Other Resources</h2>
                             {(() => {
                               const selectedEnv = environments.find(e => e.id === selectedEnvironmentForVars)
                               return selectedEnv ? (
@@ -812,19 +812,19 @@ export default function ProjectDetail() {
                                       </div>
                                     </div>
                                   )}
-                                  <div className="flex items-center justify-between py-2 px-3 bg-muted rounded-lg">
+                                  <div className="flex items-center justify-between py-2 px-3 bg-primary rounded">
                                     <div>
                                       <span className="text-sm font-medium text-foreground">Logs</span>
                                       <p className="text-xs text-muted-foreground">/ecs/{project.name}-{selectedEnv.name}</p>
                                     </div>
                                   </div>
-                                  <div className="flex items-center justify-between py-2 px-3 bg-muted rounded-lg">
+                                  <div className="flex items-center justify-between py-2 px-3 bg-primary rounded-lg">
                                     <div>
                                       <span className="text-sm font-medium text-foreground">Container Registry</span>
                                       <p className="text-xs text-muted-foreground">{project.name.toLowerCase().replace(/[^a-z0-9-_]/g, '-')}-{selectedEnv.name.toLowerCase()}</p>
                                     </div>
                                   </div>
-                                  <div className="flex items-center justify-between py-2 px-3 bg-muted rounded-lg">
+                                  <div className="flex items-center justify-between py-2 px-3 bg-primary rounded-lg">
                                     <div>
                                       <span className="text-sm font-medium text-foreground">AWS Region</span>
                                       <p className="text-xs text-muted-foreground">{selectedEnv.awsConfig.region}</p>

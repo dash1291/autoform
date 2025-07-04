@@ -189,6 +189,7 @@ export default function ResourceConfiguration({ projectId, environmentId, projec
           <div className="flex space-x-4">
             <Button
               type="submit"
+              size="sm"
               disabled={loading || isDeploying || !hasChanges}
             >
               {loading ? 'Saving...' : 'Save Changes'}
