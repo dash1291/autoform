@@ -103,6 +103,7 @@
         "ec2:CreateTags",
         "ec2:DescribeTags",
         "ec2:ModifyVpcAttribute",
+        "ec2:ModifySubnetAttribute",
         "ec2:DescribeAvailabilityZones"
       ],
       "Resource": "*"

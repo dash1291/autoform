@@ -114,6 +114,7 @@ model Deployment {
   commitSha     String
   logs          String?
   details       String?
+  celeryTaskId  String?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)

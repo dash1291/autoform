@@ -38,6 +38,8 @@ class DeploymentConfig:
         cpu: int = 256,
         memory: int = 512,
         disk_size: int = 21,
+        aws_region: Optional[str] = None,
+        aws_credentials: Optional[dict] = None,
     ):
         self.project_id = project_id
         self.project_name = project_name
@@ -51,6 +53,27 @@ class DeploymentConfig:
         self.cpu = cpu
         self.memory = memory
         self.disk_size = disk_size
+        self.aws_region = aws_region or os.getenv("AWS_REGION", "us-east-1")
+        self.aws_credentials = aws_credentials
+    
+    def dict(self):
+        """Convert to dictionary for serialization"""
+        return {
+            "project_id": self.project_id,
+            "project_name": self.project_name,
+            "git_repo_url": self.git_repo_url,
+            "branch": self.branch,
+            "commit_sha": self.commit_sha,
+            "environment_id": self.environment_id,
+            "subdirectory": self.subdirectory,
+            "health_check_path": self.health_check_path,
+            "port": self.port,
+            "cpu": self.cpu,
+            "memory": self.memory,
+            "disk_size": self.disk_size,
+            "aws_region": self.aws_region,
+            "aws_credentials": self.aws_credentials,
+        }
 
 
 class DeploymentService:
@@ -132,7 +155,8 @@ class DeploymentService:
             result = subprocess.run(
                 command,
                 shell=True,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 cwd=cwd,
                 timeout=300,  # 5 minute timeout

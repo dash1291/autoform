@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
 import uuid
 from datetime import datetime, timedelta
@@ -8,12 +8,12 @@ from core.database import prisma
 from core.security import get_current_user
 from schemas import Deployment, DeploymentStatus, User, ProjectStatus
 from services import (
-    DeploymentService,
     DeploymentConfig,
     deployment_manager,
     encryption_service,
 )
 from .github import get_branch_commit_sha
+from app.workers.tasks import deploy_project as deploy_project_task, abort_deployment as abort_deployment_task
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,6 @@ async def get_deployments(
 @router.post("/environments/{environment_id}/deploy")
 async def deploy_environment(
     environment_id: str,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
 ):
     """Start a new deployment for an environment"""
@@ -191,11 +190,6 @@ async def deploy_environment(
     aws_region = team_aws_config.awsRegion
     logger.info(f"Using AWS credentials '{team_aws_config.name}' for environment {environment_id}")
 
-    # Start deployment in background
-    deployment_service = DeploymentService(
-        region=aws_region, aws_credentials=aws_credentials
-    )
-
     # Create deployment configuration
     config = DeploymentConfig(
         project_id=project.id,
@@ -210,10 +204,24 @@ async def deploy_environment(
         cpu=environment.cpu or 256,
         memory=environment.memory or 512,
         disk_size=environment.diskSize or 21,
+        aws_region=aws_region,
+        aws_credentials=aws_credentials
     )
 
-    background_tasks.add_task(
-        deployment_service.deploy_project, config=config, deployment_id=deployment.id
+    # Queue deployment task with Celery using apply_async for better control
+    task = deploy_project_task.apply_async(
+        kwargs={
+            "config": config.dict(), 
+            "deployment_id": deployment.id
+        },
+        queue="deployments",
+        retry=False
+    )
+    
+    # Save the Celery task ID to the deployment record immediately
+    await prisma.deployment.update(
+        where={"id": deployment.id},
+        data={"celeryTaskId": task.id}
     )
 
     return {"message": "Deployment started", "deploymentId": deployment.id}
@@ -260,7 +268,7 @@ async def abort_deployment(
             detail=f"Cannot abort deployment with status: {deployment.status}",
         )
 
-    # Update deployment status
+    # Update deployment status immediately
     await prisma.deployment.update(
         where={"id": deployment_id},
         data={
@@ -296,10 +304,67 @@ async def abort_deployment(
                 data={"status": ProjectStatus.FAILED}
             )
 
-    # Abort the deployment process
-    deployment_manager.abort_deployment_by_id(deployment_id, deployment.projectId)
+    # Revoke the celery task if it exists
+    if deployment.celeryTaskId:
+        from app.workers.celery_app import app
+        app.control.revoke(deployment.celeryTaskId, terminate=True)
+
+    # Also try to abort using deployment manager
+    try:
+        from services.deployment_manager import deployment_manager
+        deployment_manager.abort_deployment_by_id(deployment_id, deployment.projectId)
+    except:
+        pass  # Ignore errors from deployment manager
 
     return {"message": "Deployment aborted"}
+
+
+@router.post("/admin/fix-stuck-environments")
+async def fix_stuck_environments(
+    current_user: User = Depends(get_current_user)
+):
+    """Fix environments stuck in deploying status (Admin only)"""
+    # For now, allow any authenticated user to run this
+    # In production, you'd want to check if user is admin
+    
+    # Find environments stuck in DEPLOYING status
+    stuck_environments = await prisma.environment.find_many(
+        where={"status": "DEPLOYING"},
+        include={"deployments": True}
+    )
+    
+    fixed_environments = []
+    
+    for environment in stuck_environments:
+        # Check if there are any active deployments for this environment
+        active_deployment = await prisma.deployment.find_first(
+            where={
+                "environmentId": environment.id,
+                "status": {
+                    "in": [
+                        DeploymentStatus.PENDING,
+                        DeploymentStatus.BUILDING,
+                        DeploymentStatus.PUSHING,
+                        DeploymentStatus.PROVISIONING,
+                        DeploymentStatus.DEPLOYING,
+                    ]
+                }
+            }
+        )
+        
+        if not active_deployment:
+            # No active deployments, so reset environment status
+            await prisma.environment.update(
+                where={"id": environment.id},
+                data={"status": "CREATED"}
+            )
+            fixed_environments.append(environment.id)
+    
+    return {
+        "message": "Fixed stuck environments",
+        "fixed_environments": len(fixed_environments),
+        "environment_ids": fixed_environments
+    }
 
 
 @router.post("/admin/fix-stuck-deployments")

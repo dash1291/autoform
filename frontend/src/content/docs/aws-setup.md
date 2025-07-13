@@ -72,6 +72,7 @@ Create and attach this custom policy for Autoform deployments:
         "ec2:AssociateRouteTable",
         "ec2:AuthorizeSecurityGroupIngress",
         "ec2:ModifyVpcAttribute",
+        "ec2:ModifySubnetAttribute",
         "ec2:Describe*"
       ],
       "Resource": "*"
@@ -94,7 +95,8 @@ Create and attach this custom policy for Autoform deployments:
         "iam:PassRole",
         "iam:GetRole",
         "iam:ListAttachedRolePolicies",
-        "iam:ListRolePolicies"
+        "iam:ListRolePolicies",
+        "iam:TagRole"
       ],
       "Resource": "*"
     },

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Request, HTTPException, status
 import asyncio
 import hashlib
 import hmac
@@ -7,7 +7,8 @@ import logging
 from typing import Dict, Any
 
 from core.database import prisma
-from services.deployment import DeploymentService, DeploymentConfig
+from services.deployment import DeploymentConfig
+from app.workers.tasks import deploy_project as deploy_project_task
 from services.encryption_service import encryption_service
 from schemas import DeploymentStatus, EnvironmentStatus
 from datetime import datetime
@@ -31,7 +32,7 @@ def verify_github_signature(payload: bytes, signature: str, secret: str) -> bool
 
 
 @router.post("/github")
-async def github_webhook(request: Request, background_tasks: BackgroundTasks):
+async def github_webhook(request: Request):
     """Handle GitHub webhook for automatic deployments"""
     try:
         # Get headers
@@ -199,8 +200,8 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
                     "environment": environment.name
                 })
 
-            # Add a single background task to wait for all deployments
-            background_tasks.add_task(wait_for_deployments, deployment_tasks)
+            # Wait for all deployment tasks to be queued
+            await asyncio.gather(*deployment_tasks, return_exceptions=True)
 
         if deployed_environments:
             return {
@@ -373,11 +374,6 @@ async def trigger_environment_deployment(environment, webhook_payload: Dict[str,
         aws_credentials = {"access_key": access_key, "secret_key": secret_key}
         aws_region = team_aws_config.awsRegion
 
-        # Start deployment
-        deployment_service = DeploymentService(
-            region=aws_region, aws_credentials=aws_credentials
-        )
-
         # Create deployment configuration
         config = DeploymentConfig(
             project_id=environment.project.id,
@@ -392,10 +388,18 @@ async def trigger_environment_deployment(environment, webhook_payload: Dict[str,
             cpu=environment.cpu or 256,
             memory=environment.memory or 512,
             disk_size=environment.diskSize or 21,
+            aws_region=aws_region,
+            aws_credentials=aws_credentials
         )
 
-        await deployment_service.deploy_project(
-            config=config, deployment_id=deployment.id
+        # Queue deployment task with Celery using apply_async for better control
+        deploy_project_task.apply_async(
+            kwargs={
+                "config": config.dict(), 
+                "deployment_id": deployment.id
+            },
+            queue="deployments",
+            retry=False
         )
 
         logger.info(f"Environment auto-deployment completed for {environment.project.name}/{environment.name}")
