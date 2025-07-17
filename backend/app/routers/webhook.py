@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Any
 
 from core.database import get_async_session
-from services.deployment import DeploymentConfig
+from services.deployment import DeploymentConfig, DeploymentService
 from sqlmodel import select, and_
 from models.webhook import Webhook
 from models.project import Project
@@ -109,36 +109,39 @@ async def github_webhook(request: Request):
             )
             projects = projects_result.scalars().all()
 
-        # Verify webhook signature using shared secret
-        if not verify_github_signature(payload, signature, webhook.secret):
-            logger.warning(f"Invalid webhook signature for repository {github_url}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid webhook signature",
-            )
-
-        # Find environments that match the push branch
-        environments_to_deploy = []
-        for project in projects:
-            # Get environments for this project that match the branch
-            project_environments = await session.execute(
-                select(Environment).where(
-                    and_(Environment.project_id == project.id, Environment.branch == branch)
+            # Verify webhook signature using shared secret
+            if not verify_github_signature(payload, signature, webhook.secret):
+                logger.warning(f"Invalid webhook signature for repository {github_url}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid webhook signature",
                 )
-            )
-            
-            for env in project_environments.scalars().all():
-                # Load related data
-                env_project = await session.get(Project, env.project_id)
-                team = await session.get(Team, env_project.team_id)
-                team_aws_config = await session.get(TeamAwsConfig, env.team_aws_config_id)
+
+            # Find environments that match the push branch
+            environments_to_deploy = []
+            for project in projects:
+                # Get environments for this project that match the branch
+                project_environments = await session.execute(
+                    select(Environment).where(
+                        and_(Environment.project_id == project.id, Environment.branch == branch)
+                    )
+                )
                 
-                # Add to the environment object for compatibility
-                env.project = env_project
-                env.project.team = team
-                env.teamAwsConfig = team_aws_config
-                
-                environments_to_deploy.append(env)
+                for env in project_environments.scalars().all():
+                    # Load related data
+                    env_project = await session.get(Project, env.project_id)
+                    team = await session.get(Team, env_project.team_id)
+                    team_aws_config = await session.get(TeamAwsConfig, env.team_aws_config_id)
+                    
+                    # Create a dictionary with environment and related data
+                    env_data = {
+                        "environment": env,
+                        "project": env_project,
+                        "team": team,
+                        "teamAwsConfig": team_aws_config
+                    }
+                    
+                    environments_to_deploy.append(env_data)
 
         if not environments_to_deploy:
             logger.info(
@@ -159,11 +162,12 @@ async def github_webhook(request: Request):
         # Filter environments based on subdirectory changes
         environments_to_deploy_filtered = []
 
-        for environment in environments_to_deploy:
-            project = environment.project
+        for env_data in environments_to_deploy:
+            environment = env_data["environment"]
+            project = env_data["project"]
             
             # Check if environment is not already deploying
-            if environment.status in ["DEPLOYING", "BUILDING", "CLONING"]:
+            if environment.status in [EnvironmentStatus.DEPLOYING, EnvironmentStatus.PROVISIONING]:
                 logger.info(f"Environment {environment.name} in project {project.name} already deploying, skipping")
                 continue
 
@@ -199,21 +203,23 @@ async def github_webhook(request: Request):
                     )
 
             if should_deploy:
-                environments_to_deploy_filtered.append(environment)
+                environments_to_deploy_filtered.append(env_data)
 
         # Trigger all environment deployments concurrently
         deployed_environments = []
         if environments_to_deploy_filtered:
             # Create deployment tasks for all environments in parallel
             deployment_tasks = []
-            for environment in environments_to_deploy_filtered:
-                logger.info(f"Triggering auto-deployment for environment {environment.name} in project {environment.project.name}")
+            for env_data in environments_to_deploy_filtered:
+                environment = env_data["environment"]
+                project = env_data["project"]
+                logger.info(f"Triggering auto-deployment for environment {environment.name} in project {project.name}")
                 task = asyncio.create_task(
-                    trigger_environment_deployment(environment, payload_data)
+                    trigger_environment_deployment(env_data, payload_data)
                 )
                 deployment_tasks.append(task)
                 deployed_environments.append({
-                    "project": environment.project.name,
+                    "project": project.name,
                     "environment": environment.name
                 })
 
@@ -273,7 +279,7 @@ async def trigger_auto_deployment(project_id: str, webhook_payload: Dict[str, An
         async with get_async_session() as session:
             deployment = Deployment(
                 project_id=project_id,
-                status="PENDING",
+                status=DeploymentStatus.PENDING,
                 image_tag=f"{project.name}:{commit_sha}",
                 commit_sha=commit_sha,
                 logs=f"🤖 Auto-deployment triggered by webhook\nCommit: {commit_sha}\nMessage: {commit_message}\n\n",
@@ -294,20 +300,20 @@ async def trigger_auto_deployment(project_id: str, webhook_payload: Dict[str, An
             logger.error(f"Project {project_id} has no team AWS credentials configured")
             return
 
-            # Decrypt team credentials
-            from services.encryption_service import EncryptionService
+        # Decrypt team credentials
+        from services.encryption_service import EncryptionService
 
-            encryption_service = EncryptionService()
-            access_key = encryption_service.decrypt(team_aws_config.aws_access_key_id)
-            secret_key = encryption_service.decrypt(team_aws_config.aws_secret_access_key)
+        encryption_service = EncryptionService()
+        access_key = encryption_service.decrypt(team_aws_config.aws_access_key_id)
+        secret_key = encryption_service.decrypt(team_aws_config.aws_secret_access_key)
 
         if not access_key or not secret_key:
             logger.error(f"Project {project_id} has invalid team AWS credentials")
             return
 
-            aws_credentials = {"access_key": access_key, "secret_key": secret_key}
-            aws_region = team_aws_config.aws_region
-            logger.info(f"Using team AWS credentials for project {project_id}")
+        aws_credentials = {"access_key": access_key, "secret_key": secret_key}
+        aws_region = team_aws_config.aws_region
+        logger.info(f"Using team AWS credentials for project {project_id}")
 
         # Initialize deployment service with proper credentials
         deployment_service = DeploymentService(
@@ -346,21 +352,24 @@ async def trigger_auto_deployment(project_id: str, webhook_payload: Dict[str, An
                     select(Deployment).where(
                         and_(
                             Deployment.project_id == project_id,
-                            Deployment.status.in_(["PENDING", "BUILDING", "DEPLOYING"])
+                            Deployment.status.in_([DeploymentStatus.PENDING, DeploymentStatus.BUILDING, DeploymentStatus.DEPLOYING])
                         )
                     )
                 )
                 for deployment in deployments.scalars().all():
-                    deployment.status = "FAILED"
+                    deployment.status = DeploymentStatus.FAILED
                     session.add(deployment)
                 await session.commit()
         except:
             pass
 
 
-async def trigger_environment_deployment(environment, webhook_payload: Dict[str, Any]):
+async def trigger_environment_deployment(env_data, webhook_payload: Dict[str, Any]):
     """Trigger automatic deployment for an environment"""
     try:
+        environment = env_data["environment"]
+        project = env_data["project"]
+        
         # Get commit info from payload
         commits = webhook_payload.get("commits", [])
         latest_commit = commits[-1] if commits else {}
@@ -370,16 +379,16 @@ async def trigger_environment_deployment(environment, webhook_payload: Dict[str,
         )
 
         logger.info(
-            f"Starting environment auto-deployment for {environment.project.name}/{environment.name}, commit {commit_sha}"
+            f"Starting environment auto-deployment for {project.name}/{environment.name}, commit {commit_sha}"
         )
 
         # Create deployment record
         async with get_async_session() as session:
             deployment = Deployment(
-                project_id=environment.project.id,
+                project_id=project.id,
                 environment_id=environment.id,
                 status=DeploymentStatus.PENDING,
-                image_tag=f"{environment.project.name}-{environment.name}:{commit_sha}",
+                image_tag=f"{project.name}-{environment.name}:{commit_sha}",
                 commit_sha=commit_sha,
                 logs=f"🤖 Auto-deployment triggered by webhook\nCommit: {commit_sha}\nMessage: {commit_message}\n\n",
             )
@@ -395,7 +404,7 @@ async def trigger_environment_deployment(environment, webhook_payload: Dict[str,
             await session.refresh(deployment)
 
         # Get team AWS credentials
-        team_aws_config = environment.teamAwsConfig
+        team_aws_config = env_data["teamAwsConfig"]
         if not team_aws_config:
             logger.error(f"Environment {environment.id} has no AWS credentials configured")
             return
@@ -408,15 +417,15 @@ async def trigger_environment_deployment(environment, webhook_payload: Dict[str,
 
         # Create deployment configuration
         config = DeploymentConfig(
-            project_id=environment.project.id,
-            project_name=f"{environment.project.name[:23] if len(f'{environment.project.name}-{environment.name}') > 32 else environment.project.name}-{environment.name[:8] if len(f'{environment.project.name}-{environment.name}') > 32 else environment.name}",
-            git_repo_url=environment.project.git_repo_url,
+            project_id=project.id,
+            project_name=f"{project.name[:23] if len(f'{project.name}-{environment.name}') > 32 else project.name}-{environment.name[:8] if len(f'{project.name}-{environment.name}') > 32 else environment.name}",
+            git_repo_url=project.git_repo_url,
             branch=environment.branch or "main",
             commit_sha=commit_sha,
             environment_id=environment.id,
-            subdirectory=environment.project.subdirectory,
-            health_check_path=environment.project.health_check_path or "/",
-            port=environment.project.port or 3000,
+            subdirectory=project.subdirectory,
+            health_check_path=project.health_check_path or "/",
+            port=project.port or 3000,
             cpu=environment.cpu or 256,
             memory=environment.memory or 512,
             disk_size=environment.disk_size or 21,
@@ -434,10 +443,10 @@ async def trigger_environment_deployment(environment, webhook_payload: Dict[str,
             retry=False
         )
 
-        logger.info(f"Environment auto-deployment completed for {environment.project.name}/{environment.name}")
+        logger.info(f"Environment auto-deployment completed for {project.name}/{environment.name}")
 
     except Exception as e:
-        logger.error(f"Environment auto-deployment failed for {environment.project.name}/{environment.name}: {e}")
+        logger.error(f"Environment auto-deployment failed for {project.name}/{environment.name}: {e}")
 
         # Update deployment status to failed if deployment record exists
         try:
@@ -447,7 +456,7 @@ async def trigger_environment_deployment(environment, webhook_payload: Dict[str,
                     select(Deployment).where(
                         and_(
                             Deployment.environment_id == environment.id,
-                            Deployment.status.in_(["PENDING", "BUILDING", "DEPLOYING"])
+                            Deployment.status.in_([DeploymentStatus.PENDING, DeploymentStatus.BUILDING, DeploymentStatus.DEPLOYING])
                         )
                     )
                 )
