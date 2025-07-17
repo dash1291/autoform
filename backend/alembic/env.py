@@ -6,6 +6,10 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -27,10 +31,10 @@ if config.config_file_name is not None:
 target_metadata = SQLModel.metadata
 
 # Set the database URL from environment variable
-config.set_main_option(
-    "sqlalchemy.url", 
-    os.getenv("DATABASE_URL", "postgresql://autoform:autoform123@localhost:5432/autoform")
-)
+# Escape % characters to prevent ConfigParser interpolation errors
+database_url = os.getenv("DATABASE_URL", "postgresql://autoform:autoform123@localhost:5432/autoform")
+escaped_url = database_url.replace('%', '%%')
+config.set_main_option("sqlalchemy.url", escaped_url)
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
