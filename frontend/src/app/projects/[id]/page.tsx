@@ -90,8 +90,7 @@ export default function ProjectDetail() {
       // Set up polling every 2 seconds
       interval = setInterval(() => {
         fetchLiveLogs(activeDeploymentId)
-        fetchProject() // Also refresh project status
-        fetchDeployments() // Refresh deployment status
+        fetchDeployments() // Only refresh deployment status - project data is static during deployment
       }, 2000)
     }
 
@@ -106,7 +105,7 @@ export default function ProjectDetail() {
     try {
       const data = await apiClient.getProject(params.id as string)
       setProject(data)
-      // Fetch AWS region based on project ownership
+      // Fetch AWS region based on project ownership (only on initial load)
       await fetchAwsRegion(data)
     } catch (err: any) {
       if (err.message.includes('404')) {
@@ -116,6 +115,15 @@ export default function ProjectDetail() {
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchProjectDataOnly = async () => {
+    try {
+      const data = await apiClient.getProject(params.id as string)
+      setProject(data)
+    } catch (err: any) {
+      console.error('Failed to fetch project data:', err)
     }
   }
 
@@ -219,7 +227,7 @@ export default function ProjectDetail() {
 
   const handleDeploymentStarted = (deploymentId: string, environmentId: string) => {
     // Refresh project and deployments when deployment starts
-    fetchProject()
+    fetchProjectDataOnly()
     fetchDeployments()
   }
 
@@ -229,7 +237,7 @@ export default function ProjectDetail() {
     try {
       await apiClient.abortDeployment(deploymentId)
       // Refresh project and deployments
-      fetchProject()
+      fetchProjectDataOnly()
       fetchDeployments()
     } catch (err) {
       setError('Failed to abort deployment')
