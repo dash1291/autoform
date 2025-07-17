@@ -33,7 +33,7 @@ async def get_project_aws_credentials(project) -> dict:
                     and_(TeamAwsConfig.team_id == project.team_id, TeamAwsConfig.is_active == True)
                 )
             )
-            config = team_aws_config.scalar_one_or_none()
+            config = team_aws_config.first()
 
             if config:
                 # Decrypt team credentials

@@ -68,7 +68,7 @@ async def check_aws_credentials(
                 team_aws_config_result = await session.execute(
                     select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
                 )
-                team_aws_config = team_aws_config_result.scalar_one_or_none()
+                team_aws_config = team_aws_config_result.first()
 
                 if not team_aws_config:
                     return {
@@ -120,7 +120,7 @@ async def check_aws_credentials(
                     team_aws_config_result = await session.execute(
                         select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
                     )
-                    team_aws_config = team_aws_config_result.scalar_one_or_none()
+                    team_aws_config = team_aws_config_result.first()
 
                     if team_aws_config:
                         access_key = encryption_service.decrypt(
@@ -278,7 +278,7 @@ async def get_aws_resources(
                 team_aws_config_result = await session.execute(
                     select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team_id, TeamAwsConfig.is_active == True))
                 )
-                team_aws_config = team_aws_config_result.scalar_one_or_none()
+                team_aws_config = team_aws_config_result.first()
 
                 if not team_aws_config:
                     return {
@@ -332,7 +332,7 @@ async def get_aws_resources(
                     team_aws_config_result = await session.execute(
                         select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
                     )
-                    team_aws_config = team_aws_config_result.scalar_one_or_none()
+                    team_aws_config = team_aws_config_result.first()
 
                     if team_aws_config:
                         access_key = encryption_service.decrypt(

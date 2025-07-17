@@ -681,7 +681,7 @@ async def get_team_aws_config(
         aws_config = await session.execute(
             select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team_id, TeamAwsConfig.is_active == True))
         )
-        aws_config = aws_config.scalar_one_or_none()
+        aws_config = aws_config.first()
 
         if not aws_config:
             return {"configured": False, "isActive": False}
