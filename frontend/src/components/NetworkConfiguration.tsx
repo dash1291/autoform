@@ -44,7 +44,7 @@ export default function NetworkConfiguration({ projectId, environmentId, project
     }
   }
 
-  const isDeployed = project?.status === 'DEPLOYED' || project?.ecsServiceArn || project?.albArn
+  const isDeployed = project?.status === 'DEPLOYED' || project?.ecsServiceArn || project?.albArn || environment?.status === 'DEPLOYED' || environment?.ecsServiceArn
   const isReadOnly = isDeployed
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -183,16 +183,16 @@ export default function NetworkConfiguration({ projectId, environmentId, project
       </CardHeader>
       <CardContent>
         {isReadOnly && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <div className="border text-muted-foreground border-border rounded-lg p-4 mb-4">
             <div className="flex items-start">
               <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                 </svg>
               </div>
               <div className="ml-3">
-                <h4 className="text-sm font-medium text-blue-800">Network Configuration Locked</h4>
-                <div className="mt-1 text-sm text-blue-700">
+                <h4 className="text-sm font-medium">Network Configuration Locked</h4>
+                <div className="mt-1 text-sm">
                   <p>This project has been deployed and network settings are now read-only. To use different network settings, create a new project.</p>
                 </div>
               </div>
@@ -206,21 +206,18 @@ export default function NetworkConfiguration({ projectId, environmentId, project
               {isReadOnly ? 'Assigned VPC' : 'Existing VPC'}
             </label>
             {isReadOnly ? (
-              <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50">
+              <div className="w-full px-3 py-2 border border-border rounded-lg">
                 {loadingResources ? (
                   <div className="flex items-center space-x-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
                     <span className="text-sm text-gray-600">Loading VPC details...</span>
                   </div>
                 ) : deployedResources?.vpc ? (
-                  <div className="flex items-center space-x-2">
+                  <div className="flex space-x-2">
                     <div>
                       <span className="text-sm font-medium">{deployedResources.vpc.name}</span>
                       <span className="text-xs block">{deployedResources.vpc.id} ({deployedResources.vpc.cidrBlock})</span>
                     </div>
-                    {formData.existingVpcId && (
-                      <span className="text-xs text-green-600">(Pre-existing)</span>
-                    )}
                   </div>
                 ) : (
                   <div className="flex items-center space-x-2">
@@ -232,7 +229,7 @@ export default function NetworkConfiguration({ projectId, environmentId, project
                 )}
               </div>
             ) : loadingResources ? (
-              <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
+              <div className="w-full px-3 py-2 border border-border rounded-lg text-gray-500">
                 Loading VPCs...
               </div>
             ) : (
@@ -263,7 +260,7 @@ export default function NetworkConfiguration({ projectId, environmentId, project
               {isReadOnly ? 'Assigned Subnets' : 'Existing Subnets'}
             </label>
             {isReadOnly ? (
-              <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50">
+              <div className="w-full px-3 py-2 border border-border rounded-lg">
                 {loadingResources ? (
                   <div className="flex items-center space-x-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
@@ -274,7 +271,7 @@ export default function NetworkConfiguration({ projectId, environmentId, project
                     {deployedResources.subnets.map((subnet: any) => (
                       <div key={subnet.id} className="flex items-center space-x-2">
                         <div>
-                          <span className="text-sm font-medium text-gray-900">{subnet.name}</span>
+                          <span className="text-sm font-medium text-foreground">{subnet.name}</span>
                           <span className="text-xs text-gray-500 block">{subnet.id} - {subnet.availabilityZone} ({subnet.cidrBlock})</span>
                         </div>
                       </div>
@@ -293,11 +290,11 @@ export default function NetworkConfiguration({ projectId, environmentId, project
                 )}
               </div>
             ) : !formData.existingVpcId ? (
-              <div className="w-full px-3 text-sm py-1.5 border border-gray-700 rounded-lg bg-popoever">
+              <div className="w-full px-3 py-2 border border-border rounded-lg text-gray-500">
                 Select a VPC first to see available subnets
               </div>
             ) : availableSubnets.length === 0 ? (
-              <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
+              <div className="w-full px-3 py-2 border border-border rounded-lg text-gray-500">
                 No subnets found for selected VPC
               </div>
             ) : (
@@ -336,7 +333,7 @@ export default function NetworkConfiguration({ projectId, environmentId, project
               {isReadOnly ? 'Assigned ECS Cluster' : 'Existing ECS Cluster'}
             </label>
             {isReadOnly ? (
-              <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50">
+              <div className="w-full px-3 py-2 border border-border rounded-lg">
                 {loadingResources ? (
                   <div className="flex items-center space-x-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
@@ -345,13 +342,10 @@ export default function NetworkConfiguration({ projectId, environmentId, project
                 ) : deployedResources?.cluster ? (
                   <div className="flex items-center space-x-2">
                     <div>
-                      <span className="text-sm font-medium text-gray-900 block">{deployedResources.cluster.name}</span>
+                      <span className="text-sm font-medium text-foreground block">{deployedResources.cluster.name}</span>
                       <span className="text-xs text-gray-500">{deployedResources.cluster.arn}</span>
                       <span className="text-xs text-blue-600 block">{deployedResources.cluster.runningTasksCount} tasks, {deployedResources.cluster.activeServicesCount} services</span>
                     </div>
-                    {formData.existingClusterArn && (
-                      <span className="text-xs text-green-600">(Pre-existing)</span>
-                    )}
                   </div>
                 ) : (
                   <div className="flex items-center space-x-2">
@@ -363,7 +357,7 @@ export default function NetworkConfiguration({ projectId, environmentId, project
                 )}
               </div>
             ) : loadingResources ? (
-              <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
+              <div className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-500">
                 Loading ECS clusters...
               </div>
             ) : (

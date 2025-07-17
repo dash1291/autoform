@@ -25,10 +25,11 @@ app.conf.update(
     
     # Worker settings
     worker_prefetch_multiplier=1,  # Only take one task at a time
-    worker_max_tasks_per_child=10,  # Restart worker after 10 tasks (was 1, too aggressive)
+    worker_max_tasks_per_child=1,  # Restart worker after each task to prevent stuck states
     worker_hijack_root_logger=False,
     worker_log_color=False,
     worker_disable_rate_limits=True,  # Disable rate limiting for faster task pickup
+    worker_pool_restarts=True,  # Enable pool restarts on errors
     
     # Task execution limits (aligned with deployment service timeout)
     task_time_limit=1200,  # 20 minutes hard limit (15 min deploy + 5 min buffer)

@@ -6,10 +6,15 @@ import os
 from botocore.exceptions import ClientError, NoCredentialsError
 
 
-from core.database import prisma
+from core.database import get_async_session
 from core.security import get_current_user
 from core.config import settings
-from schemas import Project, ProjectCreate, ProjectUpdate, ProjectStatus, User
+from sqlmodel import select, and_
+from models.project import Project as ProjectModel, ProjectStatus
+from models.team import Team, TeamMember, TeamAwsConfig
+from models.environment import Environment
+from models.webhook import Webhook
+from schemas import Project, ProjectCreate, ProjectUpdate, User as UserSchema
 from services.cloudwatch_service import CloudWatchLogsService
 from services.encryption_service import encryption_service
 from services.github_webhook import GitHubWebhookService
@@ -21,34 +26,37 @@ router = APIRouter()
 
 async def get_project_aws_credentials(project) -> dict:
     """Get AWS credentials for a project - all projects belong to teams"""
+    async with get_async_session() as session:
+        try:
+            team_aws_config = await session.execute(
+                select(TeamAwsConfig).where(
+                    and_(TeamAwsConfig.team_id == project.team_id, TeamAwsConfig.is_active == True)
+                )
+            )
+            config = team_aws_config.scalar_one_or_none()
 
-    try:
-        team_aws_config = await prisma.teamawsconfig.find_first(
-            where={"teamId": project.teamId, "isActive": True}
-        )
+            if config:
+                # Decrypt team credentials
+                access_key = encryption_service.decrypt(config.aws_access_key_id)
+                secret_key = encryption_service.decrypt(config.aws_secret_access_key)
 
-        if team_aws_config:
-            # Decrypt team credentials
-            access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
-            secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
+                if access_key and secret_key:
+                    return {
+                        "access_key": access_key,
+                        "secret_key": secret_key,
+                        "region": config.aws_region,
+                        "source": "team",
+                    }
 
-            if access_key and secret_key:
-                return {
-                    "access_key": access_key,
-                    "secret_key": secret_key,
-                    "region": team_aws_config.awsRegion,
-                    "source": "team",
-                }
+            # No team credentials configured
+            logger.error(f"Project {project.id} has no team AWS credentials configured")
+            return None
 
-        # No team credentials configured
-        logger.error(f"Project {project.id} has no team AWS credentials configured")
-        return None
-
-    except Exception as e:
-        logger.error(
-            f"Failed to get team AWS credentials for project {project.id}: {e}"
-        )
-        return None
+        except Exception as e:
+            logger.error(
+                f"Failed to get team AWS credentials for project {project.id}: {e}"
+            )
+            return None
 
 
 async def create_cloudwatch_service(project) -> CloudWatchLogsService:
@@ -83,61 +91,92 @@ async def create_aws_client(project, service: str, region: str = None):
 
 async def check_project_access(project_id: str, user_id: str) -> bool:
     """Check if user has access to project (through team membership)"""
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "team": {
-                "OR": [
-                    {"ownerId": user_id},  # User owns the team
-                    {
-                        "members": {"some": {"userId": user_id}}
-                    },  # User is team member
-                ]
-            }
-        }
-    )
-    return project is not None
+    async with get_async_session() as session:
+        # Get project with team info
+        project = await session.execute(
+            select(ProjectModel).where(ProjectModel.id == project_id)
+        )
+        project_obj = project.scalar_one_or_none()
+        
+        if not project_obj:
+            return False
+        
+        # Check if user owns the team
+        team = await session.get(Team, project_obj.team_id)
+        if team and team.owner_id == user_id:
+            return True
+        
+        # Check if user is team member
+        team_member = await session.execute(
+            select(TeamMember).where(
+                and_(TeamMember.team_id == project_obj.team_id, TeamMember.user_id == user_id)
+            )
+        )
+        return team_member.scalar_one_or_none() is not None
 
 
 async def get_user_accessible_projects(user_id: str):
     """Get all projects accessible to the user (through team membership)"""
-    projects = await prisma.project.find_many(
-        where={
-            "team": {
-                "OR": [
-                    {"ownerId": user_id},  # Teams owned by user
-                    {
-                        "members": {"some": {"userId": user_id}}
-                    },  # Teams user is member of
-                ]
-            }
-        },
-        include={"team": True, "webhook": True},
-        order={"createdAt": "desc"},
-    )
-
-    # Convert projects to dict and handle team objects
-    result = []
-    for project in projects:
-        project_dict = project.dict()
-
-        # Add webhookConfigured based on whether project has a webhook associated
-        project_dict["webhookConfigured"] = bool(
-            project.webhook and project.webhook.isActive
+    async with get_async_session() as session:
+        # Get teams where user is owner or member
+        owned_teams = await session.execute(
+            select(Team.id).where(Team.owner_id == user_id)
+        )
+        member_teams = await session.execute(
+            select(TeamMember.team_id).where(TeamMember.user_id == user_id)
+        )
+        
+        accessible_team_ids = list(owned_teams.scalars().all()) + list(member_teams.scalars().all())
+        
+        if not accessible_team_ids:
+            return []
+        
+        # Get projects from accessible teams
+        projects = await session.execute(
+            select(ProjectModel).where(ProjectModel.team_id.in_(accessible_team_ids))
+            .order_by(ProjectModel.created_at.desc())
         )
 
-        if project_dict.get("team"):
-            project_dict["team"] = {
-                "id": project_dict["team"]["id"],
-                "name": project_dict["team"]["name"],
+        # Convert projects to dict format
+        result = []
+        for project in projects.scalars().all():
+            # Get team info
+            team = await session.get(Team, project.team_id)
+            
+            # Check webhook status
+            from models.webhook import Webhook
+            webhook = await session.execute(
+                select(Webhook).where(Webhook.git_repo_url == project.git_repo_url)
+            )
+            webhook_obj = webhook.scalar_one_or_none()
+            
+            project_dict = {
+                "id": project.id,
+                "name": project.name,
+                "gitRepoUrl": project.git_repo_url,
+                "branch": project.branch,
+                "subdirectory": project.subdirectory,
+                "healthCheckPath": project.health_check_path,
+                "port": project.port,
+                "cpu": project.cpu,
+                "memory": project.memory,
+                "diskSize": project.disk_size,
+                "createdAt": project.created_at,
+                "updatedAt": project.updated_at,
+                "teamId": project.team_id,
+                "webhookConfigured": bool(webhook_obj and webhook_obj.is_active),
+                "team": {
+                    "id": team.id,
+                    "name": team.name,
+                } if team else None
             }
-        result.append(project_dict)
+            result.append(project_dict)
 
-    return result
+        return result
 
 
 @router.get("/", response_model=List[Project])
-async def get_projects(current_user: User = Depends(get_current_user)):
+async def get_projects(current_user: UserSchema = Depends(get_current_user)):
     """Get all projects accessible to the current user (personal + team projects)"""
     logger.info(f"Getting projects for user: {current_user.id}")
 
@@ -149,29 +188,33 @@ async def get_projects(current_user: User = Depends(get_current_user)):
 
 @router.post("/", response_model=Project, status_code=status.HTTP_201_CREATED)
 async def create_project(
-    project: ProjectCreate, current_user: User = Depends(get_current_user)
+    project: ProjectCreate, current_user: UserSchema = Depends(get_current_user)
 ):
     """Create a new project"""
 
     # If team_id is provided, verify user has access to the team
     if project.team_id:
-        team_access = await prisma.team.find_first(
-            where={
-                "id": project.team_id,
-                "OR": [
-                    {"ownerId": current_user.id},  # User owns the team
-                    {
-                        "members": {"some": {"userId": current_user.id}}
-                    },  # User is team member
-                ],
-            }
-        )
+        async with get_async_session() as session:
+            # Check if user owns the team
+            team = await session.get(Team, project.team_id)
+            team_access = False
+            
+            if team and team.owner_id == current_user.id:
+                team_access = True
+            else:
+                # Check if user is team member
+                team_member = await session.execute(
+                    select(TeamMember).where(
+                        and_(TeamMember.team_id == project.team_id, TeamMember.user_id == current_user.id)
+                    )
+                )
+                team_access = team_member.scalar_one_or_none() is not None
 
-        if not team_access:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have access to this team",
-            )
+            if not team_access:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You don't have access to this team",
+                )
 
     # Check if project name already exists in team
     if not project.team_id:
@@ -180,44 +223,71 @@ async def create_project(
             detail="Team ID is required. All projects must belong to a team.",
         )
     
-    existing_project = await prisma.project.find_first(
-        where={"name": project.name, "teamId": project.team_id}
-    )
-
-    if existing_project:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"A project with this name already exists in the team",
+    async with get_async_session() as session:
+        existing_project = await session.execute(
+            select(ProjectModel).where(
+                and_(ProjectModel.name == project.name, ProjectModel.team_id == project.team_id)
+            )
         )
+        
+        if existing_project.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"A project with this name already exists in the team",
+            )
 
     # Create the project
-    project_data = {
-        "name": project.name,
-        "gitRepoUrl": project.git_repo_url,
-        "teamId": project.team_id,  # Required field
-        "userId": current_user.id,  # Required field
-        "autoDeployEnabled": project.auto_deploy_enabled,
-    }
-
-    new_project = await prisma.project.create(data=project_data, include={"team": True})
-
-    # Convert to dict and handle team object
-    project_dict = new_project.dict()
-    if project_dict.get("team"):
-        project_dict["team"] = {
-            "id": project_dict["team"]["id"],
-            "name": project_dict["team"]["name"],
+    async with get_async_session() as session:
+        new_project = ProjectModel(
+            name=project.name,
+            git_repo_url=project.git_repo_url,
+            team_id=project.team_id,
+            user_id=current_user.id,
+            auto_deploy_enabled=project.auto_deploy_enabled,
+        )
+        
+        session.add(new_project)
+        await session.commit()
+        await session.refresh(new_project)
+        
+        # Get team info
+        team = await session.get(Team, new_project.team_id)
+        
+        # Check webhook status
+        webhook = await session.execute(
+            select(Webhook).where(Webhook.git_repo_url == new_project.git_repo_url)
+        )
+        webhook_obj = webhook.scalar_one_or_none()
+        
+        # Convert to dict format
+        project_dict = {
+            "id": new_project.id,
+            "name": new_project.name,
+            "gitRepoUrl": new_project.git_repo_url,
+            "branch": new_project.branch,
+            "subdirectory": new_project.subdirectory,
+            "healthCheckPath": new_project.health_check_path,
+            "port": new_project.port,
+            "cpu": new_project.cpu,
+            "memory": new_project.memory,
+            "diskSize": new_project.disk_size,
+            "createdAt": new_project.created_at,
+            "updatedAt": new_project.updated_at,
+            "teamId": new_project.team_id,
+            "autoDeployEnabled": new_project.auto_deploy_enabled,
+            "webhookConfigured": bool(webhook_obj and webhook_obj.is_active),
+            "team": {
+                "id": team.id,
+                "name": team.name,
+            } if team else None
         }
-    
-    # Add computed fields that the frontend expects
-    project_dict["webhookConfigured"] = bool(new_project.webhookId)
-
-    logger.info(f"Project '{project.name}' created successfully for team {project.team_id}")
-    return project_dict
+        
+        logger.info(f"Project '{project.name}' created successfully for team {project.team_id}")
+        return project_dict
 
 
 @router.get("/{project_id}", response_model=Project)
-async def get_project(project_id: str, current_user: User = Depends(get_current_user)):
+async def get_project(project_id: str, current_user: UserSchema = Depends(get_current_user)):
     """Get a specific project"""
     # Check if user has access to this project
     if not await check_project_access(project_id, current_user.id):
@@ -225,32 +295,54 @@ async def get_project(project_id: str, current_user: User = Depends(get_current_
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
 
-    project = await prisma.project.find_unique(
-        where={"id": project_id}, include={"team": True, "webhook": True}
-    )
-
-    # Convert to dict and handle team object
-    project_dict = project.dict()
-
-    # Add webhookConfigured based on whether project has a webhook associated
-    project_dict["webhookConfigured"] = bool(
-        project.webhook and project.webhook.isActive
-    )
-
-    if project_dict.get("team"):
-        project_dict["team"] = {
-            "id": project_dict["team"]["id"],
-            "name": project_dict["team"]["name"],
+    async with get_async_session() as session:
+        project = await session.get(ProjectModel, project_id)
+        
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+        
+        # Get team info
+        team = await session.get(Team, project.team_id)
+        
+        # Check webhook status
+        webhook = await session.execute(
+            select(Webhook).where(Webhook.git_repo_url == project.git_repo_url)
+        )
+        webhook_obj = webhook.scalar_one_or_none()
+        
+        # Convert to dict format
+        project_dict = {
+            "id": project.id,
+            "name": project.name,
+            "gitRepoUrl": project.git_repo_url,
+            "branch": project.branch,
+            "subdirectory": project.subdirectory,
+            "healthCheckPath": project.health_check_path,
+            "port": project.port,
+            "cpu": project.cpu,
+            "memory": project.memory,
+            "diskSize": project.disk_size,
+            "createdAt": project.created_at,
+            "updatedAt": project.updated_at,
+            "teamId": project.team_id,
+            "autoDeployEnabled": project.auto_deploy_enabled,
+            "webhookConfigured": bool(webhook_obj and webhook_obj.is_active),
+            "team": {
+                "id": team.id,
+                "name": team.name,
+            } if team else None
         }
-
-    return project_dict
+        
+        return project_dict
 
 
 @router.put("/{project_id}", response_model=Project)
 async def update_project(
     project_id: str,
     project_update: ProjectUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: UserSchema = Depends(get_current_user),
 ):
     """Update a project"""
     # Check if user has access to this project
@@ -259,56 +351,63 @@ async def update_project(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
 
-    project = await prisma.project.find_unique(where={"id": project_id})
-
-    # Prepare update data
-    update_data = {}
-    
-    logger.info(f"Updating project {project_id} with data: {project_update}")
-
-    # Repository configuration
-    if project_update.git_repo_url is not None:
-        update_data["gitRepoUrl"] = project_update.git_repo_url
-    if project_update.auto_deploy_enabled is not None:
-        update_data["autoDeployEnabled"] = project_update.auto_deploy_enabled
-    
-    # Project-level settings that apply to all environments
-    if hasattr(project_update, 'subdirectory') and project_update.subdirectory is not None:
-        update_data["subdirectory"] = project_update.subdirectory
-    if hasattr(project_update, 'port') and project_update.port is not None:
-        update_data["port"] = project_update.port
-    if hasattr(project_update, 'health_check_path') and project_update.health_check_path is not None:
-        update_data["healthCheckPath"] = project_update.health_check_path
-    
-    logger.info(f"Update data to be applied: {update_data}")
-
-    # Update project
-    updated_project = await prisma.project.update(
-        where={"id": project_id}, data=update_data
-    )
-
-    return updated_project
+    async with get_async_session() as session:
+        project = await session.get(ProjectModel, project_id)
+        
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+        
+        logger.info(f"Updating project {project_id} with data: {project_update}")
+        
+        # Repository configuration
+        if project_update.git_repo_url is not None:
+            project.git_repo_url = project_update.git_repo_url
+        if project_update.auto_deploy_enabled is not None:
+            project.auto_deploy_enabled = project_update.auto_deploy_enabled
+        
+        # Project-level settings that apply to all environments
+        if hasattr(project_update, 'subdirectory') and project_update.subdirectory is not None:
+            project.subdirectory = project_update.subdirectory
+        if hasattr(project_update, 'port') and project_update.port is not None:
+            project.port = project_update.port
+        if hasattr(project_update, 'health_check_path') and project_update.health_check_path is not None:
+            project.health_check_path = project_update.health_check_path
+        
+        session.add(project)
+        await session.commit()
+        await session.refresh(project)
+        
+        # Convert to dict format for return
+        project_dict = {
+            "id": project.id,
+            "name": project.name,
+            "gitRepoUrl": project.git_repo_url,
+            "branch": project.branch,
+            "subdirectory": project.subdirectory,
+            "healthCheckPath": project.health_check_path,
+            "port": project.port,
+            "cpu": project.cpu,
+            "memory": project.memory,
+            "diskSize": project.disk_size,
+            "createdAt": project.created_at,
+            "updatedAt": project.updated_at,
+            "teamId": project.team_id,
+            "autoDeployEnabled": project.auto_deploy_enabled,
+        }
+        
+        logger.info(f"Project {project_id} updated successfully")
+        return project_dict
 
 
 @router.delete("/{project_id}")
 async def delete_project(
-    project_id: str, current_user: User = Depends(get_current_user)
+    project_id: str, current_user: UserSchema = Depends(get_current_user)
 ):
     """Delete a project"""
     # Check if project exists and user has access through team
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "team": {
-                "OR": [
-                    {"ownerId": current_user.id},
-                    {"members": {"some": {"userId": current_user.id}}}
-                ]
-            }
-        }
-    )
-
-    if not project:
+    if not await check_project_access(project_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
@@ -316,42 +415,45 @@ async def delete_project(
     # TODO: Clean up AWS resources before deleting
 
     # Delete the project
-    await prisma.project.delete(where={"id": project_id})
+    async with get_async_session() as session:
+        project = await session.get(ProjectModel, project_id)
+        if project:
+            await session.delete(project)
+            await session.commit()
 
     return {"message": "Project deleted successfully"}
 
 
 @router.get("/{project_id}/service-status")
 async def get_service_status(
-    project_id: str, current_user: User = Depends(get_current_user)
+    project_id: str, current_user: UserSchema = Depends(get_current_user)
 ):
     """Get the actual ECS service status and health"""
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "team": {
-                "OR": [
-                    {"ownerId": current_user.id},
-                    {"members": {"some": {"userId": current_user.id}}}
-                ]
-            }
-        }
-    )
-
-    if not project:
+    # Check if project exists and user has access through team
+    if not await check_project_access(project_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
 
-    # Check if any environment in the project has been deployed
-    deployed_environment = await prisma.environment.find_first(
-        where={
-            "projectId": project_id,
-            "ecsServiceArn": {"not": None}
-        }
-    )
+    async with get_async_session() as session:
+        project = await session.get(ProjectModel, project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+
+        # Check if any environment in the project has been deployed
+        deployed_environment = await session.execute(
+            select(Environment).where(
+                and_(
+                    Environment.project_id == project_id,
+                    Environment.ecs_service_arn.isnot(None)
+                )
+            )
+        )
+        deployed_env = deployed_environment.scalar_one_or_none()
     
-    if not deployed_environment:
+    if not deployed_env:
         return {
             "status": "NOT_DEPLOYED",
             "message": "Service not deployed",
@@ -367,12 +469,12 @@ async def get_service_status(
         ecs_client = await create_aws_client(project, "ecs", region)
 
         # Get cluster and service identifiers from the deployed environment
-        cluster_identifier = deployed_environment.ecsClusterArn or "default"
+        cluster_identifier = deployed_env.ecs_cluster_arn or "default"
         if cluster_identifier.startswith("arn:aws:ecs:"):
             cluster_identifier = cluster_identifier.split("/")[-1]
 
         # Extract service name from ARN if it's an ARN, otherwise use as-is
-        service_identifier = deployed_environment.ecsServiceArn
+        service_identifier = deployed_env.ecs_service_arn
         if service_identifier and service_identifier.startswith("arn:aws:ecs:"):
             service_identifier = service_identifier.split("/")[
                 -1
@@ -598,36 +700,34 @@ def _get_status_message(status: str, running: int, desired: int) -> str:
 
 @router.get("/{project_id}/exec")
 async def check_exec_availability(
-    project_id: str, current_user: User = Depends(get_current_user)
+    project_id: str, current_user: UserSchema = Depends(get_current_user)
 ):
     """Check if shell execution is available for the project"""
     # Check if project exists and user has access through team
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "team": {
-                "OR": [
-                    {"ownerId": current_user.id},
-                    {"members": {"some": {"userId": current_user.id}}}
-                ]
-            }
-        }
-    )
-
-    if not project:
+    if not await check_project_access(project_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
 
-    # Check if any environment in the project has been deployed
-    deployed_environment = await prisma.environment.find_first(
-        where={
-            "projectId": project_id,
-            "ecsServiceArn": {"not": None}
-        }
-    )
+    async with get_async_session() as session:
+        project = await session.get(ProjectModel, project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+
+        # Check if any environment in the project has been deployed
+        deployed_environment = await session.execute(
+            select(Environment).where(
+                and_(
+                    Environment.project_id == project_id,
+                    Environment.ecs_service_arn.isnot(None)
+                )
+            )
+        )
+        deployed_env = deployed_environment.scalar_one_or_none()
     
-    if not deployed_environment:
+    if not deployed_env:
         return {
             "available": False,
             "status": "not_deployed",
@@ -644,12 +744,12 @@ async def check_exec_availability(
         ecs_client = await create_aws_client(project, "ecs", region)
 
         # Extract cluster name from ARN or use default
-        cluster_name = deployed_environment.ecsClusterArn or "default"
+        cluster_name = deployed_env.ecs_cluster_arn or "default"
         if cluster_name and cluster_name.startswith("arn:aws:ecs:"):
             cluster_name = cluster_name.split("/")[-1]
 
         # Extract service name from ARN
-        service_name = deployed_environment.ecsServiceArn
+        service_name = deployed_env.ecs_service_arn
         if service_name and service_name.startswith("arn:aws:ecs:"):
             service_name = service_name.split("/")[-1]
 
@@ -696,7 +796,7 @@ async def check_exec_availability(
                 "available": True,
                 "status": "ready",
                 "taskArn": task["taskArn"],
-                "clusterArn": deployed_environment.ecsClusterArn,  # Return the full cluster ARN
+                "clusterArn": deployed_env.ecs_cluster_arn,  # Return the full cluster ARN
                 "containerName": container_name,  # Added containerName
                 "taskCount": len(running_tasks),
                 "containers": containers,
@@ -728,36 +828,34 @@ async def check_exec_availability(
 
 @router.post("/{project_id}/exec/command")
 async def execute_command(
-    project_id: str, command_data: dict, current_user: User = Depends(get_current_user)
+    project_id: str, command_data: dict, current_user: UserSchema = Depends(get_current_user)
 ):
     """Execute a command in the project container"""
     # Check if project exists and user has access through team
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "team": {
-                "OR": [
-                    {"ownerId": current_user.id},
-                    {"members": {"some": {"userId": current_user.id}}}
-                ]
-            }
-        }
-    )
-
-    if not project:
+    if not await check_project_access(project_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
 
-    # Check if any environment in the project has been deployed
-    deployed_environment = await prisma.environment.find_first(
-        where={
-            "projectId": project_id,
-            "ecsServiceArn": {"not": None}
-        }
-    )
+    async with get_async_session() as session:
+        project = await session.get(ProjectModel, project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+
+        # Check if any environment in the project has been deployed
+        deployed_environment = await session.execute(
+            select(Environment).where(
+                and_(
+                    Environment.project_id == project_id,
+                    Environment.ecs_service_arn.isnot(None)
+                )
+            )
+        )
+        deployed_env = deployed_environment.scalar_one_or_none()
     
-    if not deployed_environment:
+    if not deployed_env:
         return {
             "success": False,
             "message": "Project must be deployed to execute commands",
@@ -776,12 +874,12 @@ async def execute_command(
         ecs_client = await create_aws_client(project, "ecs", region)
 
         # Extract cluster ARN or use default
-        cluster_arn = deployed_environment.ecsClusterArn or "default"
+        cluster_arn = deployed_env.ecs_cluster_arn or "default"
 
         # Get a running task
         tasks_response = ecs_client.list_tasks(
             cluster=cluster_arn,
-            serviceName=deployed_environment.ecsServiceArn,
+            serviceName=deployed_env.ecs_service_arn,
             desiredStatus="RUNNING",
         )
 
@@ -854,36 +952,34 @@ async def get_project_logs(
     project_id: str,
     limit: int = 100,
     hours_back: int = 1,
-    current_user: User = Depends(get_current_user),
+    current_user: UserSchema = Depends(get_current_user),
 ):
     """Get application logs for a project from CloudWatch"""
     # Check if project exists and user has access through team
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "team": {
-                "OR": [
-                    {"ownerId": current_user.id},
-                    {"members": {"some": {"userId": current_user.id}}}
-                ]
-            }
-        }
-    )
-
-    if not project:
+    if not await check_project_access(project_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
 
-    # Check if any environment in the project has been deployed (has ECS service)
-    deployed_environments = await prisma.environment.find_many(
-        where={
-            "projectId": project_id,
-            "ecsServiceArn": {"not": None}
-        }
-    )
+    async with get_async_session() as session:
+        project = await session.get(ProjectModel, project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+
+        # Check if any environment in the project has been deployed (has ECS service)
+        deployed_environments = await session.execute(
+            select(Environment).where(
+                and_(
+                    Environment.project_id == project_id,
+                    Environment.ecs_service_arn.isnot(None)
+                )
+            )
+        )
+        deployed_envs = deployed_environments.scalars().all()
     
-    if not deployed_environments:
+    if not deployed_envs:
         return {
             "logs": [],
             "message": "Project must be deployed to view application logs",
@@ -910,29 +1006,21 @@ async def get_project_logs(
 
 @router.get("/{project_id}/deployed-resources")
 async def get_project_deployed_resources(
-    project_id: str, current_user: User = Depends(get_current_user)
+    project_id: str, current_user: UserSchema = Depends(get_current_user)
 ):
     """Get information about deployed AWS resources for a project"""
     # Check if project exists and belongs to user or user is team member
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "team": {
-                "OR": [
-                    {"ownerId": current_user.id},  # User owns the team
-                    {
-                        "members": {"some": {"userId": current_user.id}}
-                    },  # User is team member
-                ]
-            }
-        },
-        include={"team": True},
-    )
-
-    if not project:
+    if not await check_project_access(project_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
+
+    async with get_async_session() as session:
+        project = await session.get(ProjectModel, project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
 
     try:
         # Get region from team config or environment
@@ -958,13 +1046,24 @@ async def get_project_deployed_resources(
             "loadBalancer": None,
         }
 
+        # Get deployed environment
+        deployed_environment = await session.execute(
+            select(Environment).where(
+                and_(
+                    Environment.project_id == project_id,
+                    Environment.ecs_service_arn.isnot(None)
+                )
+            )
+        )
+        deployed_env = deployed_environment.scalar_one_or_none()
+
         # If deployed environment has stored network configuration, use that
-        if deployed_environment and deployed_environment.existingVpcId:
+        if deployed_env and deployed_env.existing_vpc_id:
             try:
-                vpc_response = ec2_client.describe_vpcs(VpcIds=[deployed_environment.existingVpcId])
+                vpc_response = ec2_client.describe_vpcs(VpcIds=[deployed_env.existing_vpc_id])
                 if vpc_response["Vpcs"]:
                     vpc = vpc_response["Vpcs"][0]
-                    vpc_name = deployed_environment.existingVpcId
+                    vpc_name = deployed_env.existing_vpc_id
                     for tag in vpc.get("Tags", []):
                         if tag["Key"] == "Name":
                             vpc_name = tag["Value"]
@@ -978,11 +1077,11 @@ async def get_project_deployed_resources(
             except ClientError:
                 pass
 
-        if deployed_environment and deployed_environment.existingSubnetIds:
+        if deployed_env and deployed_env.existing_subnet_ids:
             try:
                 import json
 
-                subnet_ids = json.loads(deployed_environment.existingSubnetIds)
+                subnet_ids = json.loads(deployed_env.existing_subnet_ids)
                 if subnet_ids:
                     subnets_response = ec2_client.describe_subnets(SubnetIds=subnet_ids)
                     subnets = []
@@ -1005,10 +1104,10 @@ async def get_project_deployed_resources(
             except (ClientError, json.JSONDecodeError):
                 pass
 
-        if deployed_environment and deployed_environment.existingClusterArn:
+        if deployed_env and deployed_env.existing_cluster_arn:
             try:
                 cluster_response = ecs_client.describe_clusters(
-                    clusters=[deployed_environment.existingClusterArn]
+                    clusters=[deployed_env.existing_cluster_arn]
                 )
                 if cluster_response["clusters"]:
                     cluster = cluster_response["clusters"][0]
@@ -1020,24 +1119,16 @@ async def get_project_deployed_resources(
                     }
             except ClientError:
                 pass
-
-        # Try to find ECS service and extract network information from deployed environments
-        deployed_environment = await prisma.environment.find_first(
-            where={
-                "projectId": project_id,
-                "ecsServiceArn": {"not": None}
-            }
-        )
         
-        if deployed_environment and deployed_environment.ecsServiceArn:
+        if deployed_env and deployed_env.ecs_service_arn:
             try:
                 # Extract service name from ARN if it's an ARN
-                service_identifier = deployed_environment.ecsServiceArn
+                service_identifier = deployed_env.ecs_service_arn
                 if service_identifier.startswith("arn:aws:ecs:"):
                     service_identifier = service_identifier.split("/")[-1]
 
                 # Extract cluster name from ARN if it's an ARN
-                cluster_identifier = deployed_environment.ecsClusterArn or "default"
+                cluster_identifier = deployed_env.ecs_cluster_arn or "default"
                 if cluster_identifier.startswith("arn:aws:ecs:"):
                     cluster_identifier = cluster_identifier.split("/")[-1]
 
@@ -1130,10 +1221,10 @@ async def get_project_deployed_resources(
                 pass
 
         # Try to find load balancer from deployed environments
-        if deployed_environment and deployed_environment.albArn:
+        if deployed_env and deployed_env.alb_arn:
             try:
                 lb_response = elbv2_client.describe_load_balancers(
-                    LoadBalancerArns=[deployed_environment.albArn]
+                    LoadBalancerArns=[deployed_env.alb_arn]
                 )
                 if lb_response["LoadBalancers"]:
                     lb = lb_response["LoadBalancers"][0]
@@ -1172,26 +1263,21 @@ async def get_project_deployed_resources(
 
 @router.get("/{project_id}/debug-logs")
 async def debug_project_logs(
-    project_id: str, current_user: User = Depends(get_current_user)
+    project_id: str, current_user: UserSchema = Depends(get_current_user)
 ):
     """Debug endpoint to see what log groups and streams exist"""
     # Check if project exists and user has access through team
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "team": {
-                "OR": [
-                    {"ownerId": current_user.id},
-                    {"members": {"some": {"userId": current_user.id}}}
-                ]
-            }
-        }
-    )
-
-    if not project:
+    if not await check_project_access(project_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
+
+    async with get_async_session() as session:
+        project = await session.get(ProjectModel, project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
 
     try:
         cloudwatch_svc = await create_cloudwatch_service(project)
@@ -1213,48 +1299,47 @@ async def debug_project_logs(
 async def configure_webhook(
     project_id: str,
     github_access_token: Optional[str] = Header(None, alias="X-GitHub-Token"),
-    current_user: User = Depends(get_current_user),
+    current_user: UserSchema = Depends(get_current_user),
 ):
     """Configure webhook for automatic deployments"""
     # Check if project exists and user has access through team
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "team": {
-                "OR": [
-                    {"ownerId": current_user.id},
-                    {"members": {"some": {"userId": current_user.id}}}
-                ]
-            }
-        }
-    )
-
-    if not project:
+    if not await check_project_access(project_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
 
-    # Find or create webhook for this repository
-    webhook = await prisma.webhook.find_unique(where={"gitRepoUrl": project.gitRepoUrl})
+    async with get_async_session() as session:
+        project = await session.get(ProjectModel, project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
 
-    if not webhook:
-        import secrets
-
-        webhook_secret = secrets.token_urlsafe(32)
-
-        webhook = await prisma.webhook.create(
-            data={
-                "gitRepoUrl": project.gitRepoUrl,
-                "secret": webhook_secret,
-                "isActive": True,
-            }
+        # Find or create webhook for this repository
+        webhook = await session.execute(
+            select(Webhook).where(Webhook.git_repo_url == project.git_repo_url)
         )
+        webhook_obj = webhook.scalar_one_or_none()
 
-    # Associate project with webhook if not already associated
-    if not project.webhookId:
-        await prisma.project.update(
-            where={"id": project_id}, data={"webhookId": webhook.id}
-        )
+        if not webhook_obj:
+            import secrets
+
+            webhook_secret = secrets.token_urlsafe(32)
+
+            webhook_obj = Webhook(
+                git_repo_url=project.git_repo_url,
+                secret=webhook_secret,
+                is_active=True,
+            )
+            session.add(webhook_obj)
+            await session.commit()
+            await session.refresh(webhook_obj)
+
+        # Associate project with webhook if not already associated
+        if not project.webhook_id:
+            project.webhook_id = webhook_obj.id
+            session.add(project)
+            await session.commit()
 
     # Webhook URL
     base_url = settings.webhook_base_url or settings.backend_url
@@ -1311,79 +1396,88 @@ async def configure_webhook(
 async def delete_webhook_config(
     project_id: str,
     github_access_token: Optional[str] = Header(None, alias="X-GitHub-Token"),
-    current_user: User = Depends(get_current_user),
+    current_user: UserSchema = Depends(get_current_user),
 ):
     """Delete webhook configuration"""
     # Check if project exists and belongs to user
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "team": {
-                "OR": [
-                    {"ownerId": current_user.id},
-                    {"members": {"some": {"userId": current_user.id}}}
-                ]
-            }
-        },
-        include={"webhook": True}
-    )
-
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-        )
-
-    # If GitHub access token provided, try to delete webhook from GitHub
-    if github_access_token and project.webhook:
-        try:
-            base_url = settings.webhook_base_url or settings.backend_url
-            webhook_url = f"{base_url}/api/webhook/github"
-            webhook_service = GitHubWebhookService()
-            await webhook_service.delete_webhook(
-                git_repo_url=project.gitRepoUrl,
-                webhook_url=webhook_url,
-                access_token=github_access_token,
+    async with get_async_session() as session:
+        project = await session.get(ProjectModel, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Check team access
+        team = await session.get(Team, project.team_id)
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+        
+        has_access = team.owner_id == current_user.id
+        if not has_access:
+            member = await session.execute(
+                select(TeamMember).where(
+                    and_(TeamMember.team_id == project.team_id, TeamMember.user_id == current_user.id)
+                )
             )
-        except Exception as e:
-            logger.error(f"Failed to delete webhook from GitHub: {str(e)}")
-            # Continue with local deletion even if GitHub deletion fails
-
-    # Dissociate project from webhook and disable auto-deploy
-    await prisma.project.update(
-        where={"id": project_id}, data={"webhookId": None, "autoDeployEnabled": False}
-    )
-
-    # Check if any other projects are using this webhook
-    if project.webhook:
-        other_projects = await prisma.project.find_many(
-            where={"webhookId": project.webhook.id, "id": {"not": project_id}}
+            has_access = member.scalar_one_or_none() is not None
+        
+        if not has_access:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Get webhook
+        webhook_result = await session.execute(
+            select(Webhook).where(Webhook.git_repo_url == project.git_repo_url)
         )
+        webhook = webhook_result.scalar_one_or_none()
 
-        # If no other projects are using this webhook, delete it
-        if not other_projects:
-            await prisma.webhook.delete(where={"id": project.webhook.id})
-            logger.info(f"Deleted unused webhook for repository {project.gitRepoUrl}")
+        # If GitHub access token provided, try to delete webhook from GitHub
+        if github_access_token and webhook:
+            try:
+                base_url = settings.webhook_base_url or settings.backend_url
+                webhook_url = f"{base_url}/api/webhook/github"
+                webhook_service = GitHubWebhookService()
+                await webhook_service.delete_webhook(
+                    git_repo_url=project.git_repo_url,
+                    webhook_url=webhook_url,
+                    access_token=github_access_token,
+                )
+            except Exception as e:
+                logger.error(f"Failed to delete webhook from GitHub: {str(e)}")
+                # Continue with local deletion even if GitHub deletion fails
+
+        # Dissociate project from webhook and disable auto-deploy
+        project.webhook_id = None
+        project.auto_deploy_enabled = False
+        session.add(project)
+        await session.commit()
+
+        # Check if any other projects are using this webhook
+        if webhook:
+            other_projects = await session.execute(
+                select(ProjectModel).where(
+                    and_(ProjectModel.webhook_id == webhook.id, ProjectModel.id != project_id)
+                )
+            )
+            other_projects_list = other_projects.scalars().all()
+
+            # If no other projects are using this webhook, delete it
+            if not other_projects_list:
+                await session.delete(webhook)
+                await session.commit()
+                logger.info(f"Deleted unused webhook for repository {project.git_repo_url}")
 
     return {"message": "Webhook configuration deleted successfully"}
 
 
 @router.get("/{project_id}/codebuild-logs")
 async def get_project_codebuild_logs(
-    project_id: str, limit: int = 100, current_user: User = Depends(get_current_user)
+    project_id: str, limit: int = 100, current_user: UserSchema = Depends(get_current_user)
 ):
     """Get CodeBuild logs for a project"""
     # Check if project exists and user has access through team
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "team": {
-                "OR": [
-                    {"ownerId": current_user.id},
-                    {"members": {"some": {"userId": current_user.id}}}
-                ]
-            }
-        }
-    )
+    async with get_async_session() as session:
+        if not await check_project_access(project_id, current_user.id):
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        project = await session.get(ProjectModel, project_id)
 
     if not project:
         raise HTTPException(
@@ -1414,24 +1508,19 @@ async def get_environment_logs(
     environment_id: str,
     limit: int = 100,
     hours_back: int = 1,
-    current_user: User = Depends(get_current_user),
+    current_user: UserSchema = Depends(get_current_user),
 ):
     """Get application logs for an environment from CloudWatch"""
     # Check if environment exists and user has access through team
-    environment = await prisma.environment.find_first(
-        where={
-            "id": environment_id,
-            "project": {
-                "team": {
-                    "OR": [
-                        {"ownerId": current_user.id},
-                        {"members": {"some": {"userId": current_user.id}}}
-                    ]
-                }
-            }
-        },
-        include={"project": True}
-    )
+    async with get_async_session() as session:
+        environment = await session.get(Environment, environment_id)
+        if not environment:
+            raise HTTPException(status_code=404, detail="Environment not found")
+        
+        if not await check_project_access(environment.project_id, current_user.id):
+            raise HTTPException(status_code=404, detail="Environment not found")
+        
+        project = await session.get(ProjectModel, environment.project_id)
 
     if not environment:
         raise HTTPException(
@@ -1439,11 +1528,11 @@ async def get_environment_logs(
         )
 
     # Check if environment has been deployed
-    if not environment.ecsServiceArn:
+    if not environment.ecs_service_arn:
         return {
             "logs": [],
             "message": "Environment must be deployed to view application logs",
-            "logGroupName": f"/ecs/{environment.project.name}-{environment.name}",
+            "logGroupName": f"/ecs/{project.name}-{environment.name}",
             "totalStreams": 0,
         }
 
@@ -1451,7 +1540,7 @@ async def get_environment_logs(
     try:
         cloudwatch_svc = await create_cloudwatch_service_for_environment(environment)
         logs_data = await cloudwatch_svc.get_environment_logs(
-            project_name=environment.project.name, 
+            project_name=project.name, 
             environment_name=environment.name,
             limit=limit, 
             hours_back=hours_back
@@ -1462,31 +1551,26 @@ async def get_environment_logs(
         return {
             "logs": [],
             "message": f"Error fetching logs: {str(e)}",
-            "logGroupName": f"/ecs/{environment.project.name}-{environment.name}",
+            "logGroupName": f"/ecs/{project.name}-{environment.name}",
             "totalStreams": 0,
         }
 
 
 @router.get("/environments/{environment_id}/exec")
 async def check_environment_exec_availability(
-    environment_id: str, current_user: User = Depends(get_current_user)
+    environment_id: str, current_user: UserSchema = Depends(get_current_user)
 ):
     """Check if shell execution is available for the environment"""
     # Check if environment exists and user has access through team
-    environment = await prisma.environment.find_first(
-        where={
-            "id": environment_id,
-            "project": {
-                "team": {
-                    "OR": [
-                        {"ownerId": current_user.id},
-                        {"members": {"some": {"userId": current_user.id}}}
-                    ]
-                }
-            }
-        },
-        include={"project": True}
-    )
+    async with get_async_session() as session:
+        environment = await session.get(Environment, environment_id)
+        if not environment:
+            raise HTTPException(status_code=404, detail="Environment not found")
+        
+        if not await check_project_access(environment.project_id, current_user.id):
+            raise HTTPException(status_code=404, detail="Environment not found")
+        
+        project = await session.get(ProjectModel, environment.project_id)
 
     if not environment:
         raise HTTPException(
@@ -1494,7 +1578,7 @@ async def check_environment_exec_availability(
         )
 
     # Check if environment has been deployed
-    if not environment.ecsServiceArn:
+    if not environment.ecs_service_arn:
         return {
             "available": False,
             "status": "not_deployed",
@@ -1508,15 +1592,15 @@ async def check_environment_exec_availability(
     region = os.getenv("AWS_REGION", "us-east-1")
 
     try:
-        ecs_client = await create_aws_client(environment.project, "ecs", region)
+        ecs_client = await create_aws_client(project, "ecs", region)
 
         # Extract cluster name from ARN or use default
-        cluster_name = environment.ecsClusterArn or "default"
+        cluster_name = environment.ecs_cluster_arn or "default"
         if cluster_name and cluster_name.startswith("arn:aws:ecs:"):
             cluster_name = cluster_name.split("/")[-1]
 
         # Extract service name from ARN
-        service_name = environment.ecsServiceArn
+        service_name = environment.ecs_service_arn
         if service_name and service_name.startswith("arn:aws:ecs:"):
             service_name = service_name.split("/")[-1]
 
@@ -1561,7 +1645,7 @@ async def check_environment_exec_availability(
             "available": True,
             "status": "ready",
             "taskArn": task["taskArn"],
-            "clusterArn": environment.ecsClusterArn,
+            "clusterArn": environment.ecs_cluster_arn,
             "containerName": container_name,
             "taskCount": len(running_tasks),
             "containers": containers,
@@ -1578,24 +1662,19 @@ async def check_environment_exec_availability(
 
 @router.post("/environments/{environment_id}/exec/command")
 async def execute_environment_command(
-    environment_id: str, command_data: dict, current_user: User = Depends(get_current_user)
+    environment_id: str, command_data: dict, current_user: UserSchema = Depends(get_current_user)
 ):
     """Execute a command in the environment container"""
     # Check if environment exists and user has access through team
-    environment = await prisma.environment.find_first(
-        where={
-            "id": environment_id,
-            "project": {
-                "team": {
-                    "OR": [
-                        {"ownerId": current_user.id},
-                        {"members": {"some": {"userId": current_user.id}}}
-                    ]
-                }
-            }
-        },
-        include={"project": True}
-    )
+    async with get_async_session() as session:
+        environment = await session.get(Environment, environment_id)
+        if not environment:
+            raise HTTPException(status_code=404, detail="Environment not found")
+        
+        if not await check_project_access(environment.project_id, current_user.id):
+            raise HTTPException(status_code=404, detail="Environment not found")
+        
+        project = await session.get(ProjectModel, environment.project_id)
 
     if not environment:
         raise HTTPException(
@@ -1603,7 +1682,7 @@ async def execute_environment_command(
         )
 
     # Check if environment has been deployed
-    if not environment.ecsServiceArn:
+    if not environment.ecs_service_arn:
         return {
             "success": False,
             "message": "Environment must be deployed to execute commands",
@@ -1619,15 +1698,15 @@ async def execute_environment_command(
     region = os.getenv("AWS_REGION", "us-east-1")
 
     try:
-        ecs_client = await create_aws_client(environment.project, "ecs", region)
+        ecs_client = await create_aws_client(project, "ecs", region)
 
         # Extract cluster ARN or use default
-        cluster_arn = environment.ecsClusterArn or "default"
+        cluster_arn = environment.ecs_cluster_arn or "default"
 
         # Get a running task
         tasks_response = ecs_client.list_tasks(
             cluster=cluster_arn,
-            serviceName=environment.ecsServiceArn,
+            serviceName=environment.ecs_service_arn,
             desiredStatus="RUNNING",
         )
 
@@ -1693,24 +1772,28 @@ async def execute_environment_command(
 async def create_cloudwatch_service_for_environment(environment):
     """Create CloudWatch service with environment's team credentials"""
     # Get team AWS credentials for the environment
-    team_aws_config = await prisma.teamawsconfig.find_first(
-        where={"id": environment.teamAwsConfigId, "isActive": True}
-    )
+    async with get_async_session() as session:
+        team_aws_config_result = await session.execute(
+            select(TeamAwsConfig).where(
+                and_(TeamAwsConfig.id == environment.team_aws_config_id, TeamAwsConfig.is_active == True)
+            )
+        )
+        team_aws_config = team_aws_config_result.scalar_one_or_none()
 
     aws_credentials = None
     region = "us-east-1"
     
     if team_aws_config:
         # Decrypt team credentials
-        access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
-        secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
+        access_key = encryption_service.decrypt(team_aws_config.aws_access_key_id)
+        secret_key = encryption_service.decrypt(team_aws_config.aws_secret_access_key)
 
         if access_key and secret_key:
             aws_credentials = {
                 "access_key": access_key,
                 "secret_key": secret_key,
             }
-            region = team_aws_config.awsRegion
+            region = team_aws_config.aws_region
 
     from services.cloudwatch_service import CloudWatchLogsService
     return CloudWatchLogsService(region_name=region, aws_credentials=aws_credentials)

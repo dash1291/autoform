@@ -15,7 +15,13 @@ from infrastructure.types import (
     EnvironmentVariable,
 )
 from infrastructure import ECSInfrastructure
-from core.database import prisma
+from core.database import get_async_session
+from sqlmodel import select, Session
+from models.deployment import Deployment, DeploymentStatus
+from models.project import Project
+from models.environment import Environment
+from models.user import Account
+from models.team import Team, TeamMember
 from services.encryption_service import encryption_service
 from services.deployment_manager import deployment_manager
 from services.buildpack_service import BuildpackService
@@ -105,13 +111,18 @@ class DeploymentService:
 
             # Update database with current logs
             try:
-                if not prisma.is_connected():
-                    await prisma.connect()
-                
-                logs_text = "\n".join(self.deployment_logs[deployment_id])
-                await prisma.deployment.update(
-                    where={"id": deployment_id}, data={"logs": logs_text}
-                )
+                async with get_async_session() as session:
+                    result = await session.execute(
+                        select(Deployment).where(Deployment.id == deployment_id)
+                    )
+                    deployment = result.scalar_one_or_none()
+                    
+                    if deployment:
+                        logs_text = "\n".join(self.deployment_logs[deployment_id])
+                        deployment.logs = logs_text
+                        deployment.updated_at = datetime.now()
+                        session.add(deployment)
+                        await session.commit()
             except Exception as db_error:
                 logger.error(f"Failed to update deployment logs in database: {db_error}")
 
@@ -126,10 +137,16 @@ class DeploymentService:
                 await self.log_to_database(deployment_id, "❌ Deployment aborted by user")
                 # Update deployment status to failed (only do this once)
                 try:
-                    await prisma.deployment.update(
-                        where={"id": deployment_id}, 
-                        data={"status": "FAILED"}
-                    )
+                    async with get_async_session() as session:
+                        result = await session.execute(
+                            select(Deployment).where(Deployment.id == deployment_id)
+                        )
+                        deployment = result.scalar_one_or_none()
+                        if deployment:
+                            deployment.status = DeploymentStatus.FAILED
+                            deployment.updated_at = datetime.now()
+                            session.add(deployment)
+                            await session.commit()
                 except Exception:
                     # Status may have already been updated, ignore this error
                     pass
@@ -227,9 +244,7 @@ class DeploymentService:
         self.config = config
 
         try:
-            # Ensure database connection for background task
-            if not prisma.is_connected():
-                await prisma.connect()
+            # SQLModel doesn't need explicit connection management
                 
             # Register deployment for tracking
             if deployment_id:
@@ -307,38 +322,71 @@ class DeploymentService:
                         deployment_id, "✅ Deployment completed successfully!"
                     )
 
-                    # Update deployment status in database
-                    deployment = await prisma.deployment.update(
-                        where={"id": deployment_id}, data={"status": "SUCCESS"}
-                    )
+                    # Update deployment and environment status in single transaction
+                    async with get_async_session() as session:
+                        # Get deployment
+                        deployment_result = await session.execute(
+                            select(Deployment).where(Deployment.id == deployment_id)
+                        )
+                        deployment = deployment_result.scalar_one_or_none()
+                        
+                        if deployment:
+                            # Update deployment status
+                            deployment.status = DeploymentStatus.SUCCESS
+                            deployment.updated_at = datetime.now()
+                            session.add(deployment)
+                            
+                            # Update environment status if deployment has environment
+                            if deployment.environment_id:
+                                env_result = await session.execute(
+                                    select(Environment).where(Environment.id == deployment.environment_id)
+                                )
+                                environment = env_result.scalar_one_or_none()
+                                if environment:
+                                    environment.status = "DEPLOYED"
+                                    environment.updated_at = datetime.now()
+                                    session.add(environment)
+                            
+                            # Commit all changes in single transaction
+                            await session.commit()
 
                     # Complete deployment tracking
                     deployment_manager.complete_deployment(config.project_id)
-
-                    # Update environment status to deployed
-                    if deployment.environmentId:
-                        await prisma.environment.update(
-                            where={"id": deployment.environmentId}, data={"status": "DEPLOYED"}
-                        )
                 else:
                     await self.log_to_database(
                         deployment_id,
                         "❌ Service failed to become healthy within timeout",
                     )
 
-                    # Update deployment status to failed
-                    deployment = await prisma.deployment.update(
-                        where={"id": deployment_id}, data={"status": "FAILED"}
-                    )
+                    # Update deployment and environment status to failed in single transaction
+                    async with get_async_session() as session:
+                        deployment_result = await session.execute(
+                            select(Deployment).where(Deployment.id == deployment_id)
+                        )
+                        deployment = deployment_result.scalar_one_or_none()
+                        
+                        if deployment:
+                            # Update deployment status
+                            deployment.status = DeploymentStatus.FAILED
+                            deployment.updated_at = datetime.now()
+                            session.add(deployment)
+                            
+                            # Update environment status if deployment has environment
+                            if deployment.environment_id:
+                                env_result = await session.execute(
+                                    select(Environment).where(Environment.id == deployment.environment_id)
+                                )
+                                environment = env_result.scalar_one_or_none()
+                                if environment:
+                                    environment.status = "FAILED"
+                                    environment.updated_at = datetime.now()
+                                    session.add(environment)
+                            
+                            # Commit all changes in single transaction
+                            await session.commit()
 
                     # Complete deployment tracking (even if failed)
                     deployment_manager.complete_deployment(config.project_id)
-
-                    # Update environment status to failed
-                    if deployment.environmentId:
-                        await prisma.environment.update(
-                            where={"id": deployment.environmentId}, data={"status": "FAILED"}
-                        )
 
             return result
 
@@ -352,18 +400,37 @@ class DeploymentService:
                 )
 
                 # Update deployment status to failed
-                deployment = await prisma.deployment.update(
-                    where={"id": deployment_id}, data={"status": "FAILED"}
-                )
+                async with get_async_session() as session:
+                    result = await session.execute(
+                        select(Deployment).where(Deployment.id == deployment_id)
+                    )
+                    deployment = result.scalar_one_or_none()
+                    if deployment:
+                        deployment.status = DeploymentStatus.FAILED
+                        deployment.updated_at = datetime.now()
+                        session.add(deployment)
+                        await session.commit()
 
                 # Complete deployment tracking (even if failed/aborted)
                 deployment_manager.complete_deployment(config.project_id)
 
                 # Update environment status to failed
-                if deployment.environmentId:
-                    await prisma.environment.update(
-                        where={"id": deployment.environmentId}, data={"status": "FAILED"}
+                async with get_async_session() as env_session:
+                    deployment_result = await env_session.execute(
+                        select(Deployment).where(Deployment.id == deployment_id)
                     )
+                    deployment_obj = deployment_result.scalar_one_or_none()
+                    
+                    if deployment_obj and deployment_obj.environment_id:
+                        env_result = await env_session.execute(
+                            select(Environment).where(Environment.id == deployment_obj.environment_id)
+                        )
+                        environment = env_result.scalar_one_or_none()
+                        if environment:
+                            environment.status = "FAILED"
+                            environment.updated_at = datetime.now()
+                            env_session.add(environment)
+                            await env_session.commit()
 
             raise error
         finally:
@@ -455,46 +522,62 @@ class DeploymentService:
     async def get_github_token(self, project_id: str) -> str:
         """Get GitHub access token for project team"""
         try:
-            # Get the project with team and team owner
-            project = await prisma.project.find_unique(
-                where={"id": project_id},
-                include={
-                    "team": {
-                        "include": {
-                            "owner": {"include": {"accounts": {"where": {"provider": "github"}}}},
-                            "members": {
-                                "include": {
-                                    "user": {"include": {"accounts": {"where": {"provider": "github"}}}}
-                                }
-                            }
-                        }
-                    }
-                },
-            )
-
-            if not project or not project.team:
-                raise Exception("Project or team not found")
-
-            # First try to get token from team owner
-            if (project.team.owner 
-                and project.team.owner.accounts 
-                and len(project.team.owner.accounts) > 0):
-                return project.team.owner.accounts[0].access_token
-
-            # If owner doesn't have GitHub token, try team members
-            for member in project.team.members:
-                if (member.user 
-                    and member.user.accounts 
-                    and len(member.user.accounts) > 0):
-                    return member.user.accounts[0].access_token
-
-            # Fallback to environment variable
-            token = os.getenv("GITHUB_TOKEN")
-            if not token:
-                raise Exception(
-                    "GitHub access token not found. Please ensure team owner or members have connected their GitHub account."
+            async with get_async_session() as session:
+                # Get the project with team
+                result = await session.execute(
+                    select(Project).where(Project.id == project_id)
                 )
-            return token
+                project = result.scalar_one_or_none()
+                
+                if not project or not project.team_id:
+                    raise Exception("Project or team not found")
+                
+                # Get team with owner
+                team_result = await session.execute(
+                    select(Team).where(Team.id == project.team_id)
+                )
+                team = team_result.scalar_one_or_none()
+                
+                if not team:
+                    raise Exception("Team not found")
+                
+                # First try to get token from team owner
+                owner_accounts_result = await session.execute(
+                    select(Account).where(
+                        (Account.user_id == team.owner_id) & 
+                        (Account.provider == "github")
+                    )
+                )
+                owner_account = owner_accounts_result.scalar_one_or_none()
+                
+                if owner_account and owner_account.access_token:
+                    return owner_account.access_token
+                
+                # If owner doesn't have GitHub token, try team members
+                members_result = await session.execute(
+                    select(TeamMember).where(TeamMember.team_id == team.id)
+                )
+                members = members_result.scalars().all()
+                
+                for member in members:
+                    member_accounts_result = await session.execute(
+                        select(Account).where(
+                            (Account.user_id == member.user_id) & 
+                            (Account.provider == "github")
+                        )
+                    )
+                    member_account = member_accounts_result.scalar_one_or_none()
+                    
+                    if member_account and member_account.access_token:
+                        return member_account.access_token
+                
+                # Fallback to environment variable
+                token = os.getenv("GITHUB_TOKEN")
+                if not token:
+                    raise Exception(
+                        "GitHub access token not found. Please ensure team owner or members have connected their GitHub account."
+                    )
+                return token
 
         except Exception as error:
             raise Exception(f"Failed to get GitHub token: {error}")
@@ -1112,10 +1195,29 @@ phases:
             import json
             environment_update_data["existingSubnetIds"] = json.dumps(result.subnet_ids)
 
-        if environment_update_data:
-            await prisma.environment.update(
-                where={"id": config.environment_id}, data=environment_update_data
-            )
+        if environment_update_data and config.environment_id:
+            async with get_async_session() as session:
+                result = await session.execute(
+                    select(Environment).where(Environment.id == config.environment_id)
+                )
+                environment = result.scalar_one_or_none()
+                if environment:
+                    # Map the legacy field names to SQLModel field names
+                    field_mapping = {
+                        'ecsServiceArn': 'ecs_service_arn',
+                        'ecsClusterArn': 'ecs_cluster_arn',
+                        'albArn': 'alb_arn',
+                        'existingVpcId': 'existing_vpc_id',
+                        'existingSubnetIds': 'existing_subnet_ids',
+                        'domain': 'domain'
+                    }
+                    
+                    for key, value in environment_update_data.items():
+                        sqlmodel_field = field_mapping.get(key, key)
+                        setattr(environment, sqlmodel_field, value)
+                    environment.updated_at = datetime.now()
+                    session.add(environment)
+                    await session.commit()
 
         return result
 
@@ -1132,12 +1234,17 @@ phases:
 
         try:
             # Get environment details
-            environment = await prisma.environment.find_unique(where={"id": environment_id})
-            if not environment or not environment.ecsServiceArn or not environment.ecsClusterArn:
-                await self.log_to_database(
-                    deployment_id, "❌ Missing ECS service or cluster information in environment"
+            async with get_async_session() as session:
+                result = await session.execute(
+                    select(Environment).where(Environment.id == environment_id)
                 )
-                return False
+                environment = result.scalar_one_or_none()
+                
+                if not environment or not environment.ecs_service_arn or not environment.ecs_cluster_arn:
+                    await self.log_to_database(
+                        deployment_id, "❌ Missing ECS service or cluster information in environment"
+                    )
+                    return False
 
             # Use the same credentials as the deployment service
             client_config = {"region_name": self.region}
@@ -1151,8 +1258,8 @@ phases:
 
             ecs_client = create_client("ecs", client_config["region_name"], self.aws_credentials)
 
-            cluster_arn = environment.ecsClusterArn
-            service_arn = environment.ecsServiceArn
+            cluster_arn = environment.ecs_cluster_arn
+            service_arn = environment.ecs_service_arn
 
             start_time = asyncio.get_event_loop().time()
             max_wait_seconds = max_wait_minutes * 60
@@ -1304,12 +1411,17 @@ phases:
 
         try:
             # Get project details
-            project = await prisma.project.find_unique(where={"id": project_id})
-            if not project or not project.ecsServiceArn or not project.ecsClusterArn:
-                await self.log_to_database(
-                    deployment_id, "❌ Missing ECS service or cluster information"
+            async with get_async_session() as session:
+                result = await session.execute(
+                    select(Project).where(Project.id == project_id)
                 )
-                return False
+                project = result.scalar_one_or_none()
+                
+                if not project or not project.ecs_service_arn or not project.ecs_cluster_arn:
+                    await self.log_to_database(
+                        deployment_id, "❌ Missing ECS service or cluster information"
+                    )
+                    return False
 
             # Use the same credentials as the deployment service
             client_config = {
@@ -1325,8 +1437,8 @@ phases:
 
             ecs_client = create_client("ecs", client_config["region_name"], self.aws_credentials)
 
-            cluster_arn = project.ecsClusterArn
-            service_arn = project.ecsServiceArn
+            cluster_arn = project.ecs_cluster_arn
+            service_arn = project.ecs_service_arn
 
             start_time = asyncio.get_event_loop().time()
             max_wait_seconds = max_wait_minutes * 60
@@ -1452,19 +1564,23 @@ phases:
     ) -> List[EnvironmentVariable]:
         """Get environment variables for project"""
         try:
-            env_vars = await prisma.environmentvariable.find_many(
-                where={"projectId": project_id}
-            )
-
-            return [
-                EnvironmentVariable(
-                    key=env_var.key,
-                    value=env_var.value if not env_var.isSecret else None,
-                    is_secret=env_var.isSecret,
-                    secret_key=env_var.secretKey if env_var.isSecret else None,
+            from models.environment import EnvironmentVariable as EnvVarModel
+            
+            async with get_async_session() as session:
+                result = await session.execute(
+                    select(EnvVarModel).where(EnvVarModel.project_id == project_id)
                 )
-                for env_var in env_vars
-            ]
+                env_vars = result.scalars().all()
+
+                return [
+                    EnvironmentVariable(
+                        key=env_var.key,
+                        value=env_var.value if not env_var.is_secret else None,
+                        is_secret=env_var.is_secret,
+                        secret_key=env_var.secret_key if env_var.is_secret else None,
+                    )
+                    for env_var in env_vars
+                ]
         except Exception as error:
             logger.error(f"Error fetching environment variables: {error}")
             return []
@@ -1472,46 +1588,53 @@ phases:
     async def get_environment_network_config(self, environment_id: str) -> Dict:
         """Get environment network configuration"""
         try:
-            environment = await prisma.environment.find_unique(
-                where={"id": environment_id},
-                include={"project": True}
-            )
+            async with get_async_session() as session:
+                result = await session.execute(
+                    select(Environment).where(Environment.id == environment_id)
+                )
+                environment = result.scalar_one_or_none()
+                
+                if not environment:
+                    return {
+                        "existing_vpc_id": None,
+                        "existing_subnet_ids": None,
+                        "existing_cluster_arn": None,
+                        "cpu": 256,
+                        "memory": 512,
+                        "disk_size": 21,
+                        "port": 3000,
+                        "health_check_path": "/",
+                    }
+                
+                # Get the associated project
+                project_result = await session.execute(
+                    select(Project).where(Project.id == environment.project_id)
+                )
+                project = project_result.scalar_one_or_none()
 
-            if not environment:
+                # Parse existing subnet IDs if they exist
+                existing_subnet_ids = None
+                if environment.existing_subnet_ids:
+                    logger.info(f"🔍 Raw subnet IDs from DB: '{environment.existing_subnet_ids}' (type: {type(environment.existing_subnet_ids)})")
+                    try:
+                        existing_subnet_ids = json.loads(environment.existing_subnet_ids)
+                        logger.info(f"✅ Parsed subnet IDs successfully: {existing_subnet_ids}")
+                    except json.JSONDecodeError as e:
+                        logger.error(
+                            f"❌ Failed to parse existing subnet IDs: '{environment.existing_subnet_ids}' - Error: {e}"
+                        )
+
+                logger.info(f"🌐 Network config result: VPC='{environment.existing_vpc_id}', Subnets={existing_subnet_ids}")
                 return {
-                    "existing_vpc_id": None,
-                    "existing_subnet_ids": None,
-                    "existing_cluster_arn": None,
-                    "cpu": 256,
-                    "memory": 512,
-                    "disk_size": 21,
-                    "port": 3000,
-                    "health_check_path": "/",
+                    "existing_vpc_id": environment.existing_vpc_id,
+                    "existing_subnet_ids": existing_subnet_ids,
+                    "existing_cluster_arn": environment.existing_cluster_arn,
+                    "cpu": environment.cpu or 256,
+                    "memory": environment.memory or 512,
+                    "disk_size": environment.disk_size or 21,
+                    "port": project.port if project else 3000,
+                    "health_check_path": project.health_check_path if project else "/",
                 }
-
-            # Parse existing subnet IDs if they exist
-            existing_subnet_ids = None
-            if environment.existingSubnetIds:
-                logger.info(f"🔍 Raw subnet IDs from DB: '{environment.existingSubnetIds}' (type: {type(environment.existingSubnetIds)})")
-                try:
-                    existing_subnet_ids = json.loads(environment.existingSubnetIds)
-                    logger.info(f"✅ Parsed subnet IDs successfully: {existing_subnet_ids}")
-                except json.JSONDecodeError as e:
-                    logger.error(
-                        f"❌ Failed to parse existing subnet IDs: '{environment.existingSubnetIds}' - Error: {e}"
-                    )
-
-            logger.info(f"🌐 Network config result: VPC='{environment.existingVpcId}', Subnets={existing_subnet_ids}")
-            return {
-                "existing_vpc_id": environment.existingVpcId,
-                "existing_subnet_ids": existing_subnet_ids,
-                "existing_cluster_arn": environment.existingClusterArn,
-                "cpu": environment.cpu or 256,
-                "memory": environment.memory or 512,
-                "disk_size": environment.diskSize or 21,
-                "port": environment.project.port if environment.project else 3000,
-                "health_check_path": environment.project.healthCheckPath if environment.project else "/",
-            }
         except Exception as error:
             logger.error(f"Error fetching environment configuration: {error}")
             raise Exception(f"Failed to fetch environment configuration: {error}. Cannot proceed with deployment.")
@@ -1519,40 +1642,44 @@ phases:
     async def get_project_network_config(self, project_id: str) -> Dict:
         """Get project network configuration (deprecated - use get_environment_network_config)"""
         try:
-            project = await prisma.project.find_unique(where={"id": project_id})
+            async with get_async_session() as session:
+                result = await session.execute(
+                    select(Project).where(Project.id == project_id)
+                )
+                project = result.scalar_one_or_none()
 
-            if not project:
+                if not project:
+                    return {
+                        "existing_vpc_id": None,
+                        "existing_subnet_ids": None,
+                        "existing_cluster_arn": None,
+                        "cpu": 256,
+                        "memory": 512,
+                        "disk_size": 21,
+                        "port": 3000,
+                        "health_check_path": "/",
+                    }
+
+                # Parse existing subnet IDs if they exist
+                existing_subnet_ids = None
+                if project.existing_subnet_ids:
+                    try:
+                        existing_subnet_ids = json.loads(project.existing_subnet_ids)
+                    except json.JSONDecodeError:
+                        logger.warning(
+                            f"Failed to parse existing subnet IDs: {project.existing_subnet_ids}"
+                        )
+
                 return {
-                    "existing_vpc_id": None,
-                    "existing_subnet_ids": None,
-                    "existing_cluster_arn": None,
-                    "cpu": 256,
-                    "memory": 512,
-                    "disk_size": 21,
-                    "port": 3000,
-                    "health_check_path": "/",
+                    "existing_vpc_id": project.existing_vpc_id,
+                    "existing_subnet_ids": existing_subnet_ids,
+                    "existing_cluster_arn": project.existing_cluster_arn,
+                    "cpu": project.cpu or 256,
+                    "memory": project.memory or 512,
+                    "disk_size": project.disk_size or 21,
+                    "port": project.port or 3000,
+                    "health_check_path": project.health_check_path or "/",
                 }
-
-            # Parse existing subnet IDs if they exist
-            existing_subnet_ids = None
-            if project.existingSubnetIds:
-                try:
-                    existing_subnet_ids = json.loads(project.existingSubnetIds)
-                except json.JSONDecodeError:
-                    logger.warning(
-                        f"Failed to parse existing subnet IDs: {project.existingSubnetIds}"
-                    )
-
-            return {
-                "existing_vpc_id": project.existingVpcId,
-                "existing_subnet_ids": existing_subnet_ids,
-                "existing_cluster_arn": project.existingClusterArn,
-                "cpu": project.cpu or 256,
-                "memory": project.memory or 512,
-                "disk_size": project.diskSize or 21,
-                "port": project.port or 3000,
-                "health_check_path": project.healthCheckPath or "/",
-            }
         except Exception as error:
             logger.error(f"Error fetching project configuration: {error}")
             raise Exception(f"Failed to fetch project configuration: {error}. Cannot proceed with deployment.")

@@ -76,10 +76,6 @@ services:
       sh -c "
         echo 'Waiting for database...' &&
         sleep 5 &&
-        echo 'Running Prisma migrations...' &&
-        prisma migrate deploy &&
-        echo 'Generating Prisma client...' &&
-        prisma generate &&
         echo 'Starting FastAPI server...' &&
         uvicorn main:app --host 0.0.0.0 --port 8000 --reload
       "
@@ -91,7 +87,6 @@ services:
       dockerfile: Dockerfile
     container_name: autoform-celery-worker
     environment:
-      # Same environment variables as backend
       DATABASE_URL: postgresql://autoform:autoform123@postgres:5432/autoform
       REDIS_URL: redis://redis:6379/0
       AWS_REGION: ${AWS_REGION:-us-east-1}
@@ -99,7 +94,6 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       SECRET_KEY: ${SECRET_KEY:-your-secret-key-here-change-in-production}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-your-encryption-key-here-change-in-production}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,16 +101,8 @@ services:
         condition: service_healthy
     volumes:
       - ./:/app
-      - /var/run/docker.sock:/var/run/docker.sock  # For Docker operations if needed
-    command: >
-      sh -c "
-        echo 'Waiting for services...' &&
-        sleep 10 &&
-        echo 'Generating Prisma client...' &&
-        prisma generate &&
-        echo 'Starting Celery worker...' &&
-        celery -A app.workers.celery_app worker --loglevel=info --concurrency=1 -Q deployments,celery --without-gossip --without-mingle --without-heartbeat
-      "
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=1 -Q deployments,celery
 
   # Celery beat for scheduled tasks (optional)
   celery-beat:
@@ -140,8 +126,6 @@ services:
       sh -c "
         echo 'Waiting for services...' &&
         sleep 10 &&
-        echo 'Generating Prisma client...' &&
-        prisma generate &&
         echo 'Starting Celery beat...' &&
         celery -A app.workers.celery_app beat --loglevel=info
       "

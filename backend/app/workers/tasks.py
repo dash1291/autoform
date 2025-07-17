@@ -19,9 +19,9 @@ if not hasattr(sys.stderr, 'fileno'):
     sys.stderr = sys.__stderr__
 
 from app.workers.celery_app import app
-from core.database import prisma
-from prisma import Prisma
-from schemas import ProjectStatus, DeploymentStatus
+from core.database import get_async_session
+from models.deployment import Deployment, DeploymentStatus
+from models.project import ProjectStatus
 
 
 class DeploymentTask(Task):
@@ -56,41 +56,36 @@ def deploy_project(self, config: Dict[str, Any], deployment_id: str):
 
 async def _deploy_project_async(self, config: Dict[str, Any], deployment_id: str):
     """Async implementation of deployment logic."""
-    # Create a new Prisma client for this task to avoid event loop issues
-    prisma_client = Prisma()
+    # Using SQLModel for database operations
     
+    session = None
     try:
         print(f"Starting deployment task for {deployment_id} (timeout: 18 minutes)")
         
         # Connect to database
-        await prisma_client.connect()
+        # Database connection handled by SQLModel session
         print("Connected to database")
         
         # Update deployment status to in_progress
-        deployment = await prisma_client.deployment.find_unique(where={"id": deployment_id})
-        if not deployment:
-            raise ValueError(f"Deployment {deployment_id} not found")
-        
-        await prisma_client.deployment.update(
-            where={"id": deployment_id},
-            data={
-                "status": DeploymentStatus.DEPLOYING,
-                "celeryTaskId": self.request.id,
-                "logs": "🚀 Deployment task started by Celery worker...\n"
-            }
-        )
+        async with get_async_session() as session:
+            deployment = await session.get(Deployment, deployment_id)
+            if not deployment:
+                raise ValueError(f"Deployment {deployment_id} not found")
+            
+            # Update deployment status
+            deployment.status = DeploymentStatus.DEPLOYING
+            deployment.celery_task_id = self.request.id
+            deployment.logs = "🚀 Deployment task started by Celery worker...\n"
+            session.add(deployment)
+            await session.commit()
         print(f"Updated deployment {deployment_id} status to DEPLOYING")
         
         # Create DeploymentConfig from dict
         from services.deployment import DeploymentConfig, DeploymentService
-        from core.database import prisma as global_prisma
         deployment_config = DeploymentConfig(**config)
         print(f"Created deployment config for project {deployment_config.project_id}")
         
-        # Ensure global prisma instance is connected (used by DeploymentService)
-        if not global_prisma.is_connected():
-            await global_prisma.connect()
-            print("Connected global Prisma instance for deployment service")
+        # SQLModel doesn't need explicit connection management
         
         # Initialize deployment service with AWS credentials
         deployment_service = DeploymentService(
@@ -125,45 +120,47 @@ async def _deploy_project_async(self, config: Dict[str, Any], deployment_id: str
         
         # Update deployment status to failed
         try:
-            deployment = await prisma_client.deployment.find_unique(
-                where={"id": deployment_id},
-                include={"environment": True}
-            )
-            if deployment:
-                current_logs = deployment.logs or ""
-                error_msg = f"\n\n❌ Error: {str(e)}\n\nFull traceback:\n{traceback.format_exc()}"
-                await prisma_client.deployment.update(
-                    where={"id": deployment_id},
-                    data={
-                        "status": DeploymentStatus.FAILED,
-                        "logs": f"{current_logs}{error_msg}"
-                    }
-                )
-                print(f"Updated deployment {deployment_id} status to failed")
-                
-                # Also update environment status if this deployment was for an environment
-                if deployment.environmentId and deployment.environment:
-                    # Check if there are any other active deployments for this environment
-                    active_deployment = await prisma_client.deployment.find_first(
-                        where={
-                            "environmentId": deployment.environmentId,
-                            "id": {"not": deployment_id},
-                            "status": {"in": [
-                                DeploymentStatus.PENDING,
-                                DeploymentStatus.BUILDING, 
-                                DeploymentStatus.PUSHING,
-                                DeploymentStatus.PROVISIONING,
-                                DeploymentStatus.DEPLOYING
-                            ]}
-                        }
-                    )
+            async with get_async_session() as error_session:
+                deployment = await error_session.get(Deployment, deployment_id)
+                if deployment:
+                    current_logs = deployment.logs or ""
+                    error_msg = f"\n\n❌ Error: {str(e)}\n\nFull traceback:\n{traceback.format_exc()}"
                     
-                    if not active_deployment:
-                        await prisma_client.environment.update(
-                            where={"id": deployment.environmentId},
-                            data={"status": ProjectStatus.FAILED}
+                    # Update deployment status to failed
+                    deployment.status = DeploymentStatus.FAILED
+                    deployment.logs = f"{current_logs}{error_msg}"
+                    error_session.add(deployment)
+                    await error_session.commit()
+                    print(f"Updated deployment {deployment_id} status to failed")
+                    
+                    # Also update environment status if this deployment was for an environment  
+                    if deployment.environment_id:
+                        # Check if there are any other active deployments for this environment
+                        from sqlmodel import select
+                        from models.environment import Environment as EnvironmentModel
+                        
+                        result = await error_session.execute(
+                            select(Deployment).where(
+                                (Deployment.environment_id == deployment.environment_id) &
+                                (Deployment.id != deployment_id) &
+                                (Deployment.status.in_([
+                                    DeploymentStatus.PENDING,
+                                    DeploymentStatus.BUILDING, 
+                                    DeploymentStatus.PUSHING,
+                                    DeploymentStatus.PROVISIONING,
+                                    DeploymentStatus.DEPLOYING
+                                ]))
+                            )
                         )
-                        print(f"Updated environment {deployment.environmentId} status to FAILED")
+                        active_deployment = result.scalar_one_or_none()
+                        
+                        if not active_deployment:
+                            environment = await error_session.get(EnvironmentModel, deployment.environment_id)
+                            if environment:
+                                environment.status = ProjectStatus.FAILED
+                                error_session.add(environment)
+                                await error_session.commit()
+                                print(f"Updated environment {deployment.environment_id} status to FAILED")
                         
         except Exception as db_error:
             print(f"Failed to update deployment/environment status in database: {str(db_error)}")
@@ -172,8 +169,12 @@ async def _deploy_project_async(self, config: Dict[str, Any], deployment_id: str
         print(f"Deployment {deployment_id} failed - no retries")
         raise
     finally:
-        # Skip ALL Prisma disconnects to prevent hanging - process cleanup handles it
-        # Note: Both local and global Prisma disconnects can hang in Celery worker environment
+        # Ensure all async resources are properly cleaned up
+        try:
+            import gc
+            gc.collect()  # Force garbage collection to clean up async resources
+        except Exception as cleanup_error:
+            print(f"Cleanup error (non-critical): {cleanup_error}")
         print(f"Task {self.request.id} for deployment {deployment_id} finished")
 
 
@@ -190,42 +191,41 @@ def abort_deployment(deployment_id: str):
 
 async def _abort_deployment_async(deployment_id: str):
     """Async implementation of abort logic."""
-    if not prisma.is_connected():
-        await prisma.connect()
-    
     try:
-        deployment = await prisma.deployment.find_unique(where={"id": deployment_id})
-        if not deployment:
-            return {"success": False, "error": "Deployment not found"}
-        
-        if deployment.status not in [
-            DeploymentStatus.PENDING,
-            DeploymentStatus.BUILDING,
-            DeploymentStatus.PUSHING, 
-            DeploymentStatus.PROVISIONING,
-            DeploymentStatus.DEPLOYING
-        ]:
-            return {"success": False, "error": f"Deployment is {deployment.status}, cannot abort"}
-        
-        # Revoke the celery task if it exists
-        if deployment.celeryTaskId:
-            app.control.revoke(deployment.celeryTaskId, terminate=True)
-        
-        # Use deployment manager to abort
-        from app.services.deployment_manager import deployment_manager
-        success = deployment_manager.abort_deployment(deployment_id)
-        
-        if success:
-            current_logs = deployment.logs or ""
-            await prisma.deployment.update(
-                where={"id": deployment_id},
-                data={
-                    "status": DeploymentStatus.FAILED,
-                    "logs": f"{current_logs}\n\nDeployment aborted by user"
-                }
+        async with get_async_session() as session:
+            result = await session.execute(
+                select(Deployment).where(Deployment.id == deployment_id)
             )
-        
-        return {"success": success}
+            deployment = result.scalar_one_or_none()
+            
+            if not deployment:
+                return {"success": False, "error": "Deployment not found"}
+            
+            if deployment.status not in [
+                DeploymentStatus.PENDING,
+                DeploymentStatus.BUILDING,
+                DeploymentStatus.PUSHING, 
+                DeploymentStatus.PROVISIONING,
+                DeploymentStatus.DEPLOYING
+            ]:
+                return {"success": False, "error": f"Deployment is {deployment.status}, cannot abort"}
+            
+            # Revoke the celery task if it exists
+            if deployment.celery_task_id:
+                app.control.revoke(deployment.celery_task_id, terminate=True)
+            
+            # Use deployment manager to abort
+            from services.deployment_manager import deployment_manager
+            success = deployment_manager.abort_deployment(deployment_id)
+            
+            if success:
+                current_logs = deployment.logs or ""
+                deployment.status = DeploymentStatus.FAILED
+                deployment.logs = f"{current_logs}\n\nDeployment aborted by user"
+                session.add(deployment)
+                await session.commit()
+            
+            return {"success": success}
         
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -243,31 +243,30 @@ def cleanup_old_deployments():
 
 async def _cleanup_old_deployments_async():
     """Async implementation of cleanup logic."""
-    if not prisma.is_connected():
-        await prisma.connect()
-    
     try:
-        # Delete deployments older than 30 days
-        cutoff_date = datetime.utcnow() - timedelta(days=30)
+        from datetime import datetime, timedelta
         
-        # Count deployments to delete
-        count = await prisma.deployment.count(
-            where={
-                "created_at": {"lt": cutoff_date},
-                "status": {"in": [DeploymentStatus.SUCCESS, DeploymentStatus.FAILED]}
-            }
-        )
-        
-        # Delete in batches
-        if count > 0:
-            await prisma.deployment.delete_many(
-                where={
-                    "created_at": {"lt": cutoff_date},
-                    "status": {"in": [DeploymentStatus.SUCCESS, DeploymentStatus.FAILED]}
-                }
+        async with get_async_session() as session:
+            # Delete deployments older than 30 days
+            cutoff_date = datetime.utcnow() - timedelta(days=30)
+            
+            # Get deployments to delete
+            result = await session.execute(
+                select(Deployment).where(
+                    (Deployment.created_at < cutoff_date) &
+                    (Deployment.status.in_([DeploymentStatus.SUCCESS, DeploymentStatus.FAILED]))
+                )
             )
-        
-        return {"deleted": count}
+            deployments_to_delete = result.all()
+            count = len(deployments_to_delete)
+            
+            # Delete in batches
+            if count > 0:
+                for deployment in deployments_to_delete:
+                    await session.delete(deployment)
+                await session.commit()
+            
+            return {"deleted": count}
         
     except Exception as e:
         return {"error": str(e), "deleted": 0}

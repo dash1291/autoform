@@ -1,0 +1,48 @@
+# AWS Configuration
+aws_region = "ap-south-1"
+
+# VPC Configuration
+vpc_id     = "vpc-0544d9b44ee955849"  # Your existing VPC ID
+subnet_ids = ["subnet-05b7de5e9a6018a9b", "subnet-0b3811668cc5f70d4"]  # Your subnet IDs (minimum 2 for RDS)
+
+# Environment
+environment  = "prod"
+project_name = "autoform"
+
+# RDS Configuration
+db_instance_class          = "db.t3.micro"
+db_allocated_storage       = 20
+db_name                    = "autoform"
+db_username                = "autoform_admin"
+db_password                = "wG2wt6acQfaNkgs"  # Use a strong password
+db_backup_retention_period = 7
+db_multi_az                = false
+
+# ElastiCache Configuration
+redis_node_type              = "cache.t3.micro"
+redis_num_cache_nodes        = 1
+redis_parameter_group_family = "redis7"
+redis_engine_version         = "7.0"
+redis_port                   = 6379
+
+# Security
+allowed_cidr_blocks = ["10.0.0.0/16"]  # Update with your VPC CIDR or specific subnets
+
+# ECS Configuration
+container_image = "your-account.dkr.ecr.ap-south-1.amazonaws.com/autoform-prod:latest"
+container_port  = 8000
+container_cpu   = 256
+container_memory = 512
+health_check_path = "/health"
+
+# VPC Configuration for ECS
+use_existing_vpc = true
+existing_vpc_id = "vpc-0544d9b44ee955849"
+existing_subnet_ids = ["subnet-05b7de5e9a6018a9b", "subnet-0b3811668cc5f70d4"]
+
+# Environment Variables for Container
+environment_variables = {
+  DATABASE_URL = "postgresql://autoform_admin:wG2wt6acQfaNkgs@autoform-prod-postgres.cluster-xyz.ap-south-1.rds.amazonaws.com:5432/autoform"
+  REDIS_URL    = "redis://autoform-prod-redis.xyz.cache.amazonaws.com:6379"
+  ENV          = "production"
+}

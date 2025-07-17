@@ -1,7 +1,9 @@
 import httpx
 import logging
 from typing import Optional, Dict, Any
-from core.database import prisma
+from core.database import get_async_session
+from sqlmodel import select, and_
+from models.user import User, Account
 
 logger = logging.getLogger(__name__)
 
@@ -54,29 +56,34 @@ class GitHubUserService:
         github_id = str(github_user["id"])
 
         try:
-            # Check if user already exists in our database
-            existing_user = await prisma.user.find_first(where={"githubId": github_id})
-
-            if existing_user:
-                logger.info(
-                    f"Found existing user for GitHub username '{username}': {existing_user.id}"
+            async with get_async_session() as session:
+                # Check if user already exists in our database
+                existing_user_result = await session.exec(
+                    select(User).where(User.github_id == github_id)
                 )
-                return existing_user.id
+                existing_user = existing_user_result.scalar_one_or_none()
 
-            # Create a new user with GitHub information
-            new_user = await prisma.user.create(
-                data={
-                    "email": github_user.get("email"),  # May be None if private
-                    "name": github_user.get("name") or github_user["login"],
-                    "githubId": github_id,
-                    "image": github_user.get("avatar_url"),
-                }
-            )
+                if existing_user:
+                    logger.info(
+                        f"Found existing user for GitHub username '{username}': {existing_user.id}"
+                    )
+                    return existing_user.id
 
-            logger.info(
-                f"Created new user for GitHub username '{username}': {new_user.id}"
-            )
-            return new_user.id
+                # Create a new user with GitHub information
+                new_user = User(
+                    email=github_user.get("email"),  # May be None if private
+                    name=github_user.get("name") or github_user["login"],
+                    github_id=github_id,
+                    image=github_user.get("avatar_url"),
+                )
+                session.add(new_user)
+                await session.commit()
+                await session.refresh(new_user)
+
+                logger.info(
+                    f"Created new user for GitHub username '{username}': {new_user.id}"
+                )
+                return new_user.id
 
         except Exception as e:
             logger.error(
@@ -87,9 +94,13 @@ class GitHubUserService:
     async def get_user_github_access_token(self, user_id: str) -> Optional[str]:
         """Get the GitHub access token for a user"""
         try:
-            account = await prisma.account.find_first(
-                where={"userId": user_id, "provider": "github"}
-            )
+            async with get_async_session() as session:
+                account_result = await session.exec(
+                    select(Account).where(
+                        and_(Account.user_id == user_id, Account.provider == "github")
+                    )
+                )
+                account = account_result.scalar_one_or_none()
 
             if account and account.access_token:
                 return account.access_token

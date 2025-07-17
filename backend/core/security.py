@@ -5,6 +5,9 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
 from core.config import settings
+from core.database import get_async_session
+from sqlmodel import select
+from models.user import User
 
 # OAuth2 scheme for JWT token authentication
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -41,9 +44,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise credentials_exception
 
-    from core.database import prisma
-
-    user = await prisma.user.find_unique(where={"id": user_id})
-    if user is None:
-        raise credentials_exception
-    return user
+    async with get_async_session() as session:
+        user = await session.get(User, user_id)
+        if user is None:
+            raise credentials_exception
+        return user

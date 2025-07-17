@@ -2,7 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Dict, Any
 import logging
 
+from core.database import get_async_session
 from core.security import get_current_user
+from sqlmodel import select, and_, or_, func
+from models.user import User as UserModel
+from models.team import Team as TeamModel, TeamMember as TeamMemberModel, TeamAwsConfig
 from schemas import User
 
 logger = logging.getLogger(__name__)
@@ -19,7 +23,6 @@ async def check_aws_credentials(
     import boto3
     import os
     from botocore.exceptions import ClientError, NoCredentialsError
-    from core.database import prisma
     from services.encryption_service import encryption_service
 
     region = os.getenv("AWS_REGION", "us-east-1")
@@ -42,51 +45,55 @@ async def check_aws_credentials(
         elif credential_type == "team":
             # This should be called with team_id parameter for specific team testing
             # For now, we'll test the first available team
-            user_teams = await prisma.teammember.find_many(
-                where={"userId": current_user.id}, include={"team": True}
-            )
+            async with get_async_session() as session:
+                user_teams_result = await session.execute(
+                    select(TeamMemberModel, TeamModel).join(TeamModel).where(TeamMemberModel.user_id == current_user.id)
+                )
+                user_teams = user_teams_result.all()
 
-            owned_teams = await prisma.team.find_many(
-                where={"ownerId": current_user.id}
-            )
+                owned_teams_result = await session.execute(
+                    select(TeamModel).where(TeamModel.owner_id == current_user.id)
+                )
+                owned_teams = owned_teams_result.scalars().all()
 
-            if not user_teams and not owned_teams:
-                return {
-                    "status": "error",
-                    "message": "User is not a member of any team",
-                    "credentialSource": "team",
+                if not user_teams and not owned_teams:
+                    return {
+                        "status": "error",
+                        "message": "User is not a member of any team",
+                        "credentialSource": "team",
+                    }
+
+                team = user_teams[0][1] if user_teams else owned_teams[0]
+
+                team_aws_config_result = await session.execute(
+                    select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
+                )
+                team_aws_config = team_aws_config_result.scalar_one_or_none()
+
+                if not team_aws_config:
+                    return {
+                        "status": "error",
+                        "message": f"No AWS credentials configured for team {team.name}",
+                        "credentialSource": "team",
+                    }
+
+                # Decrypt team credentials
+                access_key = encryption_service.decrypt(team_aws_config.aws_access_key_id)
+                secret_key = encryption_service.decrypt(team_aws_config.aws_secret_access_key)
+
+                if not access_key or not secret_key:
+                    return {
+                        "status": "error",
+                        "message": "Failed to decrypt team AWS credentials",
+                        "credentialSource": "team",
+                    }
+
+                aws_credentials = {
+                    "aws_access_key_id": access_key,
+                    "aws_secret_access_key": secret_key,
                 }
-
-            team = user_teams[0].team if user_teams else owned_teams[0]
-
-            team_aws_config = await prisma.teamawsconfig.find_first(
-                where={"teamId": team.id, "isActive": True}
-            )
-
-            if not team_aws_config:
-                return {
-                    "status": "error",
-                    "message": f"No AWS credentials configured for team {team.name}",
-                    "credentialSource": "team",
-                }
-
-            # Decrypt team credentials
-            access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
-            secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
-
-            if not access_key or not secret_key:
-                return {
-                    "status": "error",
-                    "message": "Failed to decrypt team AWS credentials",
-                    "credentialSource": "team",
-                }
-
-            aws_credentials = {
-                "aws_access_key_id": access_key,
-                "aws_secret_access_key": secret_key,
-            }
-            region = team_aws_config.awsRegion
-            credential_source = f"team ({team.name})"
+                region = team_aws_config.aws_region
+                credential_source = f"team ({team.name})"
 
         elif credential_type == "default":
             # Test default/environment credentials
@@ -95,37 +102,41 @@ async def check_aws_credentials(
 
         else:  # credential_type == "auto"
             # Auto logic - use first available team credentials
-            user_teams = await prisma.teammember.find_many(
-                where={"userId": current_user.id}, include={"team": True}
-            )
-
-            owned_teams = await prisma.team.find_many(
-                where={"ownerId": current_user.id}
-            )
-
-            if user_teams or owned_teams:
-                # Use team credentials
-                team = user_teams[0].team if user_teams else owned_teams[0]
-
-                team_aws_config = await prisma.teamawsconfig.find_first(
-                    where={"teamId": team.id, "isActive": True}
+            async with get_async_session() as session:
+                user_teams_result = await session.execute(
+                    select(TeamMemberModel, TeamModel).join(TeamModel).where(TeamMemberModel.user_id == current_user.id)
                 )
+                user_teams = user_teams_result.all()
 
-                if team_aws_config:
-                    access_key = encryption_service.decrypt(
-                        team_aws_config.awsAccessKeyId
-                    )
-                    secret_key = encryption_service.decrypt(
-                        team_aws_config.awsSecretAccessKey
-                    )
+                owned_teams_result = await session.execute(
+                    select(TeamModel).where(TeamModel.owner_id == current_user.id)
+                )
+                owned_teams = owned_teams_result.scalars().all()
 
-                    if access_key and secret_key:
-                        aws_credentials = {
-                            "aws_access_key_id": access_key,
-                            "aws_secret_access_key": secret_key,
-                        }
-                        region = team_aws_config.awsRegion
-                        credential_source = f"team ({team.name})"
+                if user_teams or owned_teams:
+                    # Use team credentials
+                    team = user_teams[0][1] if user_teams else owned_teams[0]
+
+                    team_aws_config_result = await session.execute(
+                        select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
+                    )
+                    team_aws_config = team_aws_config_result.scalar_one_or_none()
+
+                    if team_aws_config:
+                        access_key = encryption_service.decrypt(
+                            team_aws_config.aws_access_key_id
+                        )
+                        secret_key = encryption_service.decrypt(
+                            team_aws_config.aws_secret_access_key
+                        )
+
+                        if access_key and secret_key:
+                            aws_credentials = {
+                                "aws_access_key_id": access_key,
+                                "aws_secret_access_key": secret_key,
+                            }
+                            region = team_aws_config.aws_region
+                            credential_source = f"team ({team.name})"
 
             # No fallback to personal credentials since they don't exist anymore
 
@@ -214,7 +225,6 @@ async def get_aws_resources(
     import boto3
     import os
     from botocore.exceptions import ClientError, NoCredentialsError
-    from core.database import prisma
     from services.encryption_service import encryption_service
 
     region = os.getenv("AWS_REGION", "us-east-1")
@@ -245,53 +255,58 @@ async def get_aws_resources(
                     "message": "team_id parameter is required when credential_type=team",
                 }
 
-            # Verify user has access to this team
-            user_team = await prisma.teammember.find_first(
-                where={"userId": current_user.id, "teamId": team_id}
-            )
-            owned_team = await prisma.team.find_first(
-                where={"id": team_id, "ownerId": current_user.id}
-            )
+            async with get_async_session() as session:
+                # Verify user has access to this team
+                user_team_result = await session.execute(
+                    select(TeamMemberModel).where(and_(TeamMemberModel.user_id == current_user.id, TeamMemberModel.team_id == team_id))
+                )
+                user_team = user_team_result.scalar_one_or_none()
+                
+                owned_team_result = await session.execute(
+                    select(TeamModel).where(and_(TeamModel.id == team_id, TeamModel.owner_id == current_user.id))
+                )
+                owned_team = owned_team_result.scalar_one_or_none()
 
-            if not user_team and not owned_team:
-                return {
-                    "vpcs": [],
-                    "subnetsByVpc": {},
-                    "clusters": [],
-                    "message": "You don't have access to this team",
+                if not user_team and not owned_team:
+                    return {
+                        "vpcs": [],
+                        "subnetsByVpc": {},
+                        "clusters": [],
+                        "message": "You don't have access to this team",
+                    }
+
+                team_aws_config_result = await session.execute(
+                    select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team_id, TeamAwsConfig.is_active == True))
+                )
+                team_aws_config = team_aws_config_result.scalar_one_or_none()
+
+                if not team_aws_config:
+                    return {
+                        "vpcs": [],
+                        "subnetsByVpc": {},
+                        "clusters": [],
+                        "message": "No AWS credentials configured for this team",
+                    }
+
+                # Decrypt team credentials
+                access_key = encryption_service.decrypt(team_aws_config.aws_access_key_id)
+                secret_key = encryption_service.decrypt(team_aws_config.aws_secret_access_key)
+
+                if not access_key or not secret_key:
+                    return {
+                        "vpcs": [],
+                        "subnetsByVpc": {},
+                        "clusters": [],
+                        "message": "Failed to decrypt team AWS credentials",
+                    }
+
+                aws_credentials = {
+                    "aws_access_key_id": access_key,
+                    "aws_secret_access_key": secret_key,
                 }
-
-            team_aws_config = await prisma.teamawsconfig.find_first(
-                where={"teamId": team_id, "isActive": True}
-            )
-
-            if not team_aws_config:
-                return {
-                    "vpcs": [],
-                    "subnetsByVpc": {},
-                    "clusters": [],
-                    "message": "No AWS credentials configured for this team",
-                }
-
-            # Decrypt team credentials
-            access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
-            secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
-
-            if not access_key or not secret_key:
-                return {
-                    "vpcs": [],
-                    "subnetsByVpc": {},
-                    "clusters": [],
-                    "message": "Failed to decrypt team AWS credentials",
-                }
-
-            aws_credentials = {
-                "aws_access_key_id": access_key,
-                "aws_secret_access_key": secret_key,
-            }
-            region = team_aws_config.awsRegion
-            credential_source = f"team"
-            logger.info(f"Using team AWS credentials for region: {region}")
+                region = team_aws_config.aws_region
+                credential_source = f"team"
+                logger.info(f"Using team AWS credentials for region: {region}")
 
         elif credential_type == "default":
             # Use default/environment credentials only
@@ -300,36 +315,41 @@ async def get_aws_resources(
 
         else:  # credential_type == "auto"
             # Auto logic - use first available team credentials
-            user_teams = await prisma.teammember.find_many(
-                where={"userId": current_user.id}, include={"team": True}
-            )
-            owned_teams = await prisma.team.find_many(
-                where={"ownerId": current_user.id}
-            )
-
-            if user_teams or owned_teams:
-                team = user_teams[0].team if user_teams else owned_teams[0]
-
-                team_aws_config = await prisma.teamawsconfig.find_first(
-                    where={"teamId": team.id, "isActive": True}
+            async with get_async_session() as session:
+                user_teams_result = await session.execute(
+                    select(TeamMemberModel, TeamModel).join(TeamModel).where(TeamMemberModel.user_id == current_user.id)
                 )
+                user_teams = user_teams_result.all()
+                
+                owned_teams_result = await session.execute(
+                    select(TeamModel).where(TeamModel.owner_id == current_user.id)
+                )
+                owned_teams = owned_teams_result.scalars().all()
 
-                if team_aws_config:
-                    access_key = encryption_service.decrypt(
-                        team_aws_config.awsAccessKeyId
-                    )
-                    secret_key = encryption_service.decrypt(
-                        team_aws_config.awsSecretAccessKey
-                    )
+                if user_teams or owned_teams:
+                    team = user_teams[0][1] if user_teams else owned_teams[0]
 
-                    if access_key and secret_key:
-                        aws_credentials = {
-                            "aws_access_key_id": access_key,
-                            "aws_secret_access_key": secret_key,
-                        }
-                        region = team_aws_config.awsRegion
-                        credential_source = f"team ({team.name})"
-                        logger.info(f"Using team credentials for region: {region}")
+                    team_aws_config_result = await session.execute(
+                        select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
+                    )
+                    team_aws_config = team_aws_config_result.scalar_one_or_none()
+
+                    if team_aws_config:
+                        access_key = encryption_service.decrypt(
+                            team_aws_config.aws_access_key_id
+                        )
+                        secret_key = encryption_service.decrypt(
+                            team_aws_config.aws_secret_access_key
+                        )
+
+                        if access_key and secret_key:
+                            aws_credentials = {
+                                "aws_access_key_id": access_key,
+                                "aws_secret_access_key": secret_key,
+                            }
+                            region = team_aws_config.aws_region
+                            credential_source = f"team ({team.name})"
+                            logger.info(f"Using team credentials for region: {region}")
 
             # Fallback to default credentials if no team credentials
             if not aws_credentials:

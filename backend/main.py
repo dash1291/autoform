@@ -37,15 +37,15 @@ async def lifespan(app: FastAPI):
     logger.info(f'Thread pool configured with {MAX_WORKERS} max workers')
 
     # Initialize database connection
-    from core.database import prisma
+    # Database handled by SQLModel sessions
 
-    await prisma.connect()
+    # Database connections handled automatically by SQLModel
 
     yield
 
     # Shutdown
     logger.info("Shutting down...")
-    await prisma.disconnect()
+    # Database connections handled automatically by SQLModel
     executor.shutdown(wait=True)
     logger.info("Thread pool shut down")
 

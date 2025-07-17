@@ -1,3 +1,5 @@
+backend/terraform/terraform.tfvars
+backend/terraform/.terraform
 # Dependencies
 .next
 node_modules/

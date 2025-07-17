@@ -4,9 +4,13 @@ import boto3
 import json
 import logging
 
-from core.database import prisma
+from core.database import get_async_session
 from core.security import get_current_user
 from core.config import settings
+from sqlmodel import select, and_
+from models.project import Project
+from models.team import Team, TeamMember, TeamAwsConfig
+from models.environment import Environment, EnvironmentVariable as EnvVarModel
 from schemas import (
     EnvironmentVariable,
     EnvironmentVariableCreate,
@@ -21,34 +25,37 @@ logger = logging.getLogger(__name__)
 
 async def get_project_aws_credentials(project) -> dict:
     """Get AWS credentials for a project - all projects belong to teams"""
+    async with get_async_session() as session:
+        try:
+            team_aws_config = await session.execute(
+                select(TeamAwsConfig).where(
+                    and_(TeamAwsConfig.team_id == project.team_id, TeamAwsConfig.is_active == True)
+                )
+            )
+            config = team_aws_config.scalar_one_or_none()
 
-    try:
-        team_aws_config = await prisma.teamawsconfig.find_first(
-            where={"teamId": project.teamId, "isActive": True}
-        )
-
-        if team_aws_config:
-            # Decrypt team credentials
-            access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
-            secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
+            if config:
+                # Decrypt team credentials
+                access_key = encryption_service.decrypt(config.aws_access_key_id)
+                secret_key = encryption_service.decrypt(config.aws_secret_access_key)
 
             if access_key and secret_key:
-                return {
-                    "access_key": access_key,
-                    "secret_key": secret_key,
-                    "region": team_aws_config.awsRegion,
-                    "source": "team",
-                }
+                    return {
+                        "access_key": access_key,
+                        "secret_key": secret_key,
+                        "region": config.aws_region,
+                        "source": "team",
+                    }
 
-        # No team credentials configured
-        logger.error(f"Project {project.id} has no team AWS credentials configured")
-        return None
+            # No team credentials configured
+            logger.error(f"Project {project.id} has no team AWS credentials configured")
+            return None
 
-    except Exception as e:
-        logger.error(
-            f"Failed to get team AWS credentials for project {project.id}: {e}"
-        )
-        return None
+        except Exception as e:
+            logger.error(
+                f"Failed to get team AWS credentials for project {project.id}: {e}"
+            )
+            return None
 
 
 async def create_aws_client(project, service: str, region: str = None):
@@ -77,25 +84,35 @@ async def create_aws_client(project, service: str, region: str = None):
 
 async def verify_project_access(project_id: str, user_id: str):
     """Verify that the user has access to the project through team membership"""
-    project = await prisma.project.find_first(
-        where={
-            "id": project_id,
-            "team": {
-                "OR": [
-                    {"ownerId": user_id},  # User owns the team
-                    {"members": {"some": {"userId": user_id}}}  # User is a team member
-                ]
-            }
-        },
-        include={"team": True}
-    )
-
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-        )
-
-    return project
+    async with get_async_session() as session:
+        project = await session.get(Project, project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+        
+        team = await session.get(Team, project.team_id)
+        if not team:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
+            )
+        
+        # Check if user owns team or is a member
+        has_access = team.owner_id == user_id
+        if not has_access:
+            member = await session.execute(
+                select(TeamMember).where(
+                    and_(TeamMember.team_id == project.team_id, TeamMember.user_id == user_id)
+                )
+            )
+            has_access = member.scalar_one_or_none() is not None
+        
+        if not has_access:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+        
+        return project
 
 
 @router.get("/", response_model=List[EnvironmentVariable])
@@ -103,36 +120,48 @@ async def get_environment_variables(
     environment_id: str, current_user: User = Depends(get_current_user)
 ):
     """Get all environment variables for an environment"""
-    # Get the environment and verify access through the project
-    environment = await prisma.environment.find_unique(
-        where={"id": environment_id},
-        include={"project": {"include": {"team": True}}}
-    )
-    
-    if not environment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Environment not found"
-        )
-    
-    # Verify user has access to the project through team membership
-    project = environment.project
-    has_access = (
-        project.team.ownerId == current_user.id
-        or await prisma.teammember.find_first(
-            where={"teamId": project.teamId, "userId": current_user.id}
-        )
-    )
-    
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+    async with get_async_session() as session:
+        # Get the environment
+        environment = await session.get(Environment, environment_id)
+        if not environment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Environment not found"
+            )
+        
+        # Get project and team
+        project = await session.get(Project, environment.project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+        
+        team = await session.get(Team, project.team_id)
+        if not team:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
+            )
+        
+        # Verify user has access to the project through team membership
+        has_access = team.owner_id == current_user.id
+        if not has_access:
+            member = await session.execute(
+                select(TeamMember).where(
+                    and_(TeamMember.team_id == project.team_id, TeamMember.user_id == current_user.id)
+                )
+            )
+            has_access = member.scalar_one_or_none() is not None
+        
+        if not has_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            )
+
+        env_vars = await session.execute(
+            select(EnvVarModel).where(EnvVarModel.environment_id == environment_id)
+            .order_by(EnvVarModel.key.asc())
         )
 
-    env_vars = await prisma.environmentvariable.find_many(
-        where={"environmentId": environment_id}, order={"key": "asc"}
-    )
-
-    return env_vars
+        return env_vars.scalars().all()
 
 
 @router.post(
@@ -144,60 +173,74 @@ async def create_environment_variable(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new environment variable"""
-    # Get the environment and verify access through the project
-    environment = await prisma.environment.find_unique(
-        where={"id": environment_id},
-        include={"project": {"include": {"team": True}}}
-    )
-    
-    if not environment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Environment not found"
+    async with get_async_session() as session:
+        # Get the environment
+        environment = await session.get(Environment, environment_id)
+        if not environment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Environment not found"
+            )
+        
+        # Get project and team
+        project = await session.get(Project, environment.project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+        
+        team = await session.get(Team, project.team_id)
+        if not team:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
+            )
+        
+        # Verify user has access to the project through team membership
+        has_access = team.owner_id == current_user.id
+        if not has_access:
+            member = await session.execute(
+                select(TeamMember).where(
+                    and_(TeamMember.team_id == project.team_id, TeamMember.user_id == current_user.id)
+                )
+            )
+            has_access = member.scalar_one_or_none() is not None
+        
+        if not has_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            )
+
+        # Check if key already exists in this environment
+        existing = await session.execute(
+            select(EnvVarModel).where(
+                and_(EnvVarModel.environment_id == environment_id, EnvVarModel.key == env_var.key)
+            )
         )
-    
-    # Verify user has access to the project through team membership
-    project = environment.project
-    has_access = (
-        project.team.ownerId == current_user.id
-        or await prisma.teammember.find_first(
-            where={"teamId": project.teamId, "userId": current_user.id}
+
+        if existing.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Environment variable with key '{env_var.key}' already exists",
+            )
+
+        # Handle secret storage if needed
+        secret_key = None
+        if env_var.is_secret and env_var.value:
+            secret_key = await store_secret(environment_id, env_var.key, env_var.value, project)
+
+        # Create environment variable
+        new_env_var = EnvVarModel(
+            environment_id=environment_id,
+            project_id=project.id,
+            key=env_var.key,
+            value=None if env_var.is_secret else env_var.value,
+            is_secret=env_var.is_secret,
+            secret_key=secret_key,
         )
-    )
-    
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
-        )
+        session.add(new_env_var)
+        await session.commit()
+        await session.refresh(new_env_var)
 
-    # Check if key already exists in this environment
-    existing = await prisma.environmentvariable.find_first(
-        where={"environmentId": environment_id, "key": env_var.key}
-    )
-
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Environment variable with key '{env_var.key}' already exists",
-        )
-
-    # Handle secret storage if needed
-    secret_key = None
-    if env_var.is_secret and env_var.value:
-        secret_key = await store_secret(environment_id, env_var.key, env_var.value, project)
-
-    # Create environment variable
-    new_env_var = await prisma.environmentvariable.create(
-        data={
-            "environmentId": environment_id,
-            "projectId": project.id,
-            "key": env_var.key,
-            "value": None if env_var.is_secret else env_var.value,
-            "isSecret": env_var.is_secret,
-            "secretKey": secret_key,
-        }
-    )
-
-    return new_env_var
+        return new_env_var
 
 
 @router.put("/{env_var_id}", response_model=EnvironmentVariable)
@@ -208,67 +251,78 @@ async def update_environment_variable(
     current_user: User = Depends(get_current_user),
 ):
     """Update an environment variable"""
-    # Get the environment and verify access through the project
-    environment = await prisma.environment.find_unique(
-        where={"id": environment_id},
-        include={"project": {"include": {"team": True}}}
-    )
-    
-    if not environment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Environment not found"
-        )
-    
-    # Verify user has access to the project through team membership
-    project = environment.project
-    has_access = (
-        project.team.ownerId == current_user.id
-        or await prisma.teammember.find_first(
-            where={"teamId": project.teamId, "userId": current_user.id}
-        )
-    )
-    
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
-        )
-
-    # Get existing variable
-    existing = await prisma.environmentvariable.find_first(
-        where={"id": env_var_id, "environmentId": environment_id}
-    )
-
-    if not existing:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Environment variable not found",
-        )
-
-    update_data = {}
-
-    # Handle value update
-    if env_var_update.value is not None:
-        if env_var_update.is_secret or existing.isSecret:
-            # Store as secret
-            secret_key = await store_secret(
-                environment_id, existing.key, env_var_update.value, project
+    async with get_async_session() as session:
+        # Get the environment
+        environment = await session.get(Environment, environment_id)
+        if not environment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Environment not found"
             )
-            update_data["value"] = None
-            update_data["secretKey"] = secret_key
-            update_data["isSecret"] = True
-        else:
-            update_data["value"] = env_var_update.value
-            update_data["secretKey"] = None
+        
+        # Get project and team
+        project = await session.get(Project, environment.project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+        
+        team = await session.get(Team, project.team_id)
+        if not team:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
+            )
+        
+        # Verify user has access to the project through team membership
+        has_access = team.owner_id == current_user.id
+        if not has_access:
+            member = await session.execute(
+                select(TeamMember).where(
+                    and_(TeamMember.team_id == project.team_id, TeamMember.user_id == current_user.id)
+                )
+            )
+            has_access = member.scalar_one_or_none() is not None
+        
+        if not has_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            )
 
-    if env_var_update.is_secret is not None:
-        update_data["isSecret"] = env_var_update.is_secret
+        # Get existing variable
+        existing = await session.execute(
+            select(EnvVarModel).where(
+                and_(EnvVarModel.id == env_var_id, EnvVarModel.environment_id == environment_id)
+            )
+        )
+        existing_var = existing.scalar_one_or_none()
 
-    # Update the variable
-    updated_var = await prisma.environmentvariable.update(
-        where={"id": env_var_id}, data=update_data
-    )
+        if not existing_var:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Environment variable not found",
+            )
 
-    return updated_var
+        # Handle value update
+        if env_var_update.value is not None:
+            if env_var_update.is_secret or existing_var.is_secret:
+                # Store as secret
+                secret_key = await store_secret(
+                    environment_id, existing_var.key, env_var_update.value, project
+                )
+                existing_var.value = None
+                existing_var.secret_key = secret_key
+                existing_var.is_secret = True
+            else:
+                existing_var.value = env_var_update.value
+                existing_var.secret_key = None
+
+        if env_var_update.is_secret is not None:
+            existing_var.is_secret = env_var_update.is_secret
+
+        session.add(existing_var)
+        await session.commit()
+        await session.refresh(existing_var)
+
+        return existing_var
 
 
 @router.delete("/{env_var_id}")
@@ -276,50 +330,65 @@ async def delete_environment_variable(
     environment_id: str, env_var_id: str, current_user: User = Depends(get_current_user)
 ):
     """Delete an environment variable"""
-    # Get the environment and verify access through the project
-    environment = await prisma.environment.find_unique(
-        where={"id": environment_id},
-        include={"project": {"include": {"team": True}}}
-    )
-    
-    if not environment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Environment not found"
+    async with get_async_session() as session:
+        # Get the environment
+        environment = await session.get(Environment, environment_id)
+        if not environment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Environment not found"
+            )
+        
+        # Get project and team
+        project = await session.get(Project, environment.project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+        
+        team = await session.get(Team, project.team_id)
+        if not team:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
+            )
+        
+        # Verify user has access to the project through team membership
+        has_access = team.owner_id == current_user.id
+        if not has_access:
+            member = await session.execute(
+                select(TeamMember).where(
+                    and_(TeamMember.team_id == project.team_id, TeamMember.user_id == current_user.id)
+                )
+            )
+            has_access = member.scalar_one_or_none() is not None
+        
+        if not has_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            )
+
+        # Get existing variable
+        existing = await session.execute(
+            select(EnvVarModel).where(
+                and_(EnvVarModel.id == env_var_id, EnvVarModel.environment_id == environment_id)
+            )
         )
-    
-    # Verify user has access to the project through team membership
-    project = environment.project
-    has_access = (
-        project.team.ownerId == current_user.id
-        or await prisma.teammember.find_first(
-            where={"teamId": project.teamId, "userId": current_user.id}
-        )
-    )
-    
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
-        )
+        existing_var = existing.scalar_one_or_none()
 
-    # Get existing variable
-    existing = await prisma.environmentvariable.find_first(
-        where={"id": env_var_id, "environmentId": environment_id}
-    )
+        if not existing_var:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Environment variable not found",
+            )
 
-    if not existing:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Environment variable not found",
-        )
+        # Delete from Secrets Manager if it's a secret
+        if existing_var.is_secret and existing_var.secret_key:
+            await delete_secret(existing_var.secret_key, project)
 
-    # Delete from Secrets Manager if it's a secret
-    if existing.isSecret and existing.secretKey:
-        await delete_secret(existing.secretKey, project)
+        # Delete the variable
+        await session.delete(existing_var)
+        await session.commit()
 
-    # Delete the variable
-    await prisma.environmentvariable.delete(where={"id": env_var_id})
-
-    return {"message": "Environment variable deleted successfully"}
+        return {"message": "Environment variable deleted successfully"}
 
 
 async def store_secret(environment_id: str, key: str, value: str, project) -> str:

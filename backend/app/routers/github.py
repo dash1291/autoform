@@ -5,9 +5,11 @@ import httpx
 import re
 import logging
 
-from core.database import prisma
+from core.database import get_async_session
 from core.security import get_current_user
 from schemas import User
+from sqlmodel import select, and_
+from models.user import Account
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -56,9 +58,13 @@ async def get_branch_commit_sha(
     owner, repo = match.groups()
 
     # Get user's GitHub token
-    account = await prisma.account.find_first(
-        where={"userId": current_user.id, "provider": "github"}
-    )
+    async with get_async_session() as session:
+        account_result = await session.execute(
+            select(Account).where(
+                and_(Account.user_id == current_user.id, Account.provider == "github")
+            )
+        )
+        account = account_result.scalar_one_or_none()
 
     if not account or not account.access_token:
         raise ValueError("GitHub account not connected")
@@ -104,9 +110,13 @@ async def validate_repository(
     owner, repo = match.groups()
 
     # Get user's GitHub token
-    account = await prisma.account.find_first(
-        where={"userId": current_user.id, "provider": "github"}
-    )
+    async with get_async_session() as session:
+        account_result = await session.execute(
+            select(Account).where(
+                and_(Account.user_id == current_user.id, Account.provider == "github")
+            )
+        )
+        account = account_result.scalar_one_or_none()
 
     if not account or not account.access_token:
         return ValidateRepoResponse(
@@ -129,9 +139,12 @@ async def validate_repository(
 
             if user_response.status_code == 401:
                 # Token expired
-                await prisma.account.update(
-                    where={"id": account.id}, data={"access_token": None}
-                )
+                async with get_async_session() as update_session:
+                    account_to_update = await update_session.get(Account, account.id)
+                    if account_to_update:
+                        account_to_update.access_token = None
+                        update_session.add(account_to_update)
+                        await update_session.commit()
 
                 return ValidateRepoResponse(
                     valid=False,

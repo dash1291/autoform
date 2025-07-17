@@ -6,8 +6,14 @@ import json
 import logging
 from typing import Dict, Any
 
-from core.database import prisma
+from core.database import get_async_session
 from services.deployment import DeploymentConfig
+from sqlmodel import select, and_
+from models.webhook import Webhook
+from models.project import Project
+from models.environment import Environment
+from models.deployment import Deployment
+from models.team import Team, TeamAwsConfig
 from app.workers.tasks import deploy_project as deploy_project_task
 from services.encryption_service import encryption_service
 from schemas import DeploymentStatus, EnvironmentStatus
@@ -83,17 +89,25 @@ async def github_webhook(request: Request):
         logger.info(f"Webhook: Push to {github_url} branch {branch}")
 
         # Find webhook by repository URL
-        webhook = await prisma.webhook.find_unique(
-            where={"gitRepoUrl": github_url}, include={"projects": True}
-        )
+        async with get_async_session() as session:
+            webhook_result = await session.execute(
+                select(Webhook).where(Webhook.git_repo_url == github_url)
+            )
+            webhook = webhook_result.scalar_one_or_none()
 
-        if not webhook:
-            logger.info(f"No webhook configured for repository {github_url}")
-            return {"message": "No webhook configured for this repository"}
+            if not webhook:
+                logger.info(f"No webhook configured for repository {github_url}")
+                return {"message": "No webhook configured for this repository"}
 
-        if not webhook.isActive:
-            logger.info(f"Webhook for repository {github_url} is not active")
-            return {"message": "Webhook is not active"}
+            if not webhook.is_active:
+                logger.info(f"Webhook for repository {github_url} is not active")
+                return {"message": "Webhook is not active"}
+
+            # Get projects for this webhook
+            projects_result = await session.execute(
+                select(Project).where(Project.git_repo_url == github_url)
+            )
+            projects = projects_result.scalars().all()
 
         # Verify webhook signature using shared secret
         if not verify_github_signature(payload, signature, webhook.secret):
@@ -103,25 +117,28 @@ async def github_webhook(request: Request):
                 detail="Invalid webhook signature",
             )
 
-        # Find environments that match the push branch
-        # Get all projects for this webhook
-        projects = webhook.projects
-        
-        # Find environments across all projects that match the branch
-        environments_to_deploy = []
-        for project in projects:
-            # Get environments for this project that match the branch
-            project_environments = await prisma.environment.find_many(
-                where={
-                    "projectId": project.id,
-                    "branch": branch
-                },
-                include={
-                    "project": {"include": {"team": True}},
-                    "teamAwsConfig": True
-                }
-            )
-            environments_to_deploy.extend(project_environments)
+            # Find environments that match the push branch
+            environments_to_deploy = []
+            for project in projects:
+                # Get environments for this project that match the branch
+                project_environments = await session.execute(
+                    select(Environment).where(
+                        and_(Environment.project_id == project.id, Environment.branch == branch)
+                    )
+                )
+                
+                for env in project_environments.scalars().all():
+                    # Load related data
+                    env_project = await session.get(Project, env.project_id)
+                    team = await session.get(Team, env_project.team_id)
+                    team_aws_config = await session.get(TeamAwsConfig, env.team_aws_config_id)
+                    
+                    # Add to the environment object for compatibility
+                    env.project = env_project
+                    env.project.team = team
+                    env.teamAwsConfig = team_aws_config
+                    
+                    environments_to_deploy.append(env)
 
         if not environments_to_deploy:
             logger.info(
@@ -244,47 +261,53 @@ async def trigger_auto_deployment(project_id: str, webhook_payload: Dict[str, An
         )
 
         # Get project with team info for credential selection
-        project = await prisma.project.find_unique(
-            where={"id": project_id}, include={"team": True}
-        )
-        if not project:
-            logger.error(f"Project {project_id} not found")
-            return
+        async with get_async_session() as session:
+            project = await session.get(Project, project_id)
+            if not project:
+                logger.error(f"Project {project_id} not found")
+                return
+            
+            team = await session.get(Team, project.team_id)
 
         # Create deployment record
-        deployment = await prisma.deployment.create(
-            data={
-                "projectId": project_id,
-                "status": "PENDING",
-                "imageTag": f"{project.name}:{commit_sha}",
-                "commitSha": commit_sha,
-                "logs": f"🤖 Auto-deployment triggered by webhook\nCommit: {commit_sha}\nMessage: {commit_message}\n\n",
-            }
-        )
+        async with get_async_session() as session:
+            deployment = Deployment(
+                project_id=project_id,
+                status="PENDING",
+                image_tag=f"{project.name}:{commit_sha}",
+                commit_sha=commit_sha,
+                logs=f"🤖 Auto-deployment triggered by webhook\nCommit: {commit_sha}\nMessage: {commit_message}\n\n",
+            )
+            session.add(deployment)
+            await session.commit()
+            await session.refresh(deployment)
 
-        # Get team AWS credentials (all projects belong to teams)
-        team_aws_config = await prisma.teamawsconfig.find_first(
-            where={"teamId": project.teamId, "isActive": True}
-        )
+            # Get team AWS credentials (all projects belong to teams)
+            team_aws_config_result = await session.execute(
+                select(TeamAwsConfig).where(
+                    and_(TeamAwsConfig.team_id == project.team_id, TeamAwsConfig.is_active == True)
+                )
+            )
+            team_aws_config = team_aws_config_result.scalar_one_or_none()
 
         if not team_aws_config:
             logger.error(f"Project {project_id} has no team AWS credentials configured")
             return
 
-        # Decrypt team credentials
-        from services.encryption_service import EncryptionService
+            # Decrypt team credentials
+            from services.encryption_service import EncryptionService
 
-        encryption_service = EncryptionService()
-        access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
-        secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
+            encryption_service = EncryptionService()
+            access_key = encryption_service.decrypt(team_aws_config.aws_access_key_id)
+            secret_key = encryption_service.decrypt(team_aws_config.aws_secret_access_key)
 
         if not access_key or not secret_key:
             logger.error(f"Project {project_id} has invalid team AWS credentials")
             return
 
-        aws_credentials = {"access_key": access_key, "secret_key": secret_key}
-        aws_region = team_aws_config.awsRegion
-        logger.info(f"Using team AWS credentials for project {project_id}")
+            aws_credentials = {"access_key": access_key, "secret_key": secret_key}
+            aws_region = team_aws_config.aws_region
+            logger.info(f"Using team AWS credentials for project {project_id}")
 
         # Initialize deployment service with proper credentials
         deployment_service = DeploymentService(
@@ -295,15 +318,15 @@ async def trigger_auto_deployment(project_id: str, webhook_payload: Dict[str, An
         config = DeploymentConfig(
             project_id=project_id,
             project_name=project.name,
-            git_repo_url=project.gitRepoUrl,
+            git_repo_url=project.git_repo_url,
             branch=project.branch or "main",
             commit_sha=commit_sha,
             subdirectory=project.subdirectory,
-            health_check_path=project.healthCheckPath or "/",
+            health_check_path=project.health_check_path or "/",
             port=project.port or 3000,
             cpu=project.cpu or 256,
             memory=project.memory or 512,
-            disk_size=project.diskSize or 21,
+            disk_size=project.disk_size or 21,
         )
 
         # Start deployment
@@ -318,13 +341,19 @@ async def trigger_auto_deployment(project_id: str, webhook_payload: Dict[str, An
 
         # Update deployment status to failed if deployment record exists
         try:
-            await prisma.deployment.update_many(
-                where={
-                    "projectId": project_id,
-                    "status": {"in": ["PENDING", "BUILDING", "DEPLOYING"]},
-                },
-                data={"status": "FAILED"},
-            )
+            async with get_async_session() as session:
+                deployments = await session.execute(
+                    select(Deployment).where(
+                        and_(
+                            Deployment.project_id == project_id,
+                            Deployment.status.in_(["PENDING", "BUILDING", "DEPLOYING"])
+                        )
+                    )
+                )
+                for deployment in deployments.scalars().all():
+                    deployment.status = "FAILED"
+                    session.add(deployment)
+                await session.commit()
         except:
             pass
 
@@ -345,22 +374,25 @@ async def trigger_environment_deployment(environment, webhook_payload: Dict[str,
         )
 
         # Create deployment record
-        deployment = await prisma.deployment.create(
-            data={
-                "projectId": environment.project.id,
-                "environmentId": environment.id,
-                "status": DeploymentStatus.PENDING,
-                "imageTag": f"{environment.project.name}-{environment.name}:{commit_sha}",
-                "commitSha": commit_sha,
-                "logs": f"🤖 Auto-deployment triggered by webhook\nCommit: {commit_sha}\nMessage: {commit_message}\n\n",
-            }
-        )
-
-        # Update environment status
-        await prisma.environment.update(
-            where={"id": environment.id}, 
-            data={"status": EnvironmentStatus.DEPLOYING}
-        )
+        async with get_async_session() as session:
+            deployment = Deployment(
+                project_id=environment.project.id,
+                environment_id=environment.id,
+                status=DeploymentStatus.PENDING,
+                image_tag=f"{environment.project.name}-{environment.name}:{commit_sha}",
+                commit_sha=commit_sha,
+                logs=f"🤖 Auto-deployment triggered by webhook\nCommit: {commit_sha}\nMessage: {commit_message}\n\n",
+            )
+            session.add(deployment)
+            
+            # Update environment status
+            env_to_update = await session.get(Environment, environment.id)
+            if env_to_update:
+                env_to_update.status = EnvironmentStatus.DEPLOYING
+                session.add(env_to_update)
+            
+            await session.commit()
+            await session.refresh(deployment)
 
         # Get team AWS credentials
         team_aws_config = environment.teamAwsConfig
@@ -369,25 +401,25 @@ async def trigger_environment_deployment(environment, webhook_payload: Dict[str,
             return
 
         # Decrypt team credentials
-        access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
-        secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
+        access_key = encryption_service.decrypt(team_aws_config.aws_access_key_id)
+        secret_key = encryption_service.decrypt(team_aws_config.aws_secret_access_key)
         aws_credentials = {"access_key": access_key, "secret_key": secret_key}
-        aws_region = team_aws_config.awsRegion
+        aws_region = team_aws_config.aws_region
 
         # Create deployment configuration
         config = DeploymentConfig(
             project_id=environment.project.id,
             project_name=f"{environment.project.name[:23] if len(f'{environment.project.name}-{environment.name}') > 32 else environment.project.name}-{environment.name[:8] if len(f'{environment.project.name}-{environment.name}') > 32 else environment.name}",
-            git_repo_url=environment.project.gitRepoUrl,
+            git_repo_url=environment.project.git_repo_url,
             branch=environment.branch or "main",
             commit_sha=commit_sha,
             environment_id=environment.id,
             subdirectory=environment.project.subdirectory,
-            health_check_path=environment.project.healthCheckPath or "/",
+            health_check_path=environment.project.health_check_path or "/",
             port=environment.project.port or 3000,
             cpu=environment.cpu or 256,
             memory=environment.memory or 512,
-            disk_size=environment.diskSize or 21,
+            disk_size=environment.disk_size or 21,
             aws_region=aws_region,
             aws_credentials=aws_credentials
         )
@@ -409,17 +441,26 @@ async def trigger_environment_deployment(environment, webhook_payload: Dict[str,
 
         # Update deployment status to failed if deployment record exists
         try:
-            await prisma.deployment.update_many(
-                where={
-                    "environmentId": environment.id,
-                    "status": {"in": ["PENDING", "BUILDING", "DEPLOYING"]},
-                },
-                data={"status": DeploymentStatus.FAILED},
-            )
-            # Reset environment status
-            await prisma.environment.update(
-                where={"id": environment.id}, 
-                data={"status": EnvironmentStatus.CREATED}
-            )
+            async with get_async_session() as session:
+                # Update failed deployments
+                deployments = await session.execute(
+                    select(Deployment).where(
+                        and_(
+                            Deployment.environment_id == environment.id,
+                            Deployment.status.in_(["PENDING", "BUILDING", "DEPLOYING"])
+                        )
+                    )
+                )
+                for deployment in deployments.scalars().all():
+                    deployment.status = DeploymentStatus.FAILED
+                    session.add(deployment)
+                
+                # Reset environment status
+                env_to_reset = await session.get(Environment, environment.id)
+                if env_to_reset:
+                    env_to_reset.status = EnvironmentStatus.CREATED
+                    session.add(env_to_reset)
+                
+                await session.commit()
         except:
             pass

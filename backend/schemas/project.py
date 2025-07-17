@@ -43,7 +43,7 @@ class Project(ProjectBase):
     webhook_id: Optional[str] = Field(None, alias="webhookId")
     subdirectory: Optional[str] = None
     port: int = 3000
-    health_check_path: str = Field("/health", alias="healthCheckPath")
+    health_check_path: str = Field("/", alias="healthCheckPath")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
     team: Optional[dict] = None  # Will include team info

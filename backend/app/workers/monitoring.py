@@ -4,7 +4,9 @@ import asyncio
 from typing import Dict, Any, Optional
 from celery import states
 from app.workers.celery_app import app
-from core.database import prisma
+from core.database import get_async_session
+from models.deployment import Deployment
+from sqlmodel import select
 
 
 async def get_task_status(task_id: str) -> Dict[str, Any]:
@@ -23,13 +25,13 @@ async def get_task_status(task_id: str) -> Dict[str, Any]:
 
 async def get_deployment_status(deployment_id: str) -> Dict[str, Any]:
     """Get deployment status including Celery task status."""
-    if not prisma.is_connected():
-        await prisma.connect()
+    # SQLModel handles connections automatically
     
-    deployment = await prisma.deployment.find_unique(
-        where={"id": deployment_id},
-        include={"environment": True}
-    )
+    async with get_async_session() as session:
+        result = await session.execute(
+            select(Deployment).where(Deployment.id == deployment_id)
+        )
+        deployment = result.scalar_one_or_none()
     
     if not deployment:
         return {"error": "Deployment not found"}
@@ -37,9 +39,9 @@ async def get_deployment_status(deployment_id: str) -> Dict[str, Any]:
     response = {
         "deployment_id": deployment.id,
         "status": deployment.status,
-        "created_at": deployment.createdAt.isoformat() if deployment.createdAt else None,
-        "updated_at": deployment.updatedAt.isoformat() if deployment.updatedAt else None,
-        "environment": deployment.environment.name if deployment.environment else None,
+        "created_at": deployment.created_at.isoformat() if deployment.created_at else None,
+        "updated_at": deployment.updated_at.isoformat() if deployment.updated_at else None,
+        "environment_id": deployment.environment_id,
     }
     
     # Add Celery task status if available

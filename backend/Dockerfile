@@ -20,9 +20,6 @@ RUN pip install --no-cache-dir -r requirements.lock
 # Copy application code
 COPY . .
 
-# Generate Prisma client
-RUN prisma generate
-
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1

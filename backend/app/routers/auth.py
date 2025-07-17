@@ -7,9 +7,11 @@ import secrets
 import logging
 
 from core.config import settings
-from core.database import prisma
+from core.database import get_async_session
 from core.security import create_access_token, get_current_user
 from schemas import User
+from sqlmodel import select, and_
+from models.user import User as UserModel, Account
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -87,48 +89,63 @@ async def github_callback(code: str, state: str):
                 github_user["email"] = primary_email
 
         # Create or update user in database
-        user = await prisma.user.upsert(
-            where={"github_id": str(github_user["id"])},
-            data={
-                "create": {
-                    "email": github_user.get("email"),
-                    "name": github_user.get("name"),
-                    "github_id": str(github_user["id"]),
-                    "image": github_user.get("avatar_url"),
-                },
-                "update": {
-                    "email": github_user.get("email"),
-                    "name": github_user.get("name"),
-                    "image": github_user.get("avatar_url"),
-                },
-            },
-        )
+        async with get_async_session() as session:
+            # Try to find existing user by github_id
+            existing_user_result = await session.execute(
+                select(UserModel).where(UserModel.github_id == str(github_user["id"]))
+            )
+            user = existing_user_result.scalar_one_or_none()
+            
+            if user:
+                # Update existing user
+                user.email = github_user.get("email")
+                user.name = github_user.get("name")
+                user.image = github_user.get("avatar_url")
+                session.add(user)
+            else:
+                # Create new user
+                user = UserModel(
+                    email=github_user.get("email"),
+                    name=github_user.get("name"),
+                    github_id=str(github_user["id"]),
+                    image=github_user.get("avatar_url"),
+                )
+                session.add(user)
+            
+            await session.commit()
+            await session.refresh(user)
 
-        # Update or create account record
-        await prisma.account.upsert(
-            where={
-                "provider_providerAccountId": {
-                    "provider": "github",
-                    "providerAccountId": str(github_user["id"]),
-                }
-            },
-            data={
-                "create": {
-                    "userId": user.id,
-                    "type": "oauth",
-                    "provider": "github",
-                    "providerAccountId": str(github_user["id"]),
-                    "access_token": access_token,
-                    "token_type": "bearer",
-                    "scope": token_data.get("scope"),
-                },
-                "update": {
-                    "access_token": access_token,
-                    "token_type": "bearer",
-                    "scope": token_data.get("scope"),
-                },
-            },
-        )
+            # Update or create account record
+            existing_account_result = await session.execute(
+                select(Account).where(
+                    and_(
+                        Account.provider == "github",
+                        Account.provider_account_id == str(github_user["id"])
+                    )
+                )
+            )
+            account = existing_account_result.scalar_one_or_none()
+            
+            if account:
+                # Update existing account
+                account.access_token = access_token
+                account.token_type = "bearer"
+                account.scope = token_data.get("scope")
+                session.add(account)
+            else:
+                # Create new account
+                account = Account(
+                    user_id=user.id,
+                    type="oauth",
+                    provider="github",
+                    provider_account_id=str(github_user["id"]),
+                    access_token=access_token,
+                    token_type="bearer",
+                    scope=token_data.get("scope"),
+                )
+                session.add(account)
+            
+            await session.commit()
 
         # Create JWT token
         access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
@@ -203,48 +220,63 @@ async def github_callback_post(request: dict):
                 github_user["email"] = primary_email
 
         # Create or update user in database
-        user = await prisma.user.upsert(
-            where={"githubId": str(github_user["id"])},
-            data={
-                "create": {
-                    "email": github_user.get("email"),
-                    "name": github_user.get("name"),
-                    "githubId": str(github_user["id"]),
-                    "image": github_user.get("avatar_url"),
-                },
-                "update": {
-                    "email": github_user.get("email"),
-                    "name": github_user.get("name"),
-                    "image": github_user.get("avatar_url"),
-                },
-            },
-        )
+        async with get_async_session() as session:
+            # Try to find existing user by github_id
+            existing_user_result = await session.execute(
+                select(UserModel).where(UserModel.github_id == str(github_user["id"]))
+            )
+            user = existing_user_result.scalar_one_or_none()
+            
+            if user:
+                # Update existing user
+                user.email = github_user.get("email")
+                user.name = github_user.get("name")
+                user.image = github_user.get("avatar_url")
+                session.add(user)
+            else:
+                # Create new user
+                user = UserModel(
+                    email=github_user.get("email"),
+                    name=github_user.get("name"),
+                    github_id=str(github_user["id"]),
+                    image=github_user.get("avatar_url"),
+                )
+                session.add(user)
+            
+            await session.commit()
+            await session.refresh(user)
 
-        # Update or create account record
-        await prisma.account.upsert(
-            where={
-                "provider_providerAccountId": {
-                    "provider": "github",
-                    "providerAccountId": str(github_user["id"]),
-                }
-            },
-            data={
-                "create": {
-                    "userId": user.id,
-                    "type": "oauth",
-                    "provider": "github",
-                    "providerAccountId": str(github_user["id"]),
-                    "access_token": access_token,
-                    "token_type": "bearer",
-                    "scope": token_data.get("scope"),
-                },
-                "update": {
-                    "access_token": access_token,
-                    "token_type": "bearer",
-                    "scope": token_data.get("scope"),
-                },
-            },
-        )
+            # Update or create account record
+            existing_account_result = await session.execute(
+                select(Account).where(
+                    and_(
+                        Account.provider == "github",
+                        Account.provider_account_id == str(github_user["id"])
+                    )
+                )
+            )
+            account = existing_account_result.scalar_one_or_none()
+            
+            if account:
+                # Update existing account
+                account.access_token = access_token
+                account.token_type = "bearer"
+                account.scope = token_data.get("scope")
+                session.add(account)
+            else:
+                # Create new account
+                account = Account(
+                    user_id=user.id,
+                    type="oauth",
+                    provider="github",
+                    provider_account_id=str(github_user["id"]),
+                    access_token=access_token,
+                    token_type="bearer",
+                    scope=token_data.get("scope"),
+                )
+                session.add(account)
+            
+            await session.commit()
 
         # Create JWT token
         access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
@@ -260,7 +292,7 @@ async def github_callback_post(request: dict):
                 "name": user.name,
                 "email": user.email,
                 "image": user.image,
-                "githubId": user.githubId,
+                "githubId": user.github_id,
             },
         }
 
@@ -282,70 +314,84 @@ async def exchange_session(request: dict):
         # Find or create user based on session data
         logger.info(f"Session exchange for user: {session_user.get('email')}")
 
-        user = await prisma.user.upsert(
-            where={"email": session_user["email"]},
-            data={
-                "create": {
-                    "email": session_user["email"],
-                    "name": session_user.get("name"),
-                    "image": session_user.get("image"),
-                    "githubId": None,  # Will be set if GitHub OAuth
-                },
-                "update": {
-                    "name": session_user.get("name"),
-                    "image": session_user.get("image"),
-                },
-            },
-        )
+        async with get_async_session() as session:
+            # Try to find existing user by email
+            existing_user_result = await session.execute(
+                select(UserModel).where(UserModel.email == session_user["email"])
+            )
+            user = existing_user_result.scalar_one_or_none()
+            
+            if user:
+                # Update existing user
+                user.name = session_user.get("name")
+                user.image = session_user.get("image")
+                session.add(user)
+            else:
+                # Create new user
+                user = UserModel(
+                    email=session_user["email"],
+                    name=session_user.get("name"),
+                    image=session_user.get("image"),
+                    github_id=None,  # Will be set if GitHub OAuth
+                )
+                session.add(user)
+            
+            await session.commit()
+            await session.refresh(user)
+            
+            logger.info(f"User upserted: {user.id} - {user.email}")
 
-        logger.info(f"User upserted: {user.id} - {user.email}")
-
-        # If this is from GitHub OAuth and we have an access token, store it
-        if access_token:
-            # Try to get GitHub user ID from the access token
-            async with httpx.AsyncClient() as client:
-                try:
-                    github_response = await client.get(
-                        "https://api.github.com/user",
-                        headers={
-                            "Authorization": f"Bearer {access_token}",
-                            "Accept": "application/vnd.github.v3+json",
-                        },
-                    )
-                    if github_response.status_code == 200:
-                        github_user = github_response.json()
-
-                        # Update user with GitHub ID
-                        await prisma.user.update(
-                            where={"id": user.id},
-                            data={"githubId": str(github_user["id"])},
-                        )
-
-                        # Store GitHub account
-                        await prisma.account.upsert(
-                            where={
-                                "provider_providerAccountId": {
-                                    "provider": "github",
-                                    "providerAccountId": str(github_user["id"]),
-                                }
-                            },
-                            data={
-                                "create": {
-                                    "userId": user.id,
-                                    "type": "oauth",
-                                    "provider": "github",
-                                    "providerAccountId": str(github_user["id"]),
-                                    "access_token": access_token,
-                                    "token_type": "bearer",
-                                },
-                                "update": {
-                                    "access_token": access_token,
-                                    "token_type": "bearer",
-                                },
+            # If this is from GitHub OAuth and we have an access token, store it
+            if access_token:
+                # Try to get GitHub user ID from the access token
+                async with httpx.AsyncClient() as client:
+                    try:
+                        github_response = await client.get(
+                            "https://api.github.com/user",
+                            headers={
+                                "Authorization": f"Bearer {access_token}",
+                                "Accept": "application/vnd.github.v3+json",
                             },
                         )
-                except Exception as e:
-                    logger.warning(f"Failed to fetch GitHub user info: {e}")
+                        if github_response.status_code == 200:
+                            github_user = github_response.json()
+
+                            # Update user with GitHub ID
+                            user.github_id = str(github_user["id"])
+                            session.add(user)
+                            await session.commit()
+
+                            # Store GitHub account
+                            existing_account_result = await session.execute(
+                                select(Account).where(
+                                    and_(
+                                        Account.provider == "github",
+                                        Account.provider_account_id == str(github_user["id"])
+                                    )
+                                )
+                            )
+                            account = existing_account_result.scalar_one_or_none()
+                            
+                            if account:
+                                # Update existing account
+                                account.access_token = access_token
+                                account.token_type = "bearer"
+                                session.add(account)
+                            else:
+                                # Create new account
+                                account = Account(
+                                    user_id=user.id,
+                                    type="oauth",
+                                    provider="github",
+                                    provider_account_id=str(github_user["id"]),
+                                    access_token=access_token,
+                                    token_type="bearer",
+                                )
+                                session.add(account)
+                            
+                            await session.commit()
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch GitHub user info: {e}")
 
         # Create JWT token
         access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
@@ -361,7 +407,7 @@ async def exchange_session(request: dict):
                 "name": user.name,
                 "email": user.email,
                 "image": user.image,
-                "githubId": user.githubId,
+                "githubId": user.github_id,
             },
         }
 
