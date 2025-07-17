@@ -117,28 +117,28 @@ async def github_webhook(request: Request):
                 detail="Invalid webhook signature",
             )
 
-            # Find environments that match the push branch
-            environments_to_deploy = []
-            for project in projects:
-                # Get environments for this project that match the branch
-                project_environments = await session.execute(
-                    select(Environment).where(
-                        and_(Environment.project_id == project.id, Environment.branch == branch)
-                    )
+        # Find environments that match the push branch
+        environments_to_deploy = []
+        for project in projects:
+            # Get environments for this project that match the branch
+            project_environments = await session.execute(
+                select(Environment).where(
+                    and_(Environment.project_id == project.id, Environment.branch == branch)
                 )
+            )
+            
+            for env in project_environments.scalars().all():
+                # Load related data
+                env_project = await session.get(Project, env.project_id)
+                team = await session.get(Team, env_project.team_id)
+                team_aws_config = await session.get(TeamAwsConfig, env.team_aws_config_id)
                 
-                for env in project_environments.scalars().all():
-                    # Load related data
-                    env_project = await session.get(Project, env.project_id)
-                    team = await session.get(Team, env_project.team_id)
-                    team_aws_config = await session.get(TeamAwsConfig, env.team_aws_config_id)
-                    
-                    # Add to the environment object for compatibility
-                    env.project = env_project
-                    env.project.team = team
-                    env.teamAwsConfig = team_aws_config
-                    
-                    environments_to_deploy.append(env)
+                # Add to the environment object for compatibility
+                env.project = env_project
+                env.project.team = team
+                env.teamAwsConfig = team_aws_config
+                
+                environments_to_deploy.append(env)
 
         if not environments_to_deploy:
             logger.info(
