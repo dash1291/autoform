@@ -1350,9 +1350,9 @@ async def configure_webhook(
         try:
             webhook_service = GitHubWebhookService()
             webhook_result = await webhook_service.create_webhook(
-                git_repo_url=project.gitRepoUrl,
+                git_repo_url=project.git_repo_url,
                 webhook_url=webhook_url,
-                webhook_secret=webhook.secret,
+                webhook_secret=webhook_obj.secret,
                 access_token=github_access_token,
             )
 
@@ -1360,7 +1360,7 @@ async def configure_webhook(
 
             return {
                 "webhookUrl": webhook_url,
-                "webhookSecret": webhook.secret,
+                "webhookSecret": webhook_obj.secret,
                 "automatic": True,
                 "webhookId": webhook_result.get("id"),
                 "status": "created"
@@ -1376,7 +1376,7 @@ async def configure_webhook(
     # Return manual instructions
     return {
         "webhookUrl": webhook_url,
-        "webhookSecret": webhook.secret,
+        "webhookSecret": webhook_obj.secret,
         "automatic": False,
         "instructions": {
             "1": "Go to your GitHub repository settings",
@@ -1384,7 +1384,7 @@ async def configure_webhook(
             "3": "Click 'Add webhook'",
             "4": f"Set Payload URL to: {webhook_url}",
             "5": "Set Content type to: application/json",
-            "6": f"Set Secret to: {webhook.secret}",
+            "6": f"Set Secret to: {webhook_obj.secret}",
             "7": "Select 'Just the push event'",
             "8": "Make sure 'Active' is checked",
             "9": "Click 'Add webhook'",
