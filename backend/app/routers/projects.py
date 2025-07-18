@@ -33,9 +33,10 @@ async def get_project_aws_credentials(project) -> dict:
                     and_(TeamAwsConfig.team_id == project.team_id, TeamAwsConfig.is_active == True)
                 )
             )
-            config = team_aws_config.first()
+            result = team_aws_config.first()
 
-            if config:
+            if result:
+                config = result[0]  # Extract the actual TeamAwsConfig object from the Row
                 # Decrypt team credentials
                 access_key = encryption_service.decrypt(config.aws_access_key_id)
                 secret_key = encryption_service.decrypt(config.aws_secret_access_key)
