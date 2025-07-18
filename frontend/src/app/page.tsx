@@ -3,10 +3,9 @@
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/lib/auth-client'
 import { signIn } from 'next-auth/react'
-import { Github, Zap, Users, Copy, Cloud, Trees } from 'lucide-react'
+import { Github, Zap, Users, Copy, Cloud, Trees, ArrowRight, CheckCircle } from 'lucide-react'
 
 export default function Home() {
   const { isAuthenticated, isLoading } = useAuth()
@@ -27,91 +26,117 @@ export default function Home() {
     }
   }
 
+  const features = [
+    {
+      icon: Cloud,
+      title: "Easy Setup",
+      description: "Autoform makes it extremely easy to get your application up and running on AWS ECS. Quickly bootstrap with best practices without having to deep-diving into AWS concepts and setting up your own tooling. Let Autoform do it for you while you focus on your application.",
+      iconColor: "text-orange-600",
+      iconBg: "bg-orange-50"
+    },
+    {
+      icon: Zap,
+      title: "Fast Automated Deployments",
+      description: "Connect your GitHub repository and deploy on every push. From code to live application in minutes without the need to setup your own deployment pipelines.",
+      iconColor: "text-blue-600",
+      iconBg: "bg-blue-100"
+    },
+    {
+      icon: Copy,
+      title: "Multiple Environments",
+      description: "Seamlessly deploy your application across different environments. Your production environment stays safe while you can test your features in preview environment.",
+      iconColor: "text-purple-600",
+      iconBg: "bg-purple-100"
+    },
+    {
+      icon: Users,
+      title: "Team Collaboration",
+      description: "Share projects and environments with your team. Built-in access controls and deployment history for better collaboration.",
+      iconColor: "text-green-600",
+      iconBg: "bg-green-50"
+    }
+  ]
+
   return (
     <main className="min-h-screen bg-gradient-to-br">
       {/* Hero Section */}
-      <div className="container w-full md:w-3/4 mx-auto px-4 py-16">
-        <div className="text-center mb-16 mt-16">
-          <div className="text-3xl font-light font-montserrat text-foreground mb-10 max-w-3xl mx-auto">
-            <p>
-              Deploy your applications to AWS ECS with ease.
-            </p>
-            <p className="mt-2">
-              From GitHub to production in minutes.
-            </p>
-          </div>
-          <div className="space-x-4">
+      <section className="pt-32 pb-16 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto text-center">
+          <h1 className="text-5xl sm:text-6xl font-light font-montserrat text-foreground mb-6 leading-tight">
+            Deploy to your cloud
+            <br />
+            <span className="text-muted-foreground">in minutes</span>
+          </h1>
+          <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed">
+            Connect your GitHub repository and deploy to production-ready AWS infrastructure. 
+            No DevOps expertise required.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
               onClick={handleGetStarted}
-              size="lg"
-              className="bg-background text-foreground"
+              className="bg-background text-foreground px-8 py-3"
             >
               Get Started
+              <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </div>
         </div>
+      </section>
 
-        {/* Features Section */}
-        <div className="mb-16">
-          <h2 className="text-3xl font-bold text-center text-foreground mb-12">
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            <Card className="border-0 border-r">
-              <CardHeader>
-                <div className="w-12 h-12 bg-orange-50 rounded-lg flex items-center justify-center mb-4">
-                  <Cloud className="h-6 w-6 text-orange-600" />
+      {/* Features Section */}
+      <section className="py-20 bg-muted/20">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-16">
+            <h2 className="text-3xl font-normal text-foreground mb-8">
+              Everything you need in a platform to ship fast
+            </h2>
+          </div>
+          
+          <div className="space-y-16">
+            {features.map((feature, index) => (
+              <div key={index} className="flex flex-col w-3/4 md:flex-row items-start gap-8 mb-8">
+                <div className="flex-1">
+                  <h3 className="text-2xl font-normal text-foreground mb-4">
+                    {feature.title}
+                  </h3>
+                  <p className="text-lg text-muted-foreground leading-relaxed">
+                    {feature.description}
+                  </p>
                 </div>
-                <CardTitle>AWS Native</CardTitle>
-                <CardDescription>
-                  Built specifically for AWS ECS. Quickly bootstrap with best practices. Scale infinitely.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-
-            <Card className="border-0 border-r">
-              <CardHeader>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                  <Zap className="h-6 w-6 text-blue-600" />
-                </div>
-                <CardTitle>Fast Automated Deployments</CardTitle>
-                <CardDescription>
-                  Connect your GitHub repo and deploy to AWS ECS on every push
-                </CardDescription>
-              </CardHeader>
-            </Card>
-
-
-            <Card className="border-0">
-              <CardHeader>
-                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
-                  <Copy className="h-6 w-6 text-purple-600" />
-                </div>
-                <CardTitle>Environments</CardTitle>
-                <CardDescription>
-                  Seemlessly deploy your application in different environments for testing
-                </CardDescription>
-              </CardHeader>
-            </Card>
+              </div>
+            ))}
           </div>
         </div>
+      </section>
 
-        {/* Call to Action */}
-        <div className="text-center text-foreground rounded p-8 border-t w-full border-border mx-auto">
-          <h3 className="text-lg font-semibold mb-4">
-            Ready to Deploy?
-          </h3>
-          <p className="mb-6 text-sm">
-            Get started with Autoform now and deploy your application to AWS ECS in minutes.
+
+      {/* CTA Section */}
+      <section className="py-20 text-foreground border-t border-border">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-3xl font-normal mb-4">
+            Ready to deploy?
+          </h2>
+          <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
+            
           </p>
           <Button 
             onClick={handleGetStarted}
-            size="lg"
-            className="bg-background text-foreground"
-            >
+            className="bg-background text-foreground px-8 py-3"
+          >
             Start Deploying Now
+            <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
         </div>
-      </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="borderborder-border">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center text-muted-foreground">
+            <p>&copy; 2025 Autoform. Built for developers who ship fast.</p>
+          </div>
+        </div>
+      </footer>
     </main>
   )
 }
