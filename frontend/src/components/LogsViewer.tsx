@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { apiClient } from '@/lib/api'
+import { formatLogTime } from '@/lib/dateUtils'
 
 interface LogEntry {
   timestamp: number
@@ -79,7 +80,7 @@ export default function LogsViewer({ environmentId }: LogsViewerProps) {
   }
 
   const formatTimestamp = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString()
+    return formatLogTime(timestamp)
   }
 
   return (

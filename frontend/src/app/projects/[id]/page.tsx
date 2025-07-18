@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Clock, GitCommit, Server } from 'lucide-react'
 import { useAuth } from '@/lib/auth-client'
 import { apiClient } from '@/lib/api'
+import { formatToLocalTime, formatDeploymentTime, processDeploymentLogs } from '@/lib/dateUtils'
 import TabNavButton from '@/components/TabNavButton'
 
 export default function ProjectDetail() {
@@ -451,14 +452,14 @@ export default function ProjectDetail() {
                   <div>
                     <span className="text-sm font-medium text-muted-foreground">Created</span>
                     <div className="mt-1 text-sm text-foreground">
-                      {new Date(project.createdAt).toLocaleString()}
+                      {formatToLocalTime(project.createdAt)}
                     </div>
                   </div>
                   
                   <div>
                     <span className="text-sm font-medium text-muted-foreground">Last Updated</span>
                     <div className="mt-1 text-sm text-foreground">
-                      {new Date(project.updatedAt).toLocaleString()}
+                      {formatToLocalTime(project.updatedAt)}
                     </div>
                   </div>
                 </div>
@@ -527,15 +528,7 @@ export default function ProjectDetail() {
                           <div className="flex items-center space-x-1">
                             <Clock className="h-3 w-3 text-muted-foreground" />
                             <span className="text-sm text-muted-foreground">
-                              {new Date(deployment.createdAt).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric'
-                              })} {new Date(deployment.createdAt).toLocaleTimeString('en-US', {
-                                hour: 'numeric',
-                                minute: '2-digit',
-                                hour12: true
-                              })}
+                              {formatDeploymentTime(deployment.createdAt)}
                             </span>
                           </div>
                         </div>
@@ -556,7 +549,7 @@ export default function ProjectDetail() {
                             View Deployment Logs
                             </summary>
                             <pre className="mt-2 bg-gray-900 text-foreground p-3 rounded text-xs overflow-y-auto max-h-48 whitespace-pre-wrap break-words font-mono">
-                              {deployment.logs}
+                              {processDeploymentLogs(deployment.logs)}
                             </pre>
                           </details>
                         </div>

@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { apiClient } from '@/lib/api'
 import { Environment, DeploymentStatus } from '@/types'
+import { formatToLocalTime } from '@/lib/dateUtils'
 import { 
   X,
   AlertCircle, 
@@ -198,7 +199,7 @@ export default function DeploymentModal({ projectId, isOpen, onClose, onDeployme
                               <div>
                               <span className="text-sm font-medium text-muted-foreground">Latest Deployment</span>
                               <span className="text-xs ml-2 mt-1">
-                                {new Date(environment.latestDeployment.createdAt).toLocaleString()}
+                                {formatToLocalTime(environment.latestDeployment.createdAt)}
                               </span>
                               </div>
                               <Badge className={getDeploymentStatusColor(environment.latestDeployment.status)}>
