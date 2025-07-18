@@ -42,7 +42,7 @@ services:
     container_name: autoform-backend
     environment:
       # Database
-      DATABASE_URL: "postgresql://postgres.lsmwaofhunglizrwogxc:NB%2B%2AukDy-4%23TB%26M@aws-0-ap-south-1.pooler.supabase.com:5432/postgres"
+      DATABASE_URL: postgresql://autoform:autoform123@postgres:5432/autoform
       
       # Redis
       REDIS_URL: redis://redis:6379/0
@@ -87,7 +87,7 @@ services:
       dockerfile: Dockerfile
     container_name: autoform-celery-worker
     environment:
-      DATABASE_URL: "postgresql://postgres.lsmwaofhunglizrwogxc:NB%2B%2AukDy-4%23TB%26M@aws-0-ap-south-1.pooler.supabase.com:5432/postgres"
+      DATABASE_URL: postgresql://autoform:autoform123@postgres:5432/autoform
       REDIS_URL: redis://redis:6379/0
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
