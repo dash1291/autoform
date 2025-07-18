@@ -60,8 +60,8 @@ async def test_aws_resources():
                             print(f"Found active AWS config: {team_aws_config.name}")
                             
                             # Try to decrypt credentials
-                            access_key = encryption_service.decrypt(team_aws_config.awsAccessKeyId)
-                            secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
+                            access_key = encryption_service.decrypt(team_aws_config.aws_access_key_id)
+                            secret_key = encryption_service.decrypt(team_aws_config.aws_secret_access_key)
                             
                             if access_key and secret_key:
                                 print(f"Successfully decrypted credentials")

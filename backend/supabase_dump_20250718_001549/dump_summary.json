@@ -1,0 +1,20 @@
+{
+  "dump_created": "2025-07-18T00:15:51.984362",
+  "tables_dumped": [
+    "users",
+    "accounts",
+    "sessions",
+    "verification_tokens",
+    "user_aws_configs",
+    "teams",
+    "team_members",
+    "team_aws_configs",
+    "projects",
+    "environments",
+    "environment_variables",
+    "deployments",
+    "webhooks"
+  ],
+  "dump_directory": "supabase_dump_20250718_001549",
+  "note": "This is a data-only dump. Structure information not included."
+}

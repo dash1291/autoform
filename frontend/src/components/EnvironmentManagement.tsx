@@ -359,30 +359,47 @@ export default function EnvironmentManagement({ projectId, teamId, onEnvironment
 
               <div>
                 <Label>AWS Configuration</Label>
-                <Select
-                  value={formData.awsConfigId}
-                  onValueChange={(value) => setFormData({ ...formData, awsConfigId: value })}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select AWS configuration" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableAwsConfigs.map((config) => (
-                      <SelectItem key={config.id} value={config.id}>
-                        {config.name} ({config.region})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {availableAwsConfigs.length === 0 && (
-                  <p className="text-sm text-amber-600 mt-1">
-                    {!teamId 
-                      ? "No team information available. Please refresh the page." 
-                      : "No AWS configurations available. Please set up team AWS credentials first."
-                    }
-                  </p>
+                {editingEnvironment && (editingEnvironment.status === 'DEPLOYED' || editingEnvironment.ecsServiceArn) ? (
+                  <div className="mt-1">
+                    <div className="px-3 py-2 bg-gray-50 border rounded-md text-sm text-gray-700">
+                      {editingEnvironment.awsConfig?.name} ({editingEnvironment.awsConfig?.region})
+                    </div>
+                    <Alert className="mt-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        AWS resource settings cannot be changed for deployed environments. Delete and recreate the environment to modify these settings.
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                ) : (
+                  <>
+                    <Select
+                      value={formData.awsConfigId}
+                      onValueChange={(value) => setFormData({ ...formData, awsConfigId: value })}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select AWS configuration" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableAwsConfigs.map((config) => (
+                          <SelectItem key={config.id} value={config.id}>
+                            {config.name} ({config.region})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {availableAwsConfigs.length === 0 && (
+                      <p className="text-sm text-amber-600 mt-1">
+                        {!teamId 
+                          ? "No team information available. Please refresh the page." 
+                          : "No AWS configurations available. Please set up team AWS credentials first."
+                        }
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
+
 
               <div className="flex justify-end space-x-2 pt-4">
                 <Button size="sm" type="button" variant="outline" onClick={() => setShowForm(false)}>

@@ -678,10 +678,11 @@ async def get_team_aws_config(
             )
 
         # Get AWS config
-        aws_config = await session.execute(
+        aws_config_result = await session.execute(
             select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team_id, TeamAwsConfig.is_active == True))
         )
-        aws_config = aws_config.first()
+        result = aws_config_result.first()
+        aws_config = result[0] if result else None
 
         if not aws_config:
             return {"configured": False, "isActive": False}

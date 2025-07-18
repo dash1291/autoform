@@ -1,0 +1,24 @@
+[
+  {
+    "id": "cmcf6w6t80009p10zynvr6k6q",
+    "created_at": "2025-06-27T19:12:50.301000",
+    "updated_at": "2025-06-27T19:12:50.301000",
+    "team_id": "cmcf6vgx50007p10z5eygw2mg",
+    "name": "personal",
+    "aws_access_key_id": "Z0FBQUFBQm9YdTB5dHVzbnY0UVNlalE0bDJfQzNtMndROXVvRnJlV21qcVJxVktUYm1YUlBuWTRqaTBrd1Fuc1ByNlQ3enVoakJZcFN5b1czQVl0dFFCSjdndEJGNHZ5czZYS2pjZV95TlR3Rk53OGQyMXpwcWc9",
+    "aws_secret_access_key": "Z0FBQUFBQm9YdTB5dEJrbnV2djdxZ05IekJtOEU0MVBDSzVZbVpYVjc0ZXpIMDMyQjlwamRUR1RrQXozamFDWmU2VFNseFktUVVlUktPbUJEMFNrZUZUaUYyVzN0Qk80SWVKZmZ6alZPLXJMRHNrNGhsZG9ZS2tSa3RmZElQaGgtTllCamVrOWpCZUs=",
+    "aws_region": "ap-south-1",
+    "is_active": true
+  },
+  {
+    "id": "cmcpz641b000yp50z2nvii9dx",
+    "created_at": "2025-07-05T08:22:04.271000",
+    "updated_at": "2025-07-05T08:22:04.271000",
+    "team_id": "cmcf6vgx50007p10z5eygw2mg",
+    "name": "autoform",
+    "aws_access_key_id": "Z0FBQUFBQm9hT0NzMkNWOXBoSFJ3NmRxcjhoVVQ0aGktVUlSeFZZQjBNSzRJWklsM0duc2pua016bmxNWDJJd3VYd3dRRmUycmMtOXk1ZmpreTYwRkYtSHlJUWgyQ1hfNXE1aVVYb2xsRUluMFVEdGVUSVdkWVk9",
+    "aws_secret_access_key": "Z0FBQUFBQm9hT0NzMWhINGMyNUdsNGY4REUzbmREQUtzYkgwYlU1aF8ySVc0STQzU1Vfb3dEQ1huVTU1eUtGQVJETDFvc1lpeWE0d2FaRmprRmkzbHlvWWtRcnN0d0dGTFZadmNLeFhYa1B2VVJuaERuZ19uT1ZVTGE2WkU0Q3RicTZQZDgwNnoyZmI=",
+    "aws_region": "ap-south-1",
+    "is_active": true
+  }
+]

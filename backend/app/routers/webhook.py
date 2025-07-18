@@ -294,7 +294,8 @@ async def trigger_auto_deployment(project_id: str, webhook_payload: Dict[str, An
                     and_(TeamAwsConfig.team_id == project.team_id, TeamAwsConfig.is_active == True)
                 )
             )
-            team_aws_config = team_aws_config_result.first()
+            result = team_aws_config_result.first()
+            team_aws_config = result[0] if result else None
 
         if not team_aws_config:
             logger.error(f"Project {project_id} has no team AWS credentials configured")

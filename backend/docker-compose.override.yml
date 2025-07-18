@@ -1,0 +1,39 @@
+# Development overrides for docker-compose.yml
+# This file is automatically loaded by docker-compose in development
+
+version: '3.8'
+
+services:
+  backend:
+    # Use development server with hot reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    
+    # Mount source code for development
+    volumes:
+      - ./:/app
+      - /app/__pycache__
+      - /app/.rye
+    
+    # Development environment variables
+    environment:
+      DEBUG: "true"
+      LOG_LEVEL: debug
+      PYTHONDONTWRITEBYTECODE: 1
+      PYTHONUNBUFFERED: 1
+
+  celery-worker:
+    # More verbose logging in development
+    command: >
+      sh -c "
+        echo 'Waiting for services...' &&
+        sleep 10 &&
+        echo 'Starting Celery worker...' &&
+        celery -A app.workers.celery_app worker --loglevel=debug --concurrency=1 -Q deployments,celery
+      "
+    
+    # Development environment variables
+    environment:
+      DEBUG: "true"
+      LOG_LEVEL: debug
+      PYTHONDONTWRITEBYTECODE: 1
+      PYTHONUNBUFFERED: 1
