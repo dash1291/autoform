@@ -41,10 +41,6 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
-    # LocalStack Configuration (for local development)
-    use_localstack: bool = False
-    localstack_host: Optional[str] = None
-    localstack_port: Optional[int] = None
 
     # Email (optional - if not configured, emails will be logged)
     smtp_server: Optional[str] = None

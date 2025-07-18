@@ -18,24 +18,9 @@ from moto import (
     mock_ecr,
 )
 
-# Configure LocalStack endpoints if available, otherwise use moto
-LOCALSTACK_ENDPOINT = os.getenv("LOCALSTACK_ENDPOINT", "http://localhost:4566")
-USE_LOCALSTACK = os.getenv("USE_LOCALSTACK", "false").lower() == "true"
-
-
 def get_aws_client(service_name: str, region: str = "us-east-1"):
-    """Get AWS client configured for LocalStack or moto"""
-    if USE_LOCALSTACK:
-        return boto3.client(
-            service_name,
-            endpoint_url=LOCALSTACK_ENDPOINT,
-            region_name=region,
-            aws_access_key_id="test",
-            aws_secret_access_key="test",
-        )
-    else:
-        # For moto, return standard client (moto will mock it)
-        return boto3.client(service_name, region_name=region)
+    """Get AWS client configured for moto mocking"""
+    return boto3.client(service_name, region_name=region)
 
 
 @pytest.fixture(scope="session")
@@ -61,29 +46,24 @@ def test_region():
 @pytest.fixture
 def mock_aws_services():
     """Mock all AWS services for testing"""
-    if not USE_LOCALSTACK:
-        # Use moto mocks
-        mocks = [
-            mock_sts(),
-            mock_ec2(),
-            mock_ecs(),
-            mock_iam(),
-            mock_elbv2(),
-            mock_logs(),
-            mock_s3(),
-            mock_ecr(),
-        ]
+    mocks = [
+        mock_sts(),
+        mock_ec2(),
+        mock_ecs(),
+        mock_iam(),
+        mock_elbv2(),
+        mock_logs(),
+        mock_s3(),
+        mock_ecr(),
+    ]
 
-        for mock in mocks:
-            mock.start()
+    for mock in mocks:
+        mock.start()
 
-        yield
+    yield
 
-        for mock in mocks:
-            mock.stop()
-    else:
-        # LocalStack doesn't need mocking
-        yield
+    for mock in mocks:
+        mock.stop()
 
 
 @pytest_asyncio.fixture
