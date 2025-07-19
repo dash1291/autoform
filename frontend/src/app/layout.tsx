@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Autoform',
-  description: 'Deploy applications to AWS ECS with ease',
+  description: 'Deploy to your cloud with ease',
 }
 
 export default function RootLayout({
