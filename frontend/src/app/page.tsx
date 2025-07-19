@@ -5,7 +5,7 @@ import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth-client'
 import { signIn } from 'next-auth/react'
-import { Github, Zap, Users, Copy, Cloud, Trees, ArrowRight, CheckCircle } from 'lucide-react'
+import { Github, PackageOpen, Zap, Users, Copy, Cloud, Trees, ArrowRight, CheckCircle } from 'lucide-react'
 
 export default function Home() {
   const { isAuthenticated, isLoading } = useAuth()
@@ -28,7 +28,7 @@ export default function Home() {
 
   const features = [
     {
-      icon: Cloud,
+      icon: PackageOpen,
       title: "Easy Setup",
       description: "Autoform makes it extremely easy to get your application up and running on AWS ECS. Quickly bootstrap with best practices without having to deep-diving into AWS concepts and setting up your own tooling. Let Autoform do it for you while you focus on your application.",
       iconColor: "text-orange-600",
@@ -95,6 +95,9 @@ export default function Home() {
           <div className="space-y-16">
             {features.map((feature, index) => (
               <div key={index} className="flex flex-col w-3/4 md:flex-row items-start gap-8 mb-8">
+                 <span>
+                    <feature.icon strokeWidth={1} className={`text-secondary w-12 h-12 rounded`} />
+                  </span>
                 <div className="flex-1">
                   <h3 className="text-2xl font-normal text-foreground mb-4">
                     {feature.title}
