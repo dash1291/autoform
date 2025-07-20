@@ -71,7 +71,7 @@ export default function Dashboard() {
   if (isLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-secondary"></div>
       </div>
     )
   }
@@ -178,7 +178,7 @@ function ProjectsList({ projects, loading }: { projects: Project[], loading: boo
   if (loading) {
     return (
       <div className="text-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-secondary mx-auto"></div>
         <p className="mt-2">Loading projects...</p>
       </div>
     )

@@ -27,7 +27,10 @@ export default function Navbar() {
           
           <div className="flex items-center space-x-4">
             {isLoading ? (
-              <div className="text-muted-foreground">Loading...</div>
+              <div className="text-muted-foreground">
+                <span>Signing In</span>
+                <span className="animate-spin inline-block ml-2 rounded-full h-4 w-4 border-b-4 border-secondary mx-auto"></span>
+              </div>
             ) : isAuthenticated && user ? (
               <>
                 <div className="flex items-center space-x-3">
