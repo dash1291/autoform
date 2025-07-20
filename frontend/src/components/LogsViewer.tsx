@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { apiClient } from '@/lib/api'
 import { formatLogTime } from '@/lib/dateUtils'
+import { Spinner } from '@/components/ui/spinner'
 
 interface LogEntry {
   timestamp: number
@@ -142,7 +143,10 @@ export default function LogsViewer({ environmentId }: LogsViewerProps) {
         <div className="max-h-96 overflow-y-auto">
           {loading && logs.length === 0 ? (
             <div className="p-4 text-center text-gray-400">
-              Loading logs...
+              Loading logs 
+              <div className="flex items-center justify-center py-8">
+                <Spinner color="secondary" />
+              </div>
             </div>
           ) : logs.length === 0 ? (
             <div className="p-4 text-center text-gray-400">

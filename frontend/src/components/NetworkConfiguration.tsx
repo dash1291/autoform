@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { apiClient } from '@/lib/api'
@@ -209,7 +210,7 @@ export default function NetworkConfiguration({ projectId, environmentId, project
               <div className="w-full px-3 py-2 border border-border rounded-lg">
                 {loadingResources ? (
                   <div className="flex items-center space-x-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    <Spinner size="sm" />
                     <span className="text-sm text-gray-600">Loading VPC details...</span>
                   </div>
                 ) : deployedResources?.vpc ? (
@@ -263,7 +264,7 @@ export default function NetworkConfiguration({ projectId, environmentId, project
               <div className="w-full px-3 py-2 border border-border rounded-lg">
                 {loadingResources ? (
                   <div className="flex items-center space-x-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    <Spinner size="sm" />
                     <span className="text-sm text-gray-600">Loading subnet details...</span>
                   </div>
                 ) : deployedResources?.subnets && deployedResources.subnets.length > 0 ? (
@@ -336,7 +337,7 @@ export default function NetworkConfiguration({ projectId, environmentId, project
               <div className="w-full px-3 py-2 border border-border rounded-lg">
                 {loadingResources ? (
                   <div className="flex items-center space-x-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    <Spinner size="sm" />
                     <span className="text-sm text-gray-600">Loading cluster details...</span>
                   </div>
                 ) : deployedResources?.cluster ? (

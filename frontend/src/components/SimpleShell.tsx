@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { apiClient } from '@/lib/api'
+import { Spinner } from '@/components/ui/spinner'
 
 interface SimpleShellProps {
   environmentId: string
@@ -131,7 +132,7 @@ export default function SimpleShell({ environmentId, isActive = false }: SimpleS
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <Spinner />
       </div>
     )
   }
@@ -183,7 +184,7 @@ export default function SimpleShell({ environmentId, isActive = false }: SimpleS
             </>
           ) : isGenerating ? (
             <div className="p-8 rounded-lg text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <Spinner className="mx-auto mb-4" />
               <p className="text-gray-500 mb-2">Generating shell command...</p>
               <p className="text-sm text-gray-400">
                 Please wait while we prepare your container shell access.

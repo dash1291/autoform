@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 // Dialog component will be replaced with conditional rendering
 import { apiClient } from '@/lib/api'
 import { Key, Shield, TestTube, Trash2, AlertCircle, CheckCircle, BookOpen, ExternalLink, Plus, Settings } from 'lucide-react'
+import { Spinner } from '@/components/ui/spinner'
 
 interface TeamAwsConfig {
   id: string
@@ -212,7 +213,7 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
   if (loading) {
     return (
       <div className="text-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+        <Spinner className="mx-auto" />
         <p className="text-gray-600 mt-2">Loading AWS configurations...</p>
       </div>
     )

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { Spinner } from '@/components/ui/spinner'
 import { Team, TeamMember, TeamMemberRole } from '@/types'
 import { apiClient } from '@/lib/api'
 import { useAuth } from '@/lib/auth-client'
@@ -119,7 +120,7 @@ export default function TeamDetail() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <Spinner />
       </div>
     )
   }
@@ -268,7 +269,7 @@ function MembersList({
   if (loading) {
     return (
       <div className="text-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+        <Spinner className="mx-auto" />
         <p className="mt-2">Loading members...</p>
       </div>
     )

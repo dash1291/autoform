@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { EnvironmentVariable } from '@/types'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { apiClient } from '@/lib/api'
@@ -275,7 +276,7 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
       {/* Variables List */}
       {loading ? (
         <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <Spinner className="mx-auto" />
           <p className="text-gray-500 mt-2">Loading environment variables...</p>
         </div>
       ) : envVars.length === 0 ? (

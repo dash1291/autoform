@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth-client'
 import { signIn, signOut } from 'next-auth/react'
+import { Spinner } from '@/components/ui/spinner'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,9 +28,9 @@ export default function Navbar() {
           
           <div className="flex items-center space-x-4">
             {isLoading ? (
-              <div className="text-muted-foreground">
+              <div className="text-muted-foreground flex items-center gap-2">
                 <span>Signing In</span>
-                <span className="animate-spin inline-block ml-2 rounded-full h-4 w-4 border-b-4 border-secondary mx-auto"></span>
+                <Spinner size="sm" color="secondary" />
               </div>
             ) : isAuthenticated && user ? (
               <>

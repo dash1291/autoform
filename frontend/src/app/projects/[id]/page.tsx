@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { Spinner } from '@/components/ui/spinner'
 import Link from 'next/link'
 import { Project, Deployment, Environment } from '@/types'
 import LogsViewer from '@/components/LogsViewer'
@@ -270,7 +271,7 @@ export default function ProjectDetail() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-secondary"></div>
+        <Spinner />
       </div>
     )
   }

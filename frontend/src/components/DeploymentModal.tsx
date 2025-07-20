@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -145,7 +146,7 @@ export default function DeploymentModal({ projectId, isOpen, onClose, onDeployme
 
           {loading ? (
             <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <Spinner className="mx-auto" />
               <p className="text-gray-600 mt-2">Loading environments...</p>
             </div>
           ) : environments.length === 0 ? (
