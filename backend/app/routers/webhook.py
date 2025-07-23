@@ -8,6 +8,15 @@ from typing import Dict, Any
 
 from core.database import get_async_session
 from services.deployment import DeploymentConfig, DeploymentService
+from infrastructure.constants import (
+    DEFAULT_LAUNCH_TYPE,
+    DEFAULT_EC2_INSTANCE_TYPE,
+    DEFAULT_EC2_MIN_SIZE,
+    DEFAULT_EC2_MAX_SIZE,
+    DEFAULT_EC2_DESIRED_CAPACITY,
+    DEFAULT_EC2_USE_SPOT,
+    DEFAULT_CAPACITY_PROVIDER_TARGET_CAPACITY,
+)
 from sqlmodel import select, and_
 from models.webhook import Webhook
 from models.project import Project
@@ -431,7 +440,16 @@ async def trigger_environment_deployment(env_data, webhook_payload: Dict[str, An
             memory=environment.memory or 512,
             disk_size=environment.disk_size or 21,
             aws_region=aws_region,
-            aws_credentials=aws_credentials
+            aws_credentials=aws_credentials,
+            launch_type=environment.launch_type or DEFAULT_LAUNCH_TYPE,
+            ec2_instance_type=environment.ec2_instance_type or DEFAULT_EC2_INSTANCE_TYPE,
+            ec2_min_size=environment.ec2_min_size or DEFAULT_EC2_MIN_SIZE,
+            ec2_max_size=environment.ec2_max_size or DEFAULT_EC2_MAX_SIZE,
+            ec2_desired_capacity=environment.ec2_desired_capacity or DEFAULT_EC2_DESIRED_CAPACITY,
+            ec2_use_spot=environment.ec2_use_spot if environment.ec2_use_spot is not None else DEFAULT_EC2_USE_SPOT,
+            ec2_spot_max_price=environment.ec2_spot_max_price or "",
+            ec2_key_name=environment.ec2_key_name or "",
+            capacity_provider_target_capacity=environment.capacity_provider_target_capacity or DEFAULT_CAPACITY_PROVIDER_TARGET_CAPACITY,
         )
 
         # Queue deployment task with Celery using apply_async for better control

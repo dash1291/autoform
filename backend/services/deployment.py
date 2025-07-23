@@ -14,7 +14,22 @@ from infrastructure.types import (
     ECSInfrastructureOutput,
     EnvironmentVariable,
 )
-from infrastructure import ECSInfrastructure
+from infrastructure.constants import (
+    DEFAULT_LAUNCH_TYPE,
+    DEFAULT_EC2_INSTANCE_TYPE,
+    DEFAULT_EC2_MIN_SIZE,
+    DEFAULT_EC2_MAX_SIZE,
+    DEFAULT_EC2_DESIRED_CAPACITY,
+    DEFAULT_EC2_USE_SPOT,
+    DEFAULT_EC2_SPOT_MAX_PRICE,
+    DEFAULT_EC2_KEY_NAME,
+    DEFAULT_CAPACITY_PROVIDER_TARGET_CAPACITY,
+    DEFAULT_CPU,
+    DEFAULT_MEMORY,
+    DEFAULT_DISK_SIZE,
+    DEFAULT_CONTAINER_PORT,
+)
+from infrastructure.ecs_infrastructure import ECSInfrastructure
 from core.database import get_async_session
 from sqlmodel import select, Session
 from models.deployment import Deployment, DeploymentStatus
@@ -40,12 +55,21 @@ class DeploymentConfig:
         environment_id: Optional[str] = None,
         subdirectory: Optional[str] = None,
         health_check_path: str = "/",
-        port: int = 3000,
-        cpu: int = 256,
-        memory: int = 512,
-        disk_size: int = 21,
+        port: int = DEFAULT_CONTAINER_PORT,
+        cpu: int = DEFAULT_CPU,
+        memory: int = DEFAULT_MEMORY,
+        disk_size: int = DEFAULT_DISK_SIZE,
         aws_region: Optional[str] = None,
         aws_credentials: Optional[dict] = None,
+        launch_type: str = DEFAULT_LAUNCH_TYPE,
+        ec2_instance_type: str = DEFAULT_EC2_INSTANCE_TYPE,
+        ec2_min_size: int = DEFAULT_EC2_MIN_SIZE,
+        ec2_max_size: int = DEFAULT_EC2_MAX_SIZE,
+        ec2_desired_capacity: int = DEFAULT_EC2_DESIRED_CAPACITY,
+        ec2_use_spot: bool = DEFAULT_EC2_USE_SPOT,
+        ec2_spot_max_price: str = DEFAULT_EC2_SPOT_MAX_PRICE,
+        ec2_key_name: str = DEFAULT_EC2_KEY_NAME,
+        capacity_provider_target_capacity: int = DEFAULT_CAPACITY_PROVIDER_TARGET_CAPACITY,
     ):
         self.project_id = project_id
         self.project_name = project_name
@@ -61,6 +85,15 @@ class DeploymentConfig:
         self.disk_size = disk_size
         self.aws_region = aws_region or os.getenv("AWS_REGION", "us-east-1")
         self.aws_credentials = aws_credentials
+        self.launch_type = launch_type
+        self.ec2_instance_type = ec2_instance_type
+        self.ec2_min_size = ec2_min_size
+        self.ec2_max_size = ec2_max_size
+        self.ec2_desired_capacity = ec2_desired_capacity
+        self.ec2_use_spot = ec2_use_spot
+        self.ec2_spot_max_price = ec2_spot_max_price
+        self.ec2_key_name = ec2_key_name
+        self.capacity_provider_target_capacity = capacity_provider_target_capacity
     
     def dict(self):
         """Convert to dictionary for serialization"""
@@ -79,6 +112,15 @@ class DeploymentConfig:
             "disk_size": self.disk_size,
             "aws_region": self.aws_region,
             "aws_credentials": self.aws_credentials,
+            "launch_type": self.launch_type,
+            "ec2_instance_type": self.ec2_instance_type,
+            "ec2_min_size": self.ec2_min_size,
+            "ec2_max_size": self.ec2_max_size,
+            "ec2_desired_capacity": self.ec2_desired_capacity,
+            "ec2_use_spot": self.ec2_use_spot,
+            "ec2_spot_max_price": self.ec2_spot_max_price,
+            "ec2_key_name": self.ec2_key_name,
+            "capacity_provider_target_capacity": self.capacity_provider_target_capacity,
         }
 
 
@@ -253,7 +295,56 @@ class DeploymentService:
                     deployment_id, "🚀 Starting deployment process..."
                 )
 
-            # Step 1: Clone repository
+            # Step 1: Create infrastructure foundation (VPC, cluster, etc.) if needed
+            environment_network = None
+            pre_provision_result = None
+            
+            if config.environment_id:
+                environment_network = await self.get_environment_network_config(config.environment_id)
+            else:
+                environment_network = await self.get_project_network_config(config.project_id)
+            
+            # Check if we need to create new cluster resources
+            # Only pre-provision if:
+            # 1. No existing cluster is specified
+            # 2. No existing VPC is specified (completely new infrastructure)
+            if (not environment_network.get("existing_cluster_arn") and 
+                not environment_network.get("existing_vpc_id")):
+                if deployment_id:
+                    await self.log_to_database(
+                        deployment_id, 
+                        "🆕 New cluster requested - creating VPC and cluster resources first"
+                    )
+                    await self.log_to_database(
+                        deployment_id, 
+                        "☁️ Provisioning VPC, cluster, and base infrastructure..."
+                    )
+                
+                # Check if aborted before infrastructure creation
+                if await self.check_if_aborted(deployment_id):
+                    raise Exception("Deployment aborted by user")
+                
+                try:
+                    # Create infrastructure foundation (everything except ECS service)
+                    pre_provision_result = await self._pre_provision_infrastructure(
+                        config, deployment_id, environment_network
+                    )
+                    
+                    if deployment_id:
+                        await self.log_to_database(
+                            deployment_id, 
+                            "✅ Infrastructure foundation ready!"
+                        )
+                except Exception as e:
+                    logger.error(f"Pre-provisioning failed: {e}")
+                    if deployment_id:
+                        await self.log_to_database(
+                            deployment_id, 
+                            f"❌ Infrastructure pre-provisioning failed: {str(e)}"
+                        )
+                    raise
+            
+            # Step 2: Clone repository
             if deployment_id:
                 await self.log_to_database(deployment_id, "📥 Cloning repository...")
             
@@ -269,7 +360,7 @@ class DeploymentService:
                 deployment_id,
             )
 
-            # Step 2: Build and push Docker image
+            # Step 3: Build and push Docker image
             if deployment_id:
                 await self.log_to_database(
                     deployment_id, "🐳 Building and pushing Docker image..."
@@ -288,17 +379,22 @@ class DeploymentService:
                 config.subdirectory,
             )
 
-            # Step 3: Deploy infrastructure using AWS API
+            # Step 4: Deploy ECS service with the built image
             if deployment_id:
                 await self.log_to_database(
-                    deployment_id, "☁️ Provisioning AWS infrastructure..."
+                    deployment_id, "🚀 Deploying ECS service with the built image..."
                 )
             
-            # Check if aborted before infrastructure deployment
+            # Check if aborted before final deployment
             if await self.check_if_aborted(deployment_id):
                 raise Exception("Deployment aborted by user")
                 
-            result = await self.deploy_infrastructure(config, image_uri, deployment_id)
+            result = await self.deploy_infrastructure(
+                config, 
+                image_uri, 
+                deployment_id, 
+                pre_provision_result=pre_provision_result
+            )
 
             # Wait for service to become healthy before marking as completed
             if deployment_id:
@@ -1077,11 +1173,80 @@ phases:
         account_id = response["Account"]
         return f"arn:aws:iam::{account_id}:role/CodeBuildServiceRole"
 
+    async def _pre_provision_infrastructure(
+        self,
+        config: DeploymentConfig,
+        deployment_id: Optional[str] = None,
+        environment_network: Optional[dict] = None,
+    ) -> dict:
+        """Pre-provision infrastructure resources that don't depend on the Docker image"""
+        try:
+            # Fetch environment variables for the project
+            environment_variables = await self.get_environment_variables(config.project_id)
+            
+            # Create infrastructure args without image_uri (we'll add it later)
+            infrastructure_args = ECSInfrastructureArgs(
+                project_name=config.project_name,
+                project_id=config.project_id,
+                image_uri="placeholder",  # Will be updated with real image later
+                container_port=config.port,
+                health_check_path=config.health_check_path,
+                region=self.region,
+                environment_variables=environment_variables,
+                cpu=config.cpu,
+                memory=config.memory,
+                disk_size=config.disk_size,
+                existing_vpc_id=environment_network.get("existing_vpc_id") if environment_network else None,
+                existing_subnet_ids=environment_network.get("existing_subnet_ids") if environment_network else None,
+                existing_cluster_arn=environment_network.get("existing_cluster_arn") if environment_network else None,
+                launch_type=config.launch_type,
+                ec2_instance_type=config.ec2_instance_type,
+                ec2_min_size=config.ec2_min_size,
+                ec2_max_size=config.ec2_max_size,
+                ec2_desired_capacity=config.ec2_desired_capacity,
+                ec2_use_spot=config.ec2_use_spot,
+                ec2_spot_max_price=config.ec2_spot_max_price,
+                ec2_key_name=config.ec2_key_name,
+                capacity_provider_target_capacity=config.capacity_provider_target_capacity,
+            )
+            
+            # Create infrastructure instance
+            infrastructure = ECSInfrastructure(
+                infrastructure_args, aws_credentials=self.aws_credentials
+            )
+            
+            if deployment_id:
+                await self.log_to_database(deployment_id, "- Creating VPC and networking resources")
+                await self.log_to_database(deployment_id, "- Setting up IAM roles and policies")
+                await self.log_to_database(deployment_id, "- Creating ECS cluster")
+                await self.log_to_database(deployment_id, "- Setting up load balancer")
+                if config.launch_type == "EC2":
+                    await self.log_to_database(deployment_id, "- Creating EC2 capacity provider and Auto Scaling Group")
+            
+            # Create infrastructure foundation (everything except ECS service)
+            foundation_resources = await infrastructure.create_infrastructure_foundation()
+            
+            # Return the created resources and infrastructure instance
+            return {
+                "foundation_resources": foundation_resources,
+                "infrastructure_instance": infrastructure,
+                "environment_network": environment_network,
+            }
+        except Exception as e:
+            logger.error(f"Failed to pre-provision infrastructure: {e}")
+            if deployment_id:
+                await self.log_to_database(
+                    deployment_id, 
+                    f"❌ Infrastructure pre-provisioning failed: {str(e)}"
+                )
+            raise
+
     async def deploy_infrastructure(
         self,
         config: DeploymentConfig,
         image_uri: str,
         deployment_id: Optional[str] = None,
+        pre_provision_result: Optional[dict] = None,
     ) -> ECSInfrastructureOutput:
         """Deploy AWS infrastructure"""
         # Fetch environment variables for the project
@@ -1106,6 +1271,7 @@ phases:
 
         infrastructure_args = ECSInfrastructureArgs(
             project_name=config.project_name,
+            project_id=config.project_id,
             image_uri=image_uri,
             container_port=config.port,
             health_check_path=config.health_check_path,
@@ -1117,6 +1283,15 @@ phases:
             existing_vpc_id=environment_network.get("existing_vpc_id"),
             existing_subnet_ids=environment_network.get("existing_subnet_ids"),
             existing_cluster_arn=environment_network.get("existing_cluster_arn"),
+            launch_type=config.launch_type,
+            ec2_instance_type=config.ec2_instance_type,
+            ec2_min_size=config.ec2_min_size,
+            ec2_max_size=config.ec2_max_size,
+            ec2_desired_capacity=config.ec2_desired_capacity,
+            ec2_use_spot=config.ec2_use_spot,
+            ec2_spot_max_price=config.ec2_spot_max_price,
+            ec2_key_name=config.ec2_key_name,
+            capacity_provider_target_capacity=config.capacity_provider_target_capacity,
         )
 
         # Add existing network resources if configured
@@ -1141,32 +1316,75 @@ phases:
                     f"🚀 Using existing ECS cluster: {environment_network['existing_cluster_arn']}",
                 )
 
-        infrastructure = ECSInfrastructure(
-            infrastructure_args, aws_credentials=self.aws_credentials
-        )
-
-        if deployment_id:
-            await self.log_to_database(
-                deployment_id, "Creating/updating AWS infrastructure..."
-            )
-            await self.log_to_database(
-                deployment_id,
-                f"- Resource allocation: {config.cpu} CPU units, "
-                f"{config.memory} MB memory, {config.disk_size} GB disk",
-            )
-            await self.log_to_database(deployment_id, "- Setting up VPC and networking")
-            await self.log_to_database(deployment_id, "- Creating security groups")
-            await self.log_to_database(
-                deployment_id, "- Setting up ECS cluster and service"
-            )
-            await self.log_to_database(deployment_id, "- Configuring load balancer")
-            if environment_variables:
+        # Check if we have pre-provisioned resources
+        if pre_provision_result and "infrastructure_instance" in pre_provision_result:
+            # Use the pre-provisioned infrastructure instance
+            infrastructure = pre_provision_result["infrastructure_instance"]
+            foundation_resources = pre_provision_result["foundation_resources"]
+            
+            # Update the infrastructure args with the actual image URI
+            infrastructure.image_uri = image_uri
+            infrastructure.args.image_uri = image_uri
+            
+            if deployment_id:
+                await self.log_to_database(
+                    deployment_id, "Using pre-provisioned infrastructure foundation..."
+                )
                 await self.log_to_database(
                     deployment_id,
-                    f"- Configuring {len(environment_variables)} environment variables and secrets",
+                    f"- Resource allocation: {config.cpu} CPU units, "
+                    f"{config.memory} MB memory, {config.disk_size} GB disk",
                 )
+                if environment_variables:
+                    await self.log_to_database(
+                        deployment_id,
+                        f"- Configuring {len(environment_variables)} environment variables and secrets",
+                    )
+            
+            # Create ECS service with the pre-created foundation
+            await infrastructure.create_ecs_service_with_foundation(foundation_resources)
+            
+            # Return the infrastructure output
+            result = ECSInfrastructureOutput(
+                cluster_arn=foundation_resources.get("cluster_arn", infrastructure.args.existing_cluster_arn),
+                service_arn=infrastructure.ecs_service.service_arn if infrastructure.ecs_service else None,
+                load_balancer_arn=foundation_resources["load_balancer_arn"],
+                load_balancer_dns=foundation_resources["load_balancer_dns"],
+                load_balancer_name=infrastructure.project_name,
+                vpc_id=foundation_resources["vpc_id"],
+                subnet_ids=foundation_resources["subnet_ids"],
+            )
+        else:
+            # Create infrastructure from scratch (existing flow)
+            infrastructure = ECSInfrastructure(
+                infrastructure_args, aws_credentials=self.aws_credentials
+            )
 
-        result = await infrastructure.create_or_update_infrastructure()
+            if deployment_id:
+                await self.log_to_database(
+                    deployment_id, "Creating/updating AWS infrastructure..."
+                )
+                await self.log_to_database(
+                    deployment_id,
+                    f"- Resource allocation: {config.cpu} CPU units, "
+                    f"{config.memory} MB memory, {config.disk_size} GB disk",
+                )
+                await self.log_to_database(deployment_id, "- Setting up VPC and networking")
+                await self.log_to_database(deployment_id, "- Creating security groups")
+                await self.log_to_database(
+                    deployment_id, "- Setting up ECS cluster and service"
+                )
+                await self.log_to_database(deployment_id, "- Configuring load balancer")
+                if environment_variables:
+                    await self.log_to_database(
+                        deployment_id,
+                        f"- Configuring {len(environment_variables)} environment variables and secrets",
+                    )
+
+            # Create infrastructure with incremental state saving
+            result = await self._create_infrastructure_with_state_saving(
+                infrastructure, config, deployment_id
+            )
 
         if deployment_id:
             await self.log_to_database(deployment_id, "✅ Infrastructure ready!")
@@ -1220,6 +1438,184 @@ phases:
                     await session.commit()
 
         return result
+
+    async def _create_infrastructure_with_state_saving(
+        self, infrastructure, config, deployment_id: Optional[str]
+    ):
+        """Create infrastructure and save state incrementally to handle partial failures"""
+        
+        # Initialize services first
+        from infrastructure.services.vpc_service import VPCService
+        from infrastructure.services.iam_service import IAMService  
+        from infrastructure.services.load_balancer_service import LoadBalancerService
+        from infrastructure.services.ecs_service import ECSService
+        
+        # Step 1: Initialize VPC
+        if deployment_id:
+            await self.log_to_database(deployment_id, "🔧 Setting up VPC and networking...")
+        
+        infrastructure.vpc_service = VPCService(
+            project_name=infrastructure.project_name,
+            environment_variables=infrastructure.args.environment_variables or [],
+            region=infrastructure.region,
+            existing_vpc_id=infrastructure.args.existing_vpc_id,
+            existing_subnet_ids=infrastructure.args.existing_subnet_ids,
+            aws_credentials=infrastructure.aws_credentials,
+        )
+        await infrastructure.vpc_service.initialize()
+        
+        # Save VPC state immediately
+        if infrastructure.vpc_service.vpc_id and config.environment_id:
+            await self._save_vpc_state_immediately(
+                config.environment_id, 
+                infrastructure.vpc_service.vpc_id,
+                infrastructure.vpc_service.subnet_ids
+            )
+            if deployment_id:
+                await self.log_to_database(
+                    deployment_id, f"✅ VPC ready: {infrastructure.vpc_service.vpc_id}"
+                )
+        
+        # Step 2: Initialize IAM
+        if deployment_id:
+            await self.log_to_database(deployment_id, "🔧 Setting up IAM roles...")
+        
+        infrastructure.iam_service = IAMService(
+            project_name=infrastructure.project_name,
+            region=infrastructure.region,
+            aws_credentials=infrastructure.aws_credentials,
+        )
+        await infrastructure.iam_service.initialize()
+        
+        # Step 3: Initialize Load Balancer  
+        if deployment_id:
+            await self.log_to_database(deployment_id, "🔧 Setting up load balancer...")
+        
+        infrastructure.load_balancer_service = LoadBalancerService(
+            project_name=infrastructure.project_name,
+            region=infrastructure.region,
+            vpc_id=infrastructure.vpc_service.vpc_id,
+            subnet_ids=infrastructure.vpc_service.subnet_ids,
+            security_group_id=infrastructure.vpc_service.security_group_ids.alb_security_group_id,
+            container_port=infrastructure.args.container_port,
+            health_check_path=infrastructure.args.health_check_path,
+            aws_credentials=infrastructure.aws_credentials,
+        )
+        await infrastructure.load_balancer_service.initialize()
+        
+        # Save ALB state immediately
+        if infrastructure.load_balancer_service.load_balancer_arn and config.environment_id:
+            await self._save_alb_state_immediately(
+                config.environment_id,
+                infrastructure.load_balancer_service.load_balancer_arn,
+                infrastructure.load_balancer_service.load_balancer_dns,
+                infrastructure.load_balancer_service.load_balancer_name
+            )
+            if deployment_id:
+                await self.log_to_database(
+                    deployment_id, f"✅ Load balancer ready: {infrastructure.load_balancer_service.load_balancer_dns}"
+                )
+        
+        # Step 4: Initialize ECS (most likely to fail)
+        if deployment_id:
+            await self.log_to_database(deployment_id, "🔧 Setting up ECS cluster and service...")
+        
+        infrastructure.ecs_service = ECSService(
+            project_name=infrastructure.project_name,
+            environment_variables=infrastructure.args.environment_variables or [],
+            cpu=infrastructure.args.cpu,
+            memory=infrastructure.args.memory,
+            disk_size=infrastructure.args.disk_size,
+            image_uri=infrastructure.args.image_uri,
+            container_port=infrastructure.args.container_port,
+            region=infrastructure.region,
+            existing_cluster_arn=infrastructure.args.existing_cluster_arn,
+            vpc_id=infrastructure.vpc_service.vpc_id,
+            subnet_ids=infrastructure.vpc_service.subnet_ids,
+            security_group_id=infrastructure.vpc_service.security_group_ids.ecs_security_group_id,
+            execution_role_arn=infrastructure.iam_service.execution_role_arn,
+            task_role_arn=infrastructure.iam_service.task_role_arn,
+            target_group_arn=infrastructure.load_balancer_service.target_group_arn,
+            aws_credentials=infrastructure.aws_credentials,
+            launch_type=infrastructure.args.launch_type,
+            ec2_instance_type=infrastructure.args.ec2_instance_type,
+            ec2_min_size=infrastructure.args.ec2_min_size,
+            ec2_max_size=infrastructure.args.ec2_max_size,
+            ec2_desired_capacity=infrastructure.args.ec2_desired_capacity,
+            ec2_use_spot=infrastructure.args.ec2_use_spot,
+            ec2_spot_max_price=infrastructure.args.ec2_spot_max_price,
+            ec2_key_name=infrastructure.args.ec2_key_name,
+            capacity_provider_target_capacity=infrastructure.args.capacity_provider_target_capacity,
+        )
+        await infrastructure.ecs_service.initialize()
+        
+        # Save ECS state immediately
+        if config.environment_id:
+            await self._save_ecs_state_immediately(
+                config.environment_id,
+                infrastructure.ecs_service.cluster_arn,
+                infrastructure.ecs_service.service_arn
+            )
+            if deployment_id:
+                await self.log_to_database(
+                    deployment_id, f"✅ ECS ready: {infrastructure.ecs_service.service_arn}"
+                )
+        
+        # Return result in expected format
+        from infrastructure.types import ECSInfrastructureOutput
+        return ECSInfrastructureOutput(
+            cluster_arn=infrastructure.ecs_service.cluster_arn,
+            service_arn=infrastructure.ecs_service.service_arn,
+            load_balancer_arn=infrastructure.load_balancer_service.load_balancer_arn,
+            load_balancer_dns=infrastructure.load_balancer_service.load_balancer_dns,
+            load_balancer_name=infrastructure.load_balancer_service.load_balancer_name,
+            vpc_id=infrastructure.vpc_service.vpc_id,
+            subnet_ids=infrastructure.vpc_service.subnet_ids,
+        )
+
+    async def _save_vpc_state_immediately(self, environment_id: str, vpc_id: str, subnet_ids: List[str]):
+        """Save VPC state immediately after creation"""
+        import json
+        async with get_async_session() as session:
+            result = await session.execute(
+                select(Environment).where(Environment.id == environment_id)
+            )
+            environment = result.scalar_one_or_none()
+            if environment and not environment.existing_vpc_id:
+                environment.existing_vpc_id = vpc_id
+                environment.existing_subnet_ids = json.dumps(subnet_ids)
+                session.add(environment)
+                await session.commit()
+                logger.info(f"Saved VPC state: {vpc_id}, subnets: {subnet_ids}")
+
+    async def _save_alb_state_immediately(self, environment_id: str, alb_arn: str, alb_dns: str, alb_name: str):
+        """Save ALB state immediately after creation"""
+        async with get_async_session() as session:
+            result = await session.execute(
+                select(Environment).where(Environment.id == environment_id)
+            )
+            environment = result.scalar_one_or_none()
+            if environment:
+                environment.alb_arn = alb_arn
+                environment.domain = alb_dns
+                environment.alb_name = alb_name
+                session.add(environment)
+                await session.commit()
+                logger.info(f"Saved ALB state: {alb_dns}")
+
+    async def _save_ecs_state_immediately(self, environment_id: str, cluster_arn: str, service_arn: str):
+        """Save ECS state immediately after creation"""
+        async with get_async_session() as session:
+            result = await session.execute(
+                select(Environment).where(Environment.id == environment_id)
+            )
+            environment = result.scalar_one_or_none()
+            if environment:
+                environment.ecs_cluster_arn = cluster_arn
+                environment.ecs_service_arn = service_arn
+                session.add(environment)
+                await session.commit()
+                logger.info(f"Saved ECS state: cluster={cluster_arn}, service={service_arn}")
 
     async def wait_for_service_healthy_environment(
         self, environment_id: str, deployment_id: str, max_wait_minutes: int = 15

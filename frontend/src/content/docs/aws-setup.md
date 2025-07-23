@@ -58,6 +58,18 @@ Create and attach this custom policy for Autoform deployments:
       "Resource": "*"
     },
     {
+      "Sid": "ECSCapacityProviders",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:CreateCapacityProvider",
+        "ecs:UpdateCapacityProvider",
+        "ecs:DeleteCapacityProvider",
+        "ecs:DescribeCapacityProviders",
+        "ecs:PutClusterCapacityProviders"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "EC2NetworkManagement",
       "Effect": "Allow",
       "Action": [
@@ -71,9 +83,31 @@ Create and attach this custom policy for Autoform deployments:
         "ec2:AttachInternetGateway",
         "ec2:AssociateRouteTable",
         "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:AuthorizeSecurityGroupEgress",
         "ec2:ModifyVpcAttribute",
         "ec2:ModifySubnetAttribute",
+        "ec2:CreateLaunchTemplate",
+        "ec2:ModifyLaunchTemplate",
+        "ec2:DeleteLaunchTemplate",
+        "ec2:DescribeLaunchTemplates",
+        "ec2:DescribeLaunchTemplateVersions",
+        "ec2:RunInstances",
+        "ec2:DescribeImages",
         "ec2:Describe*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AutoScalingManagement",
+      "Effect": "Allow",
+      "Action": [
+        "autoscaling:CreateAutoScalingGroup",
+        "autoscaling:UpdateAutoScalingGroup",
+        "autoscaling:DeleteAutoScalingGroup",
+        "autoscaling:DescribeAutoScalingGroups",
+        "autoscaling:CreateLaunchConfiguration",
+        "autoscaling:DescribeLaunchConfigurations",
+        "autoscaling:CreateOrUpdateTags"
       ],
       "Resource": "*"
     },
@@ -94,6 +128,9 @@ Create and attach this custom policy for Autoform deployments:
         "iam:PutRolePolicy",
         "iam:PassRole",
         "iam:GetRole",
+        "iam:CreateInstanceProfile",
+        "iam:GetInstanceProfile",
+        "iam:AddRoleToInstanceProfile",
         "iam:ListAttachedRolePolicies",
         "iam:ListRolePolicies",
         "iam:TagRole"

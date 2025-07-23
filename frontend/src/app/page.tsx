@@ -114,7 +114,7 @@ export default function Home() {
 
 
       {/* CTA Section */}
-      <section className="py-20 text-foreground border-t border-border">
+      <section className="py-20 text-foreground">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl font-normal mb-4">
             Ready to deploy?
@@ -133,7 +133,7 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="borderborder-border">
+      <footer>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center text-muted-foreground">
             <p>&copy; 2025 Autoform. Built for developers who ship fast.</p>

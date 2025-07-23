@@ -3,6 +3,9 @@ import logging
 
 from utils.aws_client import create_client
 from ..types import EnvironmentVariable, SecurityGroupIds
+from core.database import get_async_session
+from models.project import Project
+from sqlmodel import select
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +16,7 @@ class VPCService:
         project_name: str,
         environment_variables: List[EnvironmentVariable],
         region: str = "us-east-1",
+        project_id: Optional[str] = None,
         existing_vpc_id: Optional[str] = None,
         existing_subnet_ids: Optional[List[str]] = None,
         aws_credentials: Optional[dict] = None,
@@ -20,20 +24,90 @@ class VPCService:
         self.project_name = project_name
         self.environment_variables = environment_variables
         self.region = region
+        self.project_id = project_id
         self.existing_vpc_id = existing_vpc_id
         self.existing_subnet_ids = existing_subnet_ids
         self.aws_credentials = aws_credentials
 
         # Initialize EC2 client with custom credentials if provided
         self.ec2 = create_client("ec2", region, aws_credentials)
-
+        
+        # Initialize instance attributes
         self.vpc_id: str = ""
         self.subnet_ids: List[str] = []
         self.security_group_ids: SecurityGroupIds = None
 
+    async def _get_project_vpc_from_db(self) -> dict:
+        """Get VPC resources from database for this project"""
+        if not self.project_id:
+            return {}
+            
+        try:
+            async with get_async_session() as session:
+                result = await session.execute(
+                    select(Project).where(Project.id == self.project_id)
+                )
+                project = result.scalar_one_or_none()
+                
+                if project:
+                    return {
+                        "vpc_id": project.vpc_id,
+                        "subnet_ids": project.subnet_ids.split(",") if project.subnet_ids else None,
+                        "alb_security_group_id": project.alb_security_group_id,
+                        "ecs_security_group_id": project.ecs_security_group_id,
+                    }
+        except Exception as e:
+            logger.warning(f"Could not get project VPC from database: {e}")
+            
+        return {}
+
+    async def _save_project_vpc_to_db(self, vpc_id: str, subnet_ids: List[str], security_group_ids: SecurityGroupIds):
+        """Save VPC resources to database for this project"""
+        if not self.project_id:
+            return
+            
+        try:
+            async with get_async_session() as session:
+                result = await session.execute(
+                    select(Project).where(Project.id == self.project_id)
+                )
+                project = result.scalar_one_or_none()
+                
+                if project:
+                    project.vpc_id = vpc_id
+                    project.subnet_ids = ",".join(subnet_ids)
+                    project.alb_security_group_id = security_group_ids.alb_security_group_id
+                    project.ecs_security_group_id = security_group_ids.ecs_security_group_id
+                    
+                    session.add(project)
+                    await session.commit()
+                    logger.info(f"✅ Saved VPC resources to database for project {self.project_id}")
+        except Exception as e:
+            logger.error(f"Failed to save VPC resources to database: {e}")
+
     async def initialize(self):
         """Initialize VPC resources"""
         logger.info(f"🔍 VPC Service Initialize - existing_vpc_id: '{self.existing_vpc_id}', existing_subnet_ids: {self.existing_subnet_ids}")
+        
+        # First, check database for existing VPC resources
+        db_vpc = await self._get_project_vpc_from_db()
+        if db_vpc.get("vpc_id") and db_vpc.get("subnet_ids") and db_vpc.get("alb_security_group_id") and db_vpc.get("ecs_security_group_id"):
+            logger.info(f"✅ Found complete VPC resources in database - VPC: {db_vpc['vpc_id']}")
+            self.vpc_id = db_vpc["vpc_id"]
+            self.subnet_ids = db_vpc["subnet_ids"]
+            
+            # Recreate security group objects
+            self.security_group_ids = SecurityGroupIds(
+                alb_security_group_id=db_vpc.get("alb_security_group_id"),
+                ecs_security_group_id=db_vpc.get("ecs_security_group_id")
+            )
+            return
+        elif db_vpc.get("vpc_id"):
+            logger.info(f"⚠️  Found partial VPC resources in database - VPC: {db_vpc['vpc_id']}, will recreate security groups")
+            self.vpc_id = db_vpc["vpc_id"]
+            if db_vpc.get("subnet_ids"):
+                self.subnet_ids = db_vpc["subnet_ids"]
+        
         if self.existing_vpc_id:
             logger.info(f"Using existing VPC: {self.existing_vpc_id}")
             self.vpc_id = self.existing_vpc_id
@@ -43,17 +117,27 @@ class VPCService:
                 logger.info(f"Using existing subnets: {self.existing_subnet_ids}")
                 self.subnet_ids = self.existing_subnet_ids
             else:
-                # Create subnets in the existing VPC
-                logger.info(f"Creating subnets in existing VPC: {self.existing_vpc_id}")
-                self.subnet_ids = await self._create_subnets()
+                # Create subnets in the existing VPC (or get from database if partial)
+                if not self.subnet_ids:
+                    logger.info(f"Creating subnets in existing VPC: {self.existing_vpc_id}")
+                    self.subnet_ids = await self._create_subnets()
         else:
-            # Create new VPC and subnets for this project
-            logger.info(f"Creating new VPC for project: {self.project_name}")
-            self.vpc_id = await self._create_vpc()
-            self.subnet_ids = await self._create_subnets()
+            # Create new VPC and subnets for this project (only if not found in database)
+            if not self.vpc_id:
+                logger.info(f"Creating new VPC for project: {self.project_name}")
+                self.vpc_id = await self._create_vpc()
+            if not self.subnet_ids:
+                logger.info(f"Creating subnets for project: {self.project_name}")
+                self.subnet_ids = await self._create_subnets()
 
-        # Create security groups
-        self.security_group_ids = await self._create_security_groups()
+        # Create security groups (only if not already loaded from database)
+        if not self.security_group_ids:
+            self.security_group_ids = await self._create_security_groups()
+            
+            # Save created resources to database
+            await self._save_project_vpc_to_db(self.vpc_id, self.subnet_ids, self.security_group_ids)
+        else:
+            logger.info("✅ Using existing security groups from database")
 
     async def _create_vpc(self) -> str:
         """Create a new VPC for the project"""
@@ -209,14 +293,16 @@ class VPCService:
             ]
         )
 
-        subnet_ids = [subnet["SubnetId"] for subnet in response["Subnets"]]
+        subnet_ids = sorted([subnet["SubnetId"] for subnet in response["Subnets"]])
 
         # If no default subnets, get any available subnets
         if not subnet_ids:
             response = self.ec2.describe_subnets(
                 Filters=[{"Name": "vpc-id", "Values": [self.vpc_id]}]
             )
-            subnet_ids = [subnet["SubnetId"] for subnet in response["Subnets"][:2]]
+            # Sort subnets by ID to ensure consistent selection across deployments
+            all_subnets = sorted([subnet["SubnetId"] for subnet in response["Subnets"]])
+            subnet_ids = all_subnets[:2]
 
         if len(subnet_ids) < 2:
             raise Exception("Need at least 2 subnets for ALB")

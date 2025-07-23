@@ -66,9 +66,12 @@ async def check_aws_credentials(
                 team = user_teams[0][1] if user_teams else owned_teams[0]
 
                 team_aws_config_result = await session.execute(
-                    select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
+                    select(TeamAwsConfig)
+                    .where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
+                    .order_by(TeamAwsConfig.id.desc())
+                    .limit(1)
                 )
-                team_aws_config = team_aws_config_result.first()
+                team_aws_config = team_aws_config_result.scalar_one_or_none()
 
                 if not team_aws_config:
                     return {
@@ -118,9 +121,12 @@ async def check_aws_credentials(
                     team = user_teams[0][1] if user_teams else owned_teams[0]
 
                     team_aws_config_result = await session.execute(
-                        select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
+                        select(TeamAwsConfig)
+                        .where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
+                        .order_by(TeamAwsConfig.id.desc())
+                        .limit(1)
                     )
-                    team_aws_config = team_aws_config_result.first()
+                    team_aws_config = team_aws_config_result.scalar_one_or_none()
 
                     if team_aws_config:
                         access_key = encryption_service.decrypt(
@@ -276,9 +282,12 @@ async def get_aws_resources(
                     }
 
                 team_aws_config_result = await session.execute(
-                    select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team_id, TeamAwsConfig.is_active == True))
+                    select(TeamAwsConfig)
+                    .where(and_(TeamAwsConfig.team_id == team_id, TeamAwsConfig.is_active == True))
+                    .order_by(TeamAwsConfig.id.desc())
+                    .limit(1)
                 )
-                team_aws_config = team_aws_config_result.first()
+                team_aws_config = team_aws_config_result.scalar_one_or_none()
 
                 if not team_aws_config:
                     return {
@@ -330,9 +339,12 @@ async def get_aws_resources(
                     team = user_teams[0][1] if user_teams else owned_teams[0]
 
                     team_aws_config_result = await session.execute(
-                        select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
+                        select(TeamAwsConfig)
+                        .where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
+                        .order_by(TeamAwsConfig.id.desc())
+                        .limit(1)
                     )
-                    team_aws_config = team_aws_config_result.first()
+                    team_aws_config = team_aws_config_result.scalar_one_or_none()
 
                     if team_aws_config:
                         access_key = encryption_service.decrypt(

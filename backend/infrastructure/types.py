@@ -1,5 +1,19 @@
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
+from infrastructure.constants import (
+    DEFAULT_LAUNCH_TYPE,
+    DEFAULT_EC2_INSTANCE_TYPE,
+    DEFAULT_EC2_MIN_SIZE,
+    DEFAULT_EC2_MAX_SIZE,
+    DEFAULT_EC2_DESIRED_CAPACITY,
+    DEFAULT_EC2_USE_SPOT,
+    DEFAULT_EC2_SPOT_MAX_PRICE,
+    DEFAULT_EC2_KEY_NAME,
+    DEFAULT_CAPACITY_PROVIDER_TARGET_CAPACITY,
+    DEFAULT_CPU,
+    DEFAULT_MEMORY,
+    DEFAULT_DISK_SIZE,
+)
 
 
 class EnvironmentVariable(BaseModel):
@@ -14,6 +28,7 @@ class EnvironmentVariable(BaseModel):
 
 class ECSInfrastructureArgs(BaseModel):
     project_name: str = Field(alias="projectName")
+    project_id: Optional[str] = Field(None, alias="projectId")
     image_uri: str = Field(alias="imageUri")
     container_port: int = Field(3000, alias="containerPort")
     health_check_path: str = Field("/", alias="healthCheckPath")
@@ -24,9 +39,20 @@ class ECSInfrastructureArgs(BaseModel):
     environment_variables: List[EnvironmentVariable] = Field(
         default_factory=list, alias="environmentVariables"
     )
-    cpu: int = 256
-    memory: int = 512
-    disk_size: int = Field(21, alias="diskSize")
+    cpu: int = DEFAULT_CPU
+    memory: int = DEFAULT_MEMORY
+    disk_size: int = Field(DEFAULT_DISK_SIZE, alias="diskSize")
+    
+    # ECS Launch Type Configuration
+    launch_type: str = Field(DEFAULT_LAUNCH_TYPE, alias="launchType")
+    ec2_instance_type: str = Field(DEFAULT_EC2_INSTANCE_TYPE, alias="ec2InstanceType")
+    ec2_min_size: int = Field(DEFAULT_EC2_MIN_SIZE, alias="ec2MinSize")
+    ec2_max_size: int = Field(DEFAULT_EC2_MAX_SIZE, alias="ec2MaxSize")
+    ec2_desired_capacity: int = Field(DEFAULT_EC2_DESIRED_CAPACITY, alias="ec2DesiredCapacity")
+    ec2_use_spot: bool = Field(DEFAULT_EC2_USE_SPOT, alias="ec2UseSpot")
+    ec2_spot_max_price: Optional[str] = Field(DEFAULT_EC2_SPOT_MAX_PRICE, alias="ec2SpotMaxPrice")
+    ec2_key_name: Optional[str] = Field(DEFAULT_EC2_KEY_NAME, alias="ec2KeyName")
+    capacity_provider_target_capacity: int = Field(DEFAULT_CAPACITY_PROVIDER_TARGET_CAPACITY, alias="capacityProviderTargetCapacity")
 
     class Config:
         populate_by_name = True

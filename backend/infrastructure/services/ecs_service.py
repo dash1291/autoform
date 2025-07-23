@@ -27,6 +27,16 @@ class ECSService:
         task_role_arn: str = "",
         target_group_arn: str = "",
         aws_credentials=None,
+        launch_type: str = "EC2",
+        ec2_instance_type: str = "t3a.medium",
+        ec2_min_size: int = 1,
+        ec2_max_size: int = 3,
+        ec2_desired_capacity: int = 1,
+        ec2_use_spot: bool = True,
+        ec2_spot_max_price: str = "",
+        ec2_key_name: str = "",
+        capacity_provider_target_capacity: int = 80,
+        alb_security_group_id: str = "",
     ):
         self.project_name = project_name
         self.environment_variables = environment_variables
@@ -44,6 +54,17 @@ class ECSService:
         self.task_role_arn = task_role_arn
         self.target_group_arn = target_group_arn
         self.aws_credentials = aws_credentials
+        self.launch_type = launch_type
+        self.ec2_instance_type = ec2_instance_type
+        self.ec2_min_size = ec2_min_size
+        self.ec2_max_size = ec2_max_size
+        self.ec2_desired_capacity = ec2_desired_capacity
+        self.ec2_use_spot = ec2_use_spot
+        self.ec2_spot_max_price = ec2_spot_max_price
+        self.ec2_key_name = ec2_key_name
+        self.capacity_provider_target_capacity = capacity_provider_target_capacity
+        self.alb_security_group_id = alb_security_group_id
+        self.capacity_provider_name = None
 
         # Initialize AWS clients with custom credentials if provided
         from utils.aws_client import create_client
@@ -60,6 +81,10 @@ class ECSService:
         """Initialize ECS resources"""
         # Set up or find ECS cluster
         self.cluster_arn = await self._create_or_find_cluster()
+        
+        # Set up EC2 capacity provider if using EC2 launch type
+        if self.launch_type == "EC2":
+            await self._setup_ec2_capacity_provider()
 
         # Check for existing service configuration BEFORE creating task definition
         await self._check_existing_service_config()
@@ -69,6 +94,120 @@ class ECSService:
 
         # Create or update ECS service
         self.service_arn = await self._create_or_update_service()
+    
+    async def _setup_ec2_capacity_provider(self):
+        """Set up EC2 capacity provider for the cluster (only if needed)"""
+        from infrastructure.services.ec2_capacity_provider import EC2CapacityProvider
+        
+        # Extract cluster name from ARN
+        cluster_name = self.cluster_arn.split("/")[-1] if "/" in self.cluster_arn else self.cluster_arn
+        
+        # Check if using existing cluster with existing capacity provider
+        if self.existing_cluster_arn:
+            logger.info(f"Using existing cluster: {cluster_name}")
+            existing_cp_name = await self._check_existing_capacity_provider(cluster_name)
+            if existing_cp_name:
+                self.capacity_provider_name = existing_cp_name
+                logger.info(f"Using existing capacity provider: {existing_cp_name}")
+                return
+        
+        # Create new capacity provider for new or unconfigured cluster
+        logger.info("Setting up new EC2 capacity provider...")
+        
+        ec2_provider = EC2CapacityProvider(
+            project_name=self.project_name,  # Use original project name for IAM resources
+            cluster_name=cluster_name,
+            vpc_id=self.vpc_id,
+            subnet_ids=self.subnet_ids,
+            instance_type=self.ec2_instance_type,
+            min_size=self.ec2_min_size,
+            max_size=self.ec2_max_size,
+            desired_capacity=self.ec2_desired_capacity,
+            use_spot=self.ec2_use_spot,
+            spot_max_price=self.ec2_spot_max_price,
+            key_name=self.ec2_key_name,
+            target_capacity=self.capacity_provider_target_capacity,
+            region=self.region,
+            aws_credentials=self.aws_credentials,
+        )
+        
+        result = await ec2_provider.setup_ec2_capacity()
+        self.capacity_provider_name = result["capacity_provider_name"]
+        
+        # Add ALB security group rules if ALB security group ID is provided
+        if self.alb_security_group_id:
+            logger.info("Adding ALB security group rules to EC2 instances...")
+            ec2_provider.add_alb_security_group_rule(
+                result["security_group_id"], 
+                self.alb_security_group_id
+            )
+        
+        logger.info(f"EC2 capacity provider setup complete: {self.capacity_provider_name}")
+    
+    async def _check_existing_capacity_provider(self, cluster_name: str) -> str:
+        """Check if cluster already has an EC2 capacity provider"""
+        try:
+            response = self.ecs.describe_clusters(
+                clusters=[cluster_name],
+                include=['CAPACITY_PROVIDERS']
+            )
+            
+            if response['clusters']:
+                cluster = response['clusters'][0]
+                capacity_providers = cluster.get('capacityProviders', [])
+                
+                # Look for EC2 capacity provider (not FARGATE/FARGATE_SPOT)
+                for cp in capacity_providers:
+                    if cp not in ['FARGATE', 'FARGATE_SPOT']:
+                        return cp
+            
+            return None
+        except Exception as e:
+            logger.warning(f"Could not check existing capacity providers: {e}")
+            return None
+    
+    def _build_service_update_params(self, service_name: str, container_name: str) -> dict:
+        """Build parameters for updating ECS service"""
+        params = {
+            "cluster": self.cluster_arn,
+            "service": service_name,
+            "taskDefinition": self.task_definition_arn,
+            "desiredCount": 1,
+            "enableExecuteCommand": True,
+            "loadBalancers": [
+                {
+                    "targetGroupArn": self.target_group_arn,
+                    "containerName": container_name,
+                    "containerPort": self.container_port,
+                }
+            ],
+        }
+        
+        # Add network configuration only for Fargate/awsvpc mode
+        if self.launch_type == "FARGATE":
+            network_config = {
+                "subnets": self.subnet_ids,
+                "securityGroups": [self.security_group_id],
+                "assignPublicIp": "ENABLED"
+            }
+            params["networkConfiguration"] = {
+                "awsvpcConfiguration": network_config
+            }
+        
+        # Add capacity provider strategy for EC2
+        if self.launch_type == "EC2" and self.capacity_provider_name:
+            params["capacityProviderStrategy"] = [
+                {"capacityProvider": self.capacity_provider_name, "weight": 1, "base": 0}
+            ]
+            # Add placement strategy for EC2 to optimize instance utilization
+            params["placementStrategy"] = [
+                {
+                    "type": "binpack",
+                    "field": "MEMORY"
+                }
+            ]
+        
+        return params
 
     async def _check_existing_service_config(self):
         """Check if service exists and get its container name"""
@@ -153,10 +292,20 @@ class ECSService:
             getattr(self, "_existing_container_name", None) or self.project_name
         )
 
+        # Configure port mappings based on network mode
+        if self.launch_type == "EC2":
+            # Bridge mode: Use dynamic port allocation
+            port_mappings = [{"containerPort": self.container_port, "hostPort": 0, "protocol": "tcp"}]
+            network_mode = "bridge"
+        else:
+            # Fargate: Use awsvpc mode
+            port_mappings = [{"containerPort": self.container_port, "protocol": "tcp"}]
+            network_mode = "awsvpc"
+
         container_def = {
             "name": container_name,
             "image": self.image_uri,
-            "portMappings": [{"containerPort": self.container_port, "protocol": "tcp"}],
+            "portMappings": port_mappings,
             "essential": True,
             "logConfiguration": {
                 "logDriver": "awslogs",
@@ -167,6 +316,11 @@ class ECSService:
                 },
             },
         }
+        
+        # Add memory and CPU at container level for EC2
+        if self.launch_type == "EC2":
+            container_def["memory"] = self.memory
+            container_def["cpu"] = self.cpu
 
         # Add environment variables if any
         if environment:
@@ -178,18 +332,24 @@ class ECSService:
 
         family_name = f"{self.project_name}-task"
 
-        response = self.ecs.register_task_definition(
-            family=family_name,
-            networkMode="awsvpc",
-            requiresCompatibilities=["FARGATE"],
-            cpu=str(self.cpu),
-            memory=str(self.memory),
-            ephemeralStorage={"sizeInGiB": self.disk_size},
-            executionRoleArn=self.execution_role_arn,
-            taskRoleArn=self.task_role_arn,
-            containerDefinitions=[container_def],
-            tags=[{"key": "Name", "value": family_name}],
-        )
+        # Build task definition parameters
+        task_def_params = {
+            "family": family_name,
+            "networkMode": network_mode,
+            "requiresCompatibilities": [self.launch_type],
+            "executionRoleArn": self.execution_role_arn,
+            "taskRoleArn": self.task_role_arn,
+            "containerDefinitions": [container_def],
+            "tags": [{"key": "Name", "value": family_name}],
+        }
+        
+        # Add Fargate-specific parameters
+        if self.launch_type == "FARGATE":
+            task_def_params["cpu"] = str(self.cpu)
+            task_def_params["memory"] = str(self.memory)
+            task_def_params["ephemeralStorage"] = {"sizeInGiB": self.disk_size}
+        
+        response = self.ecs.register_task_definition(**task_def_params)
 
         task_def_arn = response["taskDefinition"]["taskDefinitionArn"]
         logger.info(f"Created task definition: {task_def_arn}")
@@ -225,20 +385,8 @@ class ECSService:
                         getattr(self, "_existing_container_name", None)
                         or self.project_name
                     )
-                    update_response = self.ecs.update_service(
-                        cluster=self.cluster_arn,
-                        service=service_name,
-                        taskDefinition=self.task_definition_arn,
-                        desiredCount=1,
-                        enableExecuteCommand=True,
-                        loadBalancers=[
-                            {
-                                "targetGroupArn": self.target_group_arn,
-                                "containerName": container_name,
-                                "containerPort": self.container_port,
-                            }
-                        ],
-                    )
+                    update_params = self._build_service_update_params(service_name, container_name)
+                    update_response = self.ecs.update_service(**update_params)
                     logger.info("Service updated successfully")
                     return update_response["service"]["serviceArn"]
                 except Exception as update_error:
@@ -269,20 +417,8 @@ class ECSService:
                             getattr(self, "_existing_container_name", None)
                             or self.project_name
                         )
-                        update_response = self.ecs.update_service(
-                            cluster=self.cluster_arn,
-                            service=service_name,
-                            taskDefinition=self.task_definition_arn,
-                            desiredCount=1,
-                            enableExecuteCommand=True,
-                            loadBalancers=[
-                                {
-                                    "targetGroupArn": self.target_group_arn,
-                                    "containerName": container_name,
-                                    "containerPort": self.container_port,
-                                }
-                            ],
-                        )
+                        update_params = self._build_service_update_params(service_name, container_name)
+                        update_response = self.ecs.update_service(**update_params)
 
                         logger.info("Service updated after stabilization")
                         return update_response["service"]["serviceArn"]
@@ -317,20 +453,8 @@ class ECSService:
                             getattr(self, "_existing_container_name", None)
                             or self.project_name
                         )
-                        update_response = self.ecs.update_service(
-                            cluster=self.cluster_arn,
-                            service=service_name,
-                            taskDefinition=self.task_definition_arn,
-                            desiredCount=1,
-                            enableExecuteCommand=True,
-                            loadBalancers=[
-                                {
-                                    "targetGroupArn": self.target_group_arn,
-                                    "containerName": container_name,
-                                    "containerPort": self.container_port,
-                                }
-                            ],
-                        )
+                        update_params = self._build_service_update_params(service_name, container_name)
+                        update_response = self.ecs.update_service(**update_params)
                         logger.info(
                             "Successfully updated service found via list_services"
                         )
@@ -350,22 +474,16 @@ class ECSService:
             )
 
         logger.info(f"No existing service found. Creating new service: {service_name}")
+        logger.info(f"DEBUG: Launch type is: {self.launch_type}")
         try:
-            response = self.ecs.create_service(
-                serviceName=service_name,
-                cluster=self.cluster_arn,
-                taskDefinition=self.task_definition_arn,
-                desiredCount=1,
-                launchType="FARGATE",
-                enableExecuteCommand=True,
-                networkConfiguration={
-                    "awsvpcConfiguration": {
-                        "subnets": self.subnet_ids,
-                        "securityGroups": [self.security_group_id],
-                        "assignPublicIp": "ENABLED",
-                    }
-                },
-                loadBalancers=[
+            # Build service parameters
+            service_params = {
+                "serviceName": service_name,
+                "cluster": self.cluster_arn,
+                "taskDefinition": self.task_definition_arn,
+                "desiredCount": 1,
+                "enableExecuteCommand": True,
+                "loadBalancers": [
                     {
                         "targetGroupArn": self.target_group_arn,
                         "containerName": getattr(self, "_existing_container_name", None)
@@ -373,8 +491,49 @@ class ECSService:
                         "containerPort": self.container_port,
                     }
                 ],
-                tags=[{"key": "Name", "value": service_name}],
-            )
+                "tags": [{"key": "Name", "value": service_name}],
+            }
+            
+            # Add network configuration only for Fargate/awsvpc mode
+            if self.launch_type == "FARGATE":
+                network_config = {
+                    "subnets": self.subnet_ids,
+                    "securityGroups": [self.security_group_id],
+                    "assignPublicIp": "ENABLED"
+                }
+                service_params["networkConfiguration"] = {
+                    "awsvpcConfiguration": network_config
+                }
+                logger.info(f"DEBUG: Added networkConfiguration for Fargate")
+            else:
+                logger.info(f"DEBUG: Using bridge mode for {self.launch_type} - no networkConfiguration")
+            
+            # Add launch type specific parameters
+            if self.launch_type == "FARGATE":
+                service_params["launchType"] = "FARGATE"
+            elif self.launch_type == "EC2" and self.capacity_provider_name:
+                service_params["capacityProviderStrategy"] = [
+                    {"capacityProvider": self.capacity_provider_name, "weight": 1, "base": 0}
+                ]
+                # Add placement strategy for EC2 to optimize instance utilization
+                service_params["placementStrategy"] = [
+                    {
+                        "type": "binpack",
+                        "field": "MEMORY"
+                    }
+                ]
+            
+            # Debug: Log the actual parameters being sent
+            logger.info(f"DEBUG: Creating service with launch_type: {self.launch_type}")
+            if 'networkConfiguration' in service_params:
+                network_cfg = service_params['networkConfiguration']['awsvpcConfiguration']
+                logger.info(f"DEBUG: Network config: {network_cfg}")
+                logger.info(f"DEBUG: Has assignPublicIp: {'assignPublicIp' in network_cfg}")
+            else:
+                logger.info(f"DEBUG: No networkConfiguration (using bridge mode)")
+            logger.info(f"DEBUG: Capacity provider: {service_params.get('capacityProviderStrategy', 'None')}")
+            
+            response = self.ecs.create_service(**service_params)
 
             service_arn = response["service"]["serviceArn"]
             logger.info(f"ECS service created: {service_arn}")
@@ -451,20 +610,8 @@ class ECSService:
                         getattr(self, "_existing_container_name", None)
                         or self.project_name
                     )
-                    update_response = self.ecs.update_service(
-                        cluster=self.cluster_arn,
-                        service=service_name,
-                        taskDefinition=self.task_definition_arn,
-                        desiredCount=1,
-                        enableExecuteCommand=True,
-                        loadBalancers=[
-                            {
-                                "targetGroupArn": self.target_group_arn,
-                                "containerName": container_name,
-                                "containerPort": self.container_port,
-                            }
-                        ],
-                    )
+                    update_params = self._build_service_update_params(service_name, container_name)
+                    update_response = self.ecs.update_service(**update_params)
                     logger.info("Successfully updated existing service")
                     return update_response["service"]["serviceArn"]
                 except Exception as update_error:

@@ -15,6 +15,7 @@ class LoadBalancerService:
         security_group_id: str = "",
         container_port: int = 3000,
         health_check_path: str = "/",
+        launch_type: str = "EC2",
         aws_credentials=None,
     ):
         self.project_name = project_name
@@ -24,6 +25,7 @@ class LoadBalancerService:
         self.security_group_id = security_group_id
         self.container_port = container_port
         self.health_check_path = health_check_path
+        self.launch_type = launch_type
         self.aws_credentials = aws_credentials
 
         # Initialize ELBv2 client with custom credentials if provided
@@ -47,6 +49,11 @@ class LoadBalancerService:
 
         # Create listener
         self.listener_arn = await self._create_listener()
+        
+        # Return the potentially corrected subnet IDs
+        return {
+            "corrected_subnet_ids": self.subnet_ids
+        }
 
     async def _create_or_find_load_balancer(self) -> dict:
         """Create or find Application Load Balancer"""
@@ -67,14 +74,12 @@ class LoadBalancerService:
                 logger.warning(f"⚠️  Requested subnets were: {self.subnet_ids}")
                 
                 if set(existing_lb_subnets) != set(self.subnet_ids):
-                    logger.error(f"❌ SUBNET MISMATCH: Existing load balancer is in different subnets than requested!")
-                    logger.error(f"   Existing ALB subnets: {existing_lb_subnets}")
-                    logger.error(f"   Requested subnets: {self.subnet_ids}")
-                    raise Exception(
-                        f"Existing load balancer '{lb_name}' is in different subnets than requested. "
-                        f"ALB is in subnets {existing_lb_subnets} but ECS will use {self.subnet_ids}. "
-                        f"This will cause networking issues. Please delete the existing load balancer or use the same subnets."
-                    )
+                    logger.warning(f"⚠️  SUBNET MISMATCH: Using existing ALB's subnets instead of requested ones!")
+                    logger.warning(f"   Existing ALB subnets: {existing_lb_subnets}")
+                    logger.warning(f"   Originally requested subnets: {self.subnet_ids}")
+                    # Update our subnet_ids to match the existing ALB
+                    self.subnet_ids = existing_lb_subnets
+                    logger.info(f"✅ Updated subnet configuration to match existing ALB: {self.subnet_ids}")
                 
                 return {"arn": lb["LoadBalancerArn"], "dns": lb["DNSName"]}
         except self.elbv2.exceptions.LoadBalancerNotFoundException:
@@ -118,13 +123,21 @@ class LoadBalancerService:
                     f"Found existing target group: {existing_tg['TargetGroupArn']}"
                 )
                 
-                # Check if the target group is in the same VPC
+                # Check if the target group is in the same VPC and has correct target type
                 existing_tg_vpc = existing_tg.get('VpcId')
+                existing_target_type = existing_tg.get('TargetType')
+                expected_target_type = "instance" if self.launch_type == "EC2" else "ip"
+                
                 logger.info(f"🔍 Existing target group VPC: {existing_tg_vpc}, Expected VPC: {self.vpc_id}")
+                logger.info(f"🔍 Existing target type: {existing_target_type}, Expected type: {expected_target_type}")
                 
                 if existing_tg_vpc != self.vpc_id:
                     logger.warning(f"⚠️  Existing target group is in different VPC ({existing_tg_vpc}) than expected ({self.vpc_id})")
                     logger.info("Creating new target group in the correct VPC")
+                    # Don't return, let it fall through to create a new one
+                elif existing_target_type != expected_target_type:
+                    logger.warning(f"⚠️  Existing target group has wrong target type ({existing_target_type}) for {self.launch_type}")
+                    logger.info(f"Creating new target group with correct target type ({expected_target_type})")
                     # Don't return, let it fall through to create a new one
                 else:
                     # Update the target group attributes to ensure correct health check settings
@@ -135,13 +148,20 @@ class LoadBalancerService:
         except Exception:
             logger.info("No existing target group found, creating new one")
 
+        # Determine target type based on launch type
+        # EC2 (bridge mode) uses instance targets, Fargate (awsvpc) uses IP targets
+        target_type = "instance" if self.launch_type == "EC2" else "ip"
+        target_port = 80 if self.launch_type == "EC2" else self.container_port
+        
+        logger.info(f"Creating target group with target type: {target_type}, port: {target_port}")
+        
         # Create new target group
         response = self.elbv2.create_target_group(
             Name=tg_name_to_create,
-            Port=self.container_port,
+            Port=target_port,
             Protocol="HTTP",
             VpcId=self.vpc_id,
-            TargetType="ip",
+            TargetType=target_type,
             HealthCheckEnabled=True,
             HealthCheckIntervalSeconds=30,
             HealthCheckPath=self.health_check_path,
