@@ -45,17 +45,17 @@ async function processDynamicContent(content: string): Promise<string> {
       if (pathMatch) {
         const relativePath = pathMatch[1].trim();
         try {
-          // Resolve path relative to project root
-          const absolutePath = path.join(process.cwd(), '..', relativePath);
+          // Always read from public directory
+          const publicPath = path.join(process.cwd(), 'public', 'aws-iam-policy.json');
           
-          if (fs.existsSync(absolutePath)) {
-            const jsonContent = fs.readFileSync(absolutePath, 'utf8');
+          if (fs.existsSync(publicPath)) {
+            const jsonContent = fs.readFileSync(publicPath, 'utf8');
             // Format JSON for display in markdown
             const formattedJson = '```json\n' + JSON.stringify(JSON.parse(jsonContent), null, 2) + '\n```';
             processedContent = processedContent.replace(match, formattedJson);
           } else {
-            console.warn(`JSON file not found: ${absolutePath}`);
-            processedContent = processedContent.replace(match, `<!-- Error: File not found: ${relativePath} -->`);
+            console.warn(`JSON file not found: ${publicPath}`);
+            processedContent = processedContent.replace(match, `<!-- Error: File not found: aws-iam-policy.json -->`);
           }
         } catch (error) {
           console.error(`Error processing JSON file ${relativePath}:`, error);
