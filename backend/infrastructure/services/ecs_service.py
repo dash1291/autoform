@@ -1,6 +1,7 @@
 import boto3
 import json
 import logging
+import time
 from typing import List, Dict, Any
 
 from infrastructure.types import EnvironmentVariable
@@ -221,25 +222,8 @@ class ECSService:
                 service_exists = True
 
                 logger.info(f"Found existing service with status: {service_status}")
-                
-                # If service is INACTIVE, we should delete it and create a new one
-                if service_status == "INACTIVE":
-                    logger.info(f"Service is INACTIVE, deleting it to create a fresh one...")
-                    try:
-                        self.ecs.delete_service(
-                            cluster=self.cluster_arn,
-                            service=service_name,
-                            force=True
-                        )
-                        import time
-                        time.sleep(5)
-                        logger.info("Successfully deleted INACTIVE service")
-                        service_exists = False
-                        # Exit early and let the code fall through to service creation
-                    except Exception as delete_inactive_error:
-                        logger.error(f"Failed to delete INACTIVE service: {str(delete_inactive_error)}")
-                        # Continue with normal flow
-                
+
+                # Try to update any existing service, regardless of status
                 if service_exists:
                     # Try to update any existing service, regardless of status
                     logger.info(
@@ -379,30 +363,13 @@ class ECSService:
                 logger.error(f"Failed to list services: {str(list_error)}")
 
         # If we get here, either no service exists or all update attempts failed
-        # In case of failed updates, we should delete the problematic service and create a new one
         if service_exists:
-            logger.warning("Service exists but cannot be updated. Attempting to delete and recreate...")
-            try:
-                # First, try to delete the existing service
-                logger.info(f"Deleting problematic service: {service_name}")
-                self.ecs.delete_service(
-                    cluster=self.cluster_arn,
-                    service=service_name,
-                    force=True
-                )
-                
-                # Wait a moment for deletion to process
-                import time
-                time.sleep(5)
-                
-                logger.info("Successfully deleted problematic service. Will create new one.")
-                service_exists = False
-                
-            except Exception as delete_error:
-                logger.error(f"Failed to delete problematic service: {str(delete_error)}")
-                raise Exception(
-                    f"Service exists but cannot be updated or deleted. Manual intervention required. Error: {str(delete_error)}"
-                )
+            logger.error(f"Service '{service_name}' exists but cannot be updated. This may be because it's in an INACTIVE state.")
+            logger.error("ACTION REQUIRED: Please manually delete the existing service and retry the deployment.")
+            logger.error(f"Command to delete: aws ecs delete-service --cluster {self.cluster_arn} --service {service_name} --force")
+            raise Exception(
+                f"Service '{service_name}' exists but cannot be updated. Please manually delete it and retry deployment."
+            )
 
         logger.info(f"No existing service found. Creating new service: {service_name}")
         try:

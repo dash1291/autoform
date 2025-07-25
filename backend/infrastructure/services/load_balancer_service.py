@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import List, Optional
 from utils.aws_client import create_client
 from .acm_service import ACMService
@@ -173,58 +174,14 @@ class LoadBalancerService:
                     logger.info("Creating new target group in the correct VPC")
                     # Don't return, let it fall through to create a new one
                 elif existing_tg_type != 'ip':
+                    # This is a corner case with inconsistent infrastructure
                     logger.warning(f"⚠️  Existing target group has incorrect target type ({existing_tg_type}) - expected 'ip' for Fargate")
-                    
-                    # Check if this target group is currently attached to any load balancer
-                    is_in_use = False
-                    lb_using_tg = None
-                    try:
-                        # Get all load balancers and check their target groups
-                        lbs_response = self.elbv2.describe_load_balancers()
-                        for lb in lbs_response.get('LoadBalancers', []):
-                            # Get listeners for this load balancer
-                            listeners_response = self.elbv2.describe_listeners(LoadBalancerArn=lb['LoadBalancerArn'])
-                            for listener in listeners_response.get('Listeners', []):
-                                for action in listener.get('DefaultActions', []):
-                                    if action.get('Type') == 'forward' and action.get('TargetGroupArn') == existing_tg['TargetGroupArn']:
-                                        is_in_use = True
-                                        lb_using_tg = lb['LoadBalancerName']
-                                        break
-                                if is_in_use:
-                                    break
-                            if is_in_use:
-                                break
-                    except Exception as check_error:
-                        logger.warning(f"Could not check if target group is in use: {check_error}")
-                        # Assume it's in use to be safe
-                        is_in_use = True
-                    
-                    if is_in_use:
-                        logger.warning(f"⚠️  Target group is currently in use by load balancer: {lb_using_tg or 'unknown'}. Creating new one with different name.")
-                        # Create with a different name to avoid conflicts
-                        tg_name_to_create = f"{tg_name}-ip"
-                        if len(tg_name_to_create) > 32:
-                            tg_name_to_create = tg_name_to_create[:32]
-                        logger.info(f"Will create new target group with name: {tg_name_to_create}")
-                    else:
-                        logger.info("Target group is not in use. Safe to delete and recreate.")
-                        # Delete the existing target group
-                        try:
-                            logger.info(f"Deleting target group with incorrect type: {existing_tg['TargetGroupArn']}")
-                            self.elbv2.delete_target_group(TargetGroupArn=existing_tg['TargetGroupArn'])
-                            
-                            # Wait a moment for deletion to process
-                            import time
-                            time.sleep(5)
-                            
-                            logger.info("Successfully deleted target group with incorrect type")
-                        except Exception as delete_error:
-                            logger.error(f"Failed to delete target group: {delete_error}")
-                            # Try to create with a different name
-                            tg_name_to_create = f"{tg_name}-ip"
-                            if len(tg_name_to_create) > 32:
-                                tg_name_to_create = tg_name_to_create[:32]
-                            logger.info(f"Will create new target group with name: {tg_name_to_create}")
+                    logger.warning("This appears to be legacy infrastructure. Creating a new target group with '-ip' suffix.")
+                    # Create with a different name to avoid conflicts
+                    tg_name_to_create = f"{tg_name}-ip"
+                    if len(tg_name_to_create) > 32:
+                        tg_name_to_create = tg_name_to_create[:32]
+                    logger.info(f"Will create new target group with name: {tg_name_to_create}")
                     # Don't return, let it fall through to create a new one
                 else:
                     # Update the target group attributes to ensure correct health check settings
