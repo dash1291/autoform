@@ -57,7 +57,6 @@ export default function DomainManagement({
   // Form state
   const [domainData, setDomainData] = useState({
     domain: "",
-    enableHttps: true,
     autoProvisionCertificate: true,
     useRoute53Validation: false,
   });
@@ -73,13 +72,12 @@ export default function DomainManagement({
       if (env) {
         setDomainData({
           domain: env.domain || "",
-          enableHttps: env.enableHttps || true,
           autoProvisionCertificate: env.autoProvisionCertificate !== false,
           useRoute53Validation: env.useRoute53Validation === true,
         });
 
         // Fetch certificate status if custom domain exists
-        if ((env.domain || env.customDomain) && env.enableHttps) {
+        if (env.domain) {
           fetchCertificateStatus(env.id);
         }
       }
@@ -87,7 +85,6 @@ export default function DomainManagement({
       setSelectedEnvironment(null);
       setDomainData({
         domain: "",
-        enableHttps: true,
         autoProvisionCertificate: true,
         useRoute53Validation: false,
       });
@@ -152,7 +149,6 @@ export default function DomainManagement({
     try {
       const updateData = {
         domain: domainData.domain || null,
-        enableHttps: domainData.enableHttps,
         autoProvisionCertificate: domainData.autoProvisionCertificate,
         useRoute53Validation: false, // Always false since we don't support Route53 validation yet
       };
@@ -162,36 +158,11 @@ export default function DomainManagement({
         updateData
       );
 
-      // Handle certificate information
-      if (result.certificate) {
-        setCertificateInfo(result.certificate);
-
-        if (result.certificate.status === "provisioned") {
-          setSuccess(
-            `Domain configured successfully! SSL certificate is ready.`
-          );
-        } else if (result.certificate.status === "pending_validation") {
-          if (result.certificate.validationRequired === "manual") {
-            setSuccess(
-              `Domain configured successfully! SSL certificate requested - manual validation required.`
-            );
-          } else {
-            setSuccess(
-              `Domain configured successfully! SSL certificate validation in progress.`
-            );
-          }
-        } else if (result.certificate.status === "failed") {
-          setError(
-            `Domain configured but SSL certificate provisioning failed: ${result.certificate.error}`
-          );
-        }
-      } else {
-        setSuccess(`Domain configured successfully`);
-      }
+      setSuccess("Domain configuration updated successfully!");
 
       // Refresh environments and certificate status
       await fetchEnvironments();
-      if (domainData.domain && domainData.enableHttps) {
+      if (domainData.domain) {
         await fetchCertificateStatus(selectedEnvironment.id);
       }
     } catch (error: any) {

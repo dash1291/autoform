@@ -141,9 +141,9 @@ export interface Environment {
   projectName?: string
   branch: string
   status: ProjectStatus
-  domain?: string
+  domain?: string  // User's custom domain
+  albDns?: string  // ALB DNS name
   certificateArn?: string
-  enableHttps?: boolean
   autoProvisionCertificate?: boolean
   useRoute53Validation?: boolean
   cpu: number
@@ -159,7 +159,6 @@ export interface Environment {
   ecsClusterArn?: string
   ecsServiceArn?: string
   albArn?: string
-  albDns?: string
   awsConfig: {
     id: string
     name: string

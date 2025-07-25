@@ -460,17 +460,13 @@ export default function EnvironmentManagement({ projectId, teamId, onEnvironment
                         </span>
                         {environment.domain && (
                           <a 
-                            href={`${environment.enableHttps ? 'https' : 'http'}://${environment.domain}`}
+                            href={`https://${environment.domain}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center text-blue-600 hover:text-blue-800 hover:underline"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {environment.enableHttps ? (
-                              <Lock className="h-3 w-3 mr-1 text-green-600" />
-                            ) : (
-                              <Globe className="h-3 w-3 mr-1" />
-                            )}
+                            <Lock className="h-3 w-3 mr-1 text-green-600" />
                             {environment.domain}
                             <ExternalLink className="h-3 w-3 ml-1" />
                           </a>
