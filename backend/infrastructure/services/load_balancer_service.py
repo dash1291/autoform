@@ -1,6 +1,7 @@
 import logging
-from typing import List
+from typing import List, Optional
 from utils.aws_client import create_client
+from .acm_service import ACMService
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,12 @@ class LoadBalancerService:
         container_port: int = 3000,
         health_check_path: str = "/",
         aws_credentials=None,
+        certificate_arn: str = None,
+        enable_https: bool = False,
+        redirect_http_to_https: bool = True,
+        domain_name: Optional[str] = None,
+        auto_provision_certificate: bool = True,
+        use_route53_validation: bool = True,
     ):
         self.project_name = project_name
         self.region = region
@@ -25,18 +32,50 @@ class LoadBalancerService:
         self.container_port = container_port
         self.health_check_path = health_check_path
         self.aws_credentials = aws_credentials
+        self.certificate_arn = certificate_arn
+        self.enable_https = enable_https
+        self.redirect_http_to_https = redirect_http_to_https
+        self.domain_name = domain_name
+        self.auto_provision_certificate = auto_provision_certificate
+        self.use_route53_validation = use_route53_validation
 
         # Initialize ELBv2 client with custom credentials if provided
         self.elbv2 = create_client("elbv2", region, aws_credentials)
+        
+        # Initialize ACM service if needed
+        self.acm_service = None
+        if domain_name and auto_provision_certificate and not certificate_arn:
+            self.acm_service = ACMService(
+                project_name=project_name,
+                domain_name=domain_name,
+                region=region,
+                aws_credentials=aws_credentials,
+                use_route53_validation=use_route53_validation,
+            )
 
         self.load_balancer_arn: str = ""
         self.load_balancer_dns: str = ""
         self.load_balancer_name: str = ""
         self.target_group_arn: str = ""
         self.listener_arn: str = ""
+        self.https_listener_arn: str = ""
 
     async def initialize(self):
         """Initialize Load Balancer resources"""
+        # Auto-provision certificate if needed
+        if self.domain_name and self.auto_provision_certificate and not self.certificate_arn:
+            logger.info(f"Auto-provisioning certificate for domain: {self.domain_name}")
+            if self.acm_service:
+                try:
+                    # During deployment, wait for validation to complete
+                    self.certificate_arn = await self.acm_service.get_or_create_certificate(wait_for_validation=True)
+                    self.enable_https = True
+                    logger.info(f"Certificate provisioned successfully: {self.certificate_arn}")
+                except Exception as e:
+                    logger.error(f"Failed to auto-provision certificate: {e}")
+                    logger.warning("Continuing without HTTPS...")
+                    self.enable_https = False
+        
         # Create or find load balancer
         lb_result = await self._create_or_find_load_balancer()
         self.load_balancer_arn = lb_result["arn"]
@@ -47,6 +86,11 @@ class LoadBalancerService:
 
         # Create listener
         self.listener_arn = await self._create_listener()
+        
+        # Create DNS record if domain is configured
+        if self.domain_name and self.acm_service and self.load_balancer_dns:
+            logger.info(f"Creating DNS record for {self.domain_name} -> {self.load_balancer_dns}")
+            await self.acm_service.create_dns_record_for_load_balancer(self.load_balancer_dns)
 
     async def _create_or_find_load_balancer(self) -> dict:
         """Create or find Application Load Balancer"""
@@ -118,13 +162,69 @@ class LoadBalancerService:
                     f"Found existing target group: {existing_tg['TargetGroupArn']}"
                 )
                 
-                # Check if the target group is in the same VPC
+                # Check if the target group is in the same VPC and has correct target type
                 existing_tg_vpc = existing_tg.get('VpcId')
+                existing_tg_type = existing_tg.get('TargetType')
                 logger.info(f"🔍 Existing target group VPC: {existing_tg_vpc}, Expected VPC: {self.vpc_id}")
+                logger.info(f"🔍 Existing target group type: {existing_tg_type}, Expected type: ip")
                 
                 if existing_tg_vpc != self.vpc_id:
                     logger.warning(f"⚠️  Existing target group is in different VPC ({existing_tg_vpc}) than expected ({self.vpc_id})")
                     logger.info("Creating new target group in the correct VPC")
+                    # Don't return, let it fall through to create a new one
+                elif existing_tg_type != 'ip':
+                    logger.warning(f"⚠️  Existing target group has incorrect target type ({existing_tg_type}) - expected 'ip' for Fargate")
+                    
+                    # Check if this target group is currently attached to any load balancer
+                    is_in_use = False
+                    lb_using_tg = None
+                    try:
+                        # Get all load balancers and check their target groups
+                        lbs_response = self.elbv2.describe_load_balancers()
+                        for lb in lbs_response.get('LoadBalancers', []):
+                            # Get listeners for this load balancer
+                            listeners_response = self.elbv2.describe_listeners(LoadBalancerArn=lb['LoadBalancerArn'])
+                            for listener in listeners_response.get('Listeners', []):
+                                for action in listener.get('DefaultActions', []):
+                                    if action.get('Type') == 'forward' and action.get('TargetGroupArn') == existing_tg['TargetGroupArn']:
+                                        is_in_use = True
+                                        lb_using_tg = lb['LoadBalancerName']
+                                        break
+                                if is_in_use:
+                                    break
+                            if is_in_use:
+                                break
+                    except Exception as check_error:
+                        logger.warning(f"Could not check if target group is in use: {check_error}")
+                        # Assume it's in use to be safe
+                        is_in_use = True
+                    
+                    if is_in_use:
+                        logger.warning(f"⚠️  Target group is currently in use by load balancer: {lb_using_tg or 'unknown'}. Creating new one with different name.")
+                        # Create with a different name to avoid conflicts
+                        tg_name_to_create = f"{tg_name}-ip"
+                        if len(tg_name_to_create) > 32:
+                            tg_name_to_create = tg_name_to_create[:32]
+                        logger.info(f"Will create new target group with name: {tg_name_to_create}")
+                    else:
+                        logger.info("Target group is not in use. Safe to delete and recreate.")
+                        # Delete the existing target group
+                        try:
+                            logger.info(f"Deleting target group with incorrect type: {existing_tg['TargetGroupArn']}")
+                            self.elbv2.delete_target_group(TargetGroupArn=existing_tg['TargetGroupArn'])
+                            
+                            # Wait a moment for deletion to process
+                            import time
+                            time.sleep(5)
+                            
+                            logger.info("Successfully deleted target group with incorrect type")
+                        except Exception as delete_error:
+                            logger.error(f"Failed to delete target group: {delete_error}")
+                            # Try to create with a different name
+                            tg_name_to_create = f"{tg_name}-ip"
+                            if len(tg_name_to_create) > 32:
+                                tg_name_to_create = tg_name_to_create[:32]
+                            logger.info(f"Will create new target group with name: {tg_name_to_create}")
                     # Don't return, let it fall through to create a new one
                 else:
                     # Update the target group attributes to ensure correct health check settings
@@ -151,7 +251,11 @@ class LoadBalancerService:
             HealthyThresholdCount=2,
             UnhealthyThresholdCount=2,
             Matcher={"HttpCode": "200"},
-            Tags=[{"Key": "Name", "Value": tg_name_to_create}],
+            Tags=[
+                {"Key": "Name", "Value": tg_name_to_create},
+                {"Key": "Project", "Value": self.project_name},
+                {"Key": "ManagedBy", "Value": "AutoForm"}
+            ],
         )
 
         target_group = response["TargetGroups"][0]
@@ -181,40 +285,119 @@ class LoadBalancerService:
             # Don't fail deployment if we can't update attributes
 
     async def _create_listener(self) -> str:
-        """Create listener for the load balancer"""
+        """Create listener(s) for the load balancer"""
+        # Create HTTP listener
+        self.listener_arn = await self._create_http_listener()
+        
+        # Create HTTPS listener if certificate is provided
+        if self.enable_https and self.certificate_arn:
+            self.https_listener_arn = await self._create_https_listener()
+            logger.info(f"HTTPS listener created with certificate: {self.certificate_arn}")
+        
+        return self.listener_arn
+
+    async def _create_http_listener(self) -> str:
+        """Create HTTP listener"""
         try:
-            # Check if listener already exists
+            # Check if HTTP listener already exists
             response = self.elbv2.describe_listeners(
                 LoadBalancerArn=self.load_balancer_arn
             )
 
-            # Update existing listener to point to new target group
-            if response["Listeners"] and len(response["Listeners"]) > 0:
-                listener = response["Listeners"][0]
+            for listener in response.get("Listeners", []):
+                if listener.get("Port") == 80:
+                    # Update existing HTTP listener
+                    if self.redirect_http_to_https and self.enable_https and self.certificate_arn:
+                        # Configure redirect to HTTPS
+                        self.elbv2.modify_listener(
+                            ListenerArn=listener["ListenerArn"],
+                            DefaultActions=[{
+                                "Type": "redirect",
+                                "RedirectConfig": {
+                                    "Protocol": "HTTPS",
+                                    "Port": "443",
+                                    "StatusCode": "HTTP_301"
+                                }
+                            }],
+                        )
+                        logger.info(f"Updated HTTP listener to redirect to HTTPS: {listener['ListenerArn']}")
+                    else:
+                        # Forward to target group
+                        self.elbv2.modify_listener(
+                            ListenerArn=listener["ListenerArn"],
+                            DefaultActions=[
+                                {"Type": "forward", "TargetGroupArn": self.target_group_arn}
+                            ],
+                        )
+                        logger.info(f"Updated existing HTTP listener: {listener['ListenerArn']}")
+                    return listener["ListenerArn"]
+        except Exception as e:
+            logger.info(f"Error checking for existing HTTP listener: {e}")
 
-                self.elbv2.modify_listener(
-                    ListenerArn=listener["ListenerArn"],
-                    DefaultActions=[
-                        {"Type": "forward", "TargetGroupArn": self.target_group_arn}
-                    ],
-                )
+        # Create new HTTP listener
+        if self.redirect_http_to_https and self.enable_https and self.certificate_arn:
+            # Create with redirect action
+            default_actions = [{
+                "Type": "redirect",
+                "RedirectConfig": {
+                    "Protocol": "HTTPS",
+                    "Port": "443",
+                    "StatusCode": "HTTP_301"
+                }
+            }]
+        else:
+            # Create with forward action
+            default_actions = [
+                {"Type": "forward", "TargetGroupArn": self.target_group_arn}
+            ]
 
-                logger.info(f"Updated existing listener: {listener['ListenerArn']}")
-                return listener["ListenerArn"]
-        except Exception:
-            logger.info("No existing listener found, creating new one")
-
-        # Create new listener
         response = self.elbv2.create_listener(
             LoadBalancerArn=self.load_balancer_arn,
             Port=80,
             Protocol="HTTP",
-            DefaultActions=[
-                {"Type": "forward", "TargetGroupArn": self.target_group_arn}
-            ],
-            Tags=[{"Key": "Name", "Value": f"{self.project_name}-listener"}],
+            DefaultActions=default_actions,
+            Tags=[{"Key": "Name", "Value": f"{self.project_name}-http-listener"}],
         )
 
         listener = response["Listeners"][0]
-        logger.info(f"Created new listener: {listener['ListenerArn']}")
+        logger.info(f"Created new HTTP listener: {listener['ListenerArn']}")
+        return listener["ListenerArn"]
+
+    async def _create_https_listener(self) -> str:
+        """Create HTTPS listener"""
+        try:
+            # Check if HTTPS listener already exists
+            response = self.elbv2.describe_listeners(
+                LoadBalancerArn=self.load_balancer_arn
+            )
+
+            for listener in response.get("Listeners", []):
+                if listener.get("Port") == 443:
+                    # Update existing HTTPS listener
+                    self.elbv2.modify_listener(
+                        ListenerArn=listener["ListenerArn"],
+                        Certificates=[{"CertificateArn": self.certificate_arn}],
+                        DefaultActions=[
+                            {"Type": "forward", "TargetGroupArn": self.target_group_arn}
+                        ],
+                    )
+                    logger.info(f"Updated existing HTTPS listener: {listener['ListenerArn']}")
+                    return listener["ListenerArn"]
+        except Exception as e:
+            logger.info(f"Error checking for existing HTTPS listener: {e}")
+
+        # Create new HTTPS listener
+        response = self.elbv2.create_listener(
+            LoadBalancerArn=self.load_balancer_arn,
+            Port=443,
+            Protocol="HTTPS",
+            Certificates=[{"CertificateArn": self.certificate_arn}],
+            DefaultActions=[
+                {"Type": "forward", "TargetGroupArn": self.target_group_arn}
+            ],
+            Tags=[{"Key": "Name", "Value": f"{self.project_name}-https-listener"}],
+        )
+
+        listener = response["Listeners"][0]
+        logger.info(f"Created new HTTPS listener: {listener['ListenerArn']}")
         return listener["ListenerArn"]

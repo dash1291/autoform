@@ -32,6 +32,42 @@ export const docSections: DocSection[] = [
   }
 ]
 
+async function processDynamicContent(content: string): Promise<string> {
+  // Replace {{include-json:path}} with the JSON file content
+  const jsonIncludeRegex = /\{\{include-json:(.*?)\}\}/g;
+  
+  let processedContent = content;
+  const matches = content.match(jsonIncludeRegex);
+  
+  if (matches) {
+    for (const match of matches) {
+      const pathMatch = match.match(/\{\{include-json:(.*?)\}\}/);
+      if (pathMatch) {
+        const relativePath = pathMatch[1].trim();
+        try {
+          // Resolve path relative to project root
+          const absolutePath = path.join(process.cwd(), '..', relativePath);
+          
+          if (fs.existsSync(absolutePath)) {
+            const jsonContent = fs.readFileSync(absolutePath, 'utf8');
+            // Format JSON for display in markdown
+            const formattedJson = '```json\n' + JSON.stringify(JSON.parse(jsonContent), null, 2) + '\n```';
+            processedContent = processedContent.replace(match, formattedJson);
+          } else {
+            console.warn(`JSON file not found: ${absolutePath}`);
+            processedContent = processedContent.replace(match, `<!-- Error: File not found: ${relativePath} -->`);
+          }
+        } catch (error) {
+          console.error(`Error processing JSON file ${relativePath}:`, error);
+          processedContent = processedContent.replace(match, `<!-- Error processing file: ${relativePath} -->`);
+        }
+      }
+    }
+  }
+  
+  return processedContent;
+}
+
 export async function getDocBySlug(slug: string): Promise<{ meta: DocMeta; content: string } | null> {
   try {
     const docsDirectory = path.join(process.cwd(), 'src/content/docs')
@@ -45,10 +81,13 @@ export async function getDocBySlug(slug: string): Promise<{ meta: DocMeta; conte
     const fileContents = fs.readFileSync(fullPath, 'utf8')
     const { data, content } = matter(fileContents)
     
+    // Process dynamic content first (e.g., JSON file inclusions)
+    const dynamicContent = await processDynamicContent(content)
+    
     // Process markdown content to HTML
     const processedContent = await remark()
       .use(html, { sanitize: false })
-      .process(content)
+      .process(dynamicContent)
     const contentHtml = processedContent.toString()
     
     return {

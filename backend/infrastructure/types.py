@@ -27,6 +27,12 @@ class ECSInfrastructureArgs(BaseModel):
     cpu: int = 256
     memory: int = 512
     disk_size: int = Field(21, alias="diskSize")
+    domain_name: Optional[str] = Field(None, alias="domainName")
+    certificate_arn: Optional[str] = Field(None, alias="certificateArn")
+    enable_https: bool = Field(False, alias="enableHttps")
+    auto_provision_certificate: bool = Field(True, alias="autoProvisionCertificate")
+    use_route53_validation: bool = Field(True, alias="useRoute53Validation")
+    redirect_http_to_https: bool = Field(True, alias="redirectHttpToHttps")
 
     class Config:
         populate_by_name = True
@@ -40,6 +46,9 @@ class ECSInfrastructureOutput(BaseModel):
     load_balancer_name: str = Field(alias="loadBalancerName")
     vpc_id: Optional[str] = Field(None, alias="vpcId")
     subnet_ids: Optional[List[str]] = Field(None, alias="subnetIds")
+    domain_name: Optional[str] = Field(None, alias="domainName")
+    application_url: Optional[str] = Field(None, alias="applicationUrl")
+    certificate_arn: Optional[str] = Field(None, alias="certificateArn")
 
     class Config:
         populate_by_name = True

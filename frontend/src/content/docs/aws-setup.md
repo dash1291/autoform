@@ -27,6 +27,8 @@ Autoform will create and manage these AWS resources:
 - **ECR** - Container Registry
 - **ECS Fargate** - Serverless container hosting
 - **ALB** - Application Load Balancer
+- **ACM** - SSL certificates for HTTPS domains
+- **Route53** - DNS management (optional, for automatic domain validation)
 
 ---
 
@@ -44,107 +46,9 @@ Autoform will create and manage these AWS resources:
 
 Create and attach this custom policy for Autoform deployments:
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "ECSManagement",
-      "Effect": "Allow",
-      "Action": [
-        "ecs:*",
-        "application-autoscaling:*"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "EC2NetworkManagement",
-      "Effect": "Allow",
-      "Action": [
-        "ec2:CreateVpc",
-        "ec2:CreateSubnet",
-        "ec2:CreateInternetGateway",
-        "ec2:CreateRouteTable",
-        "ec2:CreateRoute",
-        "ec2:CreateSecurityGroup",
-        "ec2:CreateTags",
-        "ec2:AttachInternetGateway",
-        "ec2:AssociateRouteTable",
-        "ec2:AuthorizeSecurityGroupIngress",
-        "ec2:ModifyVpcAttribute",
-        "ec2:ModifySubnetAttribute",
-        "ec2:Describe*"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "LoadBalancerManagement",
-      "Effect": "Allow",
-      "Action": [
-        "elasticloadbalancing:*"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "IAMRoleManagement",
-      "Effect": "Allow",
-      "Action": [
-        "iam:CreateRole",
-        "iam:AttachRolePolicy",
-        "iam:PutRolePolicy",
-        "iam:PassRole",
-        "iam:GetRole",
-        "iam:ListAttachedRolePolicies",
-        "iam:ListRolePolicies",
-        "iam:TagRole"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "ECRManagement",
-      "Effect": "Allow",
-      "Action": [
-        "ecr:*"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "CodeBuildManagement",
-      "Effect": "Allow",
-      "Action": [
-        "codebuild:*"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "CloudWatchLogs",
-      "Effect": "Allow",
-      "Action": [
-        "logs:*"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "SecretsManager",
-      "Effect": "Allow",
-      "Action": [
-        "secretsmanager:*"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "S3Access",
-      "Effect": "Allow",
-      "Action": [
-        "s3:*"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
+{{include-json:backend/aws-iam-policy.json}}
 
-> This policy provides the necessary permissions for Autoform to deploy applications to AWS ECS.
+> This policy provides the necessary permissions for Autoform to deploy applications to AWS ECS, including SSL certificate management and optional Route53 DNS automation.
 
 ### Step 3: Create Access Keys
 

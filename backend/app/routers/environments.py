@@ -83,7 +83,12 @@ async def get_project_environments(
                     "name": env.name,
                     "branch": env.branch,
                     "status": env.status,
-                    "domain": env.domain,
+                    "domain": env.custom_domain,
+                    "albDns": env.domain,
+                    "certificateArn": env.certificate_arn,
+                    "enableHttps": env.enable_https,
+                    "autoProvisionCertificate": env.auto_provision_certificate,
+                    "useRoute53Validation": env.use_route53_validation,
                     "existingVpcId": env.existing_vpc_id,
                     "existingSubnetIds": env.existing_subnet_ids,
                     "existingClusterArn": env.existing_cluster_arn,
@@ -211,6 +216,10 @@ async def create_environment(
             existing_vpc_id=environment_data.get("existingVpcId"),
             existing_subnet_ids=environment_data.get("existingSubnetIds"),
             existing_cluster_arn=environment_data.get("existingClusterArn"),
+            custom_domain=environment_data.get("domain"),
+            enable_https=environment_data.get("enableHttps", False),
+            auto_provision_certificate=environment_data.get("autoProvisionCertificate", True),
+            use_route53_validation=environment_data.get("useRoute53Validation", False),
             status=EnvironmentStatus.CREATED,
         )
         
@@ -306,7 +315,8 @@ async def get_environment(
             "ecsClusterArn": environment.ecs_cluster_arn,
             "ecsServiceArn": environment.ecs_service_arn,
             "albArn": environment.alb_arn,
-            "domain": environment.domain,
+            "domain": environment.custom_domain,
+            "albDns": environment.custom_domain,
             "existingVpcId": environment.existing_vpc_id,
             "existingSubnetIds": environment.existing_subnet_ids,
             "existingClusterArn": environment.existing_cluster_arn,
@@ -349,14 +359,15 @@ async def update_environment(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Environment not found"
             )
         
-        # Check if environment is deployed - if so, block AWS and compute resource changes
+        # Check if environment is deployed - if so, block infrastructure resource changes
+        # AWS credentials can be updated (for rotation/account switching)
         is_deployed = environment.status == "DEPLOYED" or environment.ecs_service_arn is not None
-        protected_fields = {"awsConfigId", "awsConfigType", "existingVpcId", "existingSubnetIds", "existingClusterArn", "cpu", "memory", "diskSize"}
+        protected_fields = {"existingVpcId", "existingSubnetIds", "existingClusterArn", "cpu", "memory", "diskSize"}
         
         if is_deployed and any(field in environment_data for field in protected_fields):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot modify AWS or compute resource settings for deployed environments. Please delete and recreate the environment if you need to change these settings."
+                detail="Cannot modify infrastructure resource settings (VPC, subnets, cluster, CPU, memory, disk) for deployed environments. AWS credentials and domain settings can still be updated."
             )
         
         # Get project
@@ -463,6 +474,91 @@ async def update_environment(
             environment.existing_subnet_ids = environment_data["existingSubnetIds"]
         if "existingClusterArn" in environment_data:
             environment.existing_cluster_arn = environment_data["existingClusterArn"]
+        if "domain" in environment_data:
+            environment.custom_domain = environment_data["domain"]
+        if "enableHttps" in environment_data:
+            environment.enable_https = environment_data["enableHttps"]
+        if "autoProvisionCertificate" in environment_data:
+            environment.auto_provision_certificate = environment_data["autoProvisionCertificate"]
+        if "useRoute53Validation" in environment_data:
+            environment.use_route53_validation = environment_data["useRoute53Validation"]
+
+        # Handle certificate provisioning if domain and HTTPS settings changed
+        certificate_info = None
+        if environment.custom_domain and environment.enable_https and environment.auto_provision_certificate:
+            try:
+                from infrastructure.services.acm_service import ACMService
+                from services.encryption_service import encryption_service
+                
+                # Get team AWS credentials
+                team_aws_config = await session.get(TeamAwsConfig, environment.team_aws_config_id)
+                aws_credentials = None
+                if team_aws_config:
+                    # Decrypt team credentials
+                    access_key = encryption_service.decrypt(team_aws_config.aws_access_key_id)
+                    secret_key = encryption_service.decrypt(team_aws_config.aws_secret_access_key)
+                    
+                    if access_key and secret_key:
+                        aws_credentials = {"access_key": access_key, "secret_key": secret_key}
+                
+                # Initialize ACM service
+                acm_service = ACMService(
+                    project_name=environment.name,
+                    domain_name=environment.custom_domain,
+                    region=team_aws_config.aws_region if team_aws_config else "us-east-1",
+                    aws_credentials=aws_credentials,
+                    use_route53_validation=environment.use_route53_validation,
+                )
+                
+                # Try to get or create certificate (don't wait for validation to avoid blocking)
+                certificate_arn = await acm_service.get_or_create_certificate(wait_for_validation=False)
+                environment.certificate_arn = certificate_arn
+                
+                certificate_status = await acm_service.get_certificate_status()
+                
+                certificate_info = {
+                    "certificateArn": certificate_arn,
+                    "status": "provisioned" if certificate_status == "ISSUED" else "pending_validation",
+                    "certificateStatus": certificate_status
+                }
+                
+                logger.info(f"Certificate status for {environment.custom_domain}: {certificate_status}, use_route53: {environment.use_route53_validation}")
+                logger.info(f"Validation records available: {len(acm_service.validation_records) if acm_service.validation_records else 0}")
+                
+                # If certificate is pending validation, provide appropriate instructions
+                if certificate_status == "PENDING_VALIDATION":
+                    if environment.use_route53_validation:
+                        certificate_info.update({
+                            "validationRequired": "automatic",
+                            "validationRecords": acm_service.validation_records,
+                            "domain": environment.custom_domain,
+                            "instructions": {
+                                "step1": "Route53 validation is in progress",
+                                "step2": "Certificate validation typically completes within 15 minutes", 
+                                "step3": "If Route53 validation fails, you may need to add the DNS records manually"
+                            }
+                        })
+                    else:
+                        certificate_info.update({
+                            "validationRequired": "manual",
+                            "validationRecords": acm_service.validation_records,
+                            "domain": environment.custom_domain,
+                            "instructions": {
+                                "step1": "Add the CNAME validation records to your DNS provider",
+                                "step2": f"Add a CNAME record pointing {environment.custom_domain} to your load balancer (if deployed)",
+                                "step3": "Certificate validation typically completes within 15 minutes"
+                            }
+                        })
+                
+                logger.info(f"Certificate requested for {environment.custom_domain}: {certificate_arn}, Status: {certificate_status}")
+                
+            except Exception as e:
+                logger.error(f"Failed to provision certificate for {environment.custom_domain}: {e}")
+                certificate_info = {
+                    "error": str(e),
+                    "status": "failed",
+                    "validationRequired": "manual" if not environment.use_route53_validation else "automatic"
+                }
 
         # Save changes
         session.add(environment)
@@ -471,11 +567,16 @@ async def update_environment(
 
         logger.info(f"Environment {environment_id} updated by {current_user.id}")
 
-        return {
+        response = {
             "message": f"Environment '{environment.name}' updated successfully",
             "id": environment.id,
             "name": environment.name,
         }
+        
+        if certificate_info:
+            response["certificate"] = certificate_info
+            
+        return response
 
 
 @router.delete("/environments/{environment_id}")
@@ -542,6 +643,149 @@ async def delete_environment(
         )
 
         return {"message": f"Environment '{environment.name}' deleted successfully"}
+
+
+@router.get("/environments/{environment_id}/certificate-status")
+async def get_certificate_status(
+    environment_id: str, current_user: User = Depends(get_current_user)
+):
+    """Get the current certificate status for an environment"""
+    async with get_async_session() as session:
+        # Get environment
+        environment = await session.get(Environment, environment_id)
+        if not environment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Environment not found"
+            )
+        
+        # Get project and verify access
+        project = await session.get(Project, environment.project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+        
+        team = await session.get(Team, project.team_id)
+        if not team:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
+            )
+        
+        # Verify access
+        has_access = team.owner_id == current_user.id
+        if not has_access:
+            member_result = await session.execute(
+                select(TeamMember).where(
+                    and_(TeamMember.team_id == project.team_id, TeamMember.user_id == current_user.id)
+                )
+            )
+            has_access = member_result.scalar_one_or_none() is not None
+        
+        if not has_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            )
+        
+        # If no domain or HTTPS not enabled, return not applicable
+        if not environment.custom_domain or not environment.enable_https:
+            return {
+                "status": "not_applicable",
+                "message": "HTTPS not configured for this environment"
+            }
+        
+        # If no certificate ARN, return pending
+        if not environment.certificate_arn:
+            return {
+                "status": "not_requested",
+                "message": "SSL certificate not yet requested"
+            }
+        
+        try:
+            from infrastructure.services.acm_service import ACMService
+            from services.encryption_service import encryption_service
+            
+            # Get team AWS credentials
+            team_aws_config = await session.get(TeamAwsConfig, environment.team_aws_config_id)
+            if not team_aws_config:
+                return {
+                    "status": "error",
+                    "message": "No AWS credentials configured"
+                }
+            
+            # Decrypt team credentials
+            access_key = encryption_service.decrypt(team_aws_config.aws_access_key_id)
+            secret_key = encryption_service.decrypt(team_aws_config.aws_secret_access_key)
+            
+            if not access_key or not secret_key:
+                return {
+                    "status": "error", 
+                    "message": "Invalid AWS credentials"
+                }
+            
+            aws_credentials = {"access_key": access_key, "secret_key": secret_key}
+            
+            # Check certificate status using ACM service
+            acm_service = ACMService(
+                project_name=environment.name,
+                domain_name=environment.custom_domain,
+                region=team_aws_config.aws_region,
+                aws_credentials=aws_credentials,
+                use_route53_validation=environment.use_route53_validation,
+            )
+            
+            # Set the certificate ARN so we can check its status
+            acm_service.certificate_arn = environment.certificate_arn
+            certificate_status = await acm_service.get_certificate_status()
+            
+            if certificate_status == "ISSUED":
+                return {
+                    "status": "ready",
+                    "message": "SSL certificate is active and ready"
+                }
+            elif certificate_status == "PENDING_VALIDATION":
+                logger.info(f"Certificate is pending validation for {environment.custom_domain}")
+                logger.info(f"use_route53_validation: {environment.use_route53_validation}")
+                
+                # Always try to get validation records when pending
+                validation_records = None
+                try:
+                    validation_records = await acm_service.get_certificate_validation_records()
+                    logger.info(f"Got {len(validation_records) if validation_records else 0} validation records")
+                except Exception as e:
+                    logger.error(f"Error getting validation records: {e}")
+                
+                response = {
+                    "status": "pending_validation",
+                    "message": "SSL certificate is pending DNS validation"
+                }
+                
+                # Always set validation type based on use_route53_validation setting
+                response["validationRequired"] = "manual" if not environment.use_route53_validation else "automatic"
+                
+                if validation_records:
+                    response["validationRecords"] = validation_records
+                elif not environment.use_route53_validation:
+                    # For manual validation, we should have records. Log if we don't
+                    logger.warning(f"No validation records found for manual validation of {environment.custom_domain}")
+                    
+                return response
+            elif certificate_status == "FAILED":
+                return {
+                    "status": "failed",
+                    "message": "SSL certificate validation failed"
+                }
+            else:
+                return {
+                    "status": "unknown",
+                    "message": f"SSL certificate status: {certificate_status}"
+                }
+                
+        except Exception as e:
+            logger.error(f"Error checking certificate status: {e}")
+            return {
+                "status": "error",
+                "message": "Failed to check certificate status"
+            }
 
 
 @router.get("/environments/{environment_id}/available-aws-configs")

@@ -2,175 +2,120 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "S3Permissions",
+      "Sid": "ECSManagement",
       "Effect": "Allow",
       "Action": [
-        "s3:CreateBucket",
-        "s3:ListBucket",
-        "s3:GetBucketLocation",
-        "s3:PutObject",
-        "s3:GetObject",
-        "s3:DeleteObject",
-        "s3:PutBucketPolicy",
-        "s3:GetBucketPolicy",
-        "s3:ListAllMyBuckets"
-      ],
-      "Resource": [
-        "arn:aws:s3:::*-builds-*",
-        "arn:aws:s3:::*-builds-*/*"
-      ]
-    },
-    {
-      "Sid": "ECRPermissions",
-      "Effect": "Allow",
-      "Action": [
-        "ecr:CreateRepository",
-        "ecr:DescribeRepositories",
-        "ecr:GetAuthorizationToken",
-        "ecr:BatchCheckLayerAvailability",
-        "ecr:GetDownloadUrlForLayer",
-        "ecr:BatchGetImage",
-        "ecr:PutImage",
-        "ecr:InitiateLayerUpload",
-        "ecr:UploadLayerPart",
-        "ecr:CompleteLayerUpload",
-        "ecr:ListImages",
-        "ecr:DescribeImages"
+        "ecs:*",
+        "application-autoscaling:*"
       ],
       "Resource": "*"
     },
     {
-      "Sid": "ECSPermissions",
-      "Effect": "Allow",
-      "Action": [
-        "ecs:CreateCluster",
-        "ecs:DescribeClusters",
-        "ecs:ListClusters",
-        "ecs:CreateService",
-        "ecs:UpdateService",
-        "ecs:DescribeServices",
-        "ecs:ListServices",
-        "ecs:RegisterTaskDefinition",
-        "ecs:DescribeTaskDefinition",
-        "ecs:ListTaskDefinitions",
-        "ecs:RunTask",
-        "ecs:StopTask",
-        "ecs:DescribeTasks",
-        "ecs:ListTasks",
-        "ecs:ExecuteCommand",
-        "ecs:TagResource"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "IAMPermissions",
-      "Effect": "Allow",
-      "Action": [
-        "iam:CreateRole",
-        "iam:GetRole",
-        "iam:AttachRolePolicy",
-        "iam:PutRolePolicy",
-        "iam:PassRole",
-        "iam:CreateServiceLinkedRole",
-        "iam:TagRole"
-      ],
-      "Resource": [
-        "arn:aws:iam::*:role/*-ecs-execution-role",
-        "arn:aws:iam::*:role/*-ecs-task-role",
-        "arn:aws:iam::*:role/*-codebuild-role",
-        "arn:aws:iam::*:role/aws-service-role/*"
-      ]
-    },
-    {
-      "Sid": "EC2Permissions",
+      "Sid": "EC2NetworkManagement",
       "Effect": "Allow",
       "Action": [
         "ec2:CreateVpc",
-        "ec2:DescribeVpcs",
         "ec2:CreateSubnet",
-        "ec2:DescribeSubnets",
         "ec2:CreateInternetGateway",
-        "ec2:AttachInternetGateway",
-        "ec2:DescribeInternetGateways",
         "ec2:CreateRouteTable",
         "ec2:CreateRoute",
-        "ec2:AssociateRouteTable",
-        "ec2:DescribeRouteTables",
         "ec2:CreateSecurityGroup",
-        "ec2:AuthorizeSecurityGroupIngress",
-        "ec2:AuthorizeSecurityGroupEgress",
-        "ec2:DescribeSecurityGroups",
         "ec2:CreateTags",
-        "ec2:DescribeTags",
+        "ec2:AttachInternetGateway",
+        "ec2:AssociateRouteTable",
+        "ec2:AuthorizeSecurityGroupIngress",
         "ec2:ModifyVpcAttribute",
         "ec2:ModifySubnetAttribute",
-        "ec2:DescribeAvailabilityZones"
+        "ec2:Describe*"
       ],
       "Resource": "*"
     },
     {
-      "Sid": "ELBPermissions",
+      "Sid": "LoadBalancerManagement",
       "Effect": "Allow",
       "Action": [
-        "elasticloadbalancing:CreateLoadBalancer",
-        "elasticloadbalancing:DescribeLoadBalancers",
-        "elasticloadbalancing:CreateTargetGroup",
-        "elasticloadbalancing:DescribeTargetGroups",
-        "elasticloadbalancing:ModifyTargetGroup",
-        "elasticloadbalancing:CreateListener",
-        "elasticloadbalancing:DescribeListeners",
-        "elasticloadbalancing:ModifyListener",
-        "elasticloadbalancing:RegisterTargets",
-        "elasticloadbalancing:DeregisterTargets",
-        "elasticloadbalancing:DescribeTargetHealth",
-        "elasticloadbalancing:AddTags",
-        "elasticloadbalancing:DescribeTags"
+        "elasticloadbalancing:*"
       ],
       "Resource": "*"
     },
     {
-      "Sid": "CloudWatchLogsPermissions",
+      "Sid": "IAMRoleManagement",
       "Effect": "Allow",
       "Action": [
-        "logs:CreateLogGroup",
-        "logs:CreateLogStream",
-        "logs:PutLogEvents",
-        "logs:DescribeLogGroups",
-        "logs:DescribeLogStreams",
-        "logs:GetLogEvents",
-        "logs:FilterLogEvents"
+        "iam:CreateRole",
+        "iam:AttachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:PassRole",
+        "iam:GetRole",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRolePolicies",
+        "iam:TagRole"
       ],
-      "Resource": [
-        "arn:aws:logs:*:*:log-group:/ecs/*",
-        "arn:aws:logs:*:*:log-group:/aws/codebuild/*"
-      ]
+      "Resource": "*"
     },
     {
-      "Sid": "CodeBuildPermissions",
+      "Sid": "ECRManagement",
       "Effect": "Allow",
       "Action": [
-        "codebuild:CreateProject",
-        "codebuild:UpdateProject",
-        "codebuild:DeleteProject",
-        "codebuild:BatchGetProjects",
-        "codebuild:StartBuild",
-        "codebuild:StopBuild",
-        "codebuild:BatchGetBuilds"
+        "ecr:*"
       ],
-      "Resource": "arn:aws:codebuild:*:*:project/*-build"
+      "Resource": "*"
     },
     {
-      "Sid": "SecretsManagerPermissions",
+      "Sid": "CodeBuildManagement",
       "Effect": "Allow",
       "Action": [
-        "secretsmanager:CreateSecret",
-        "secretsmanager:UpdateSecret",
-        "secretsmanager:DeleteSecret",
-        "secretsmanager:DescribeSecret",
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:TagResource"
+        "codebuild:*"
       ],
-      "Resource": "arn:aws:secretsmanager:*:*:secret:autoform/*"
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SecretsManager",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3Access",
+      "Effect": "Allow",
+      "Action": [
+        "s3:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ACMPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "acm:RequestCertificate",
+        "acm:DescribeCertificate",
+        "acm:ListCertificates",
+        "acm:GetCertificate",
+        "acm:AddTagsToCertificate"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Route53Permissions",
+      "Effect": "Allow",
+      "Action": [
+        "route53:ListHostedZones",
+        "route53:GetHostedZone",
+        "route53:ChangeResourceRecordSets",
+        "route53:GetChange",
+        "route53:ListResourceRecordSets"
+      ],
+      "Resource": "*"
     },
     {
       "Sid": "STSPermissions",

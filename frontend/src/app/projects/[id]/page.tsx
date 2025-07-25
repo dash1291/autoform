@@ -8,6 +8,7 @@ import { Project, Deployment, Environment } from '@/types'
 import LogsViewer from '@/components/LogsViewer'
 import EnvironmentVariables from '@/components/EnvironmentVariables'
 import EnvironmentManagement from '@/components/EnvironmentManagement'
+import DomainManagement from '@/components/DomainManagement'
 import DeploymentModal from '@/components/DeploymentModal'
 import SimpleShell from '@/components/SimpleShell'
 import NetworkConfiguration from '@/components/NetworkConfiguration'
@@ -35,7 +36,7 @@ export default function ProjectDetail() {
   const [activeDeploymentId, setActiveDeploymentId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'deployments' | 'logs' | 'settings' | 'shell'>('overview')
   const [selectedEnvironment, setSelectedEnvironment] = useState<Environment | null>(null)
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'environment' | 'environments' | 'repository' | 'resources'>('repository')
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'environment' | 'environments' | 'repository' | 'resources' | 'domains'>('repository')
   const [environments, setEnvironments] = useState<Environment[]>([])
   const [selectedEnvironmentForVars, setSelectedEnvironmentForVars] = useState<string | null>(null)
   const [serviceStatus, setServiceStatus] = useState<any>(null)
@@ -646,7 +647,7 @@ export default function ProjectDetail() {
                       onClick={() => setActiveSettingsTab('environments')}
                       className={`${activeSettingsTab === 'environments' ? 'text-foreground' : 'text-muted-foreground'} hover:text-foreground w-full justify-start text-sm`}
                     >
-                      Deployment Environments
+                      Environments
                     </Button>
                     <Button
                       variant={'ghost'}
@@ -654,6 +655,13 @@ export default function ProjectDetail() {
                       className={`${activeSettingsTab === 'environment' ? 'text-foreground' : 'text-muted-foreground'} hover:text-foreground w-full justify-start text-sm`}
                     >
                       Environment Variables
+                    </Button>
+                    <Button
+                      variant={'ghost'}
+                      onClick={() => setActiveSettingsTab('domains')}
+                      className={`${activeSettingsTab === 'domains' ? 'text-foreground' : 'text-muted-foreground'} hover:text-foreground w-full justify-start text-sm`}
+                    >
+                      Domains
                     </Button>
                     <Button
                       variant={'ghost'}
@@ -726,6 +734,12 @@ export default function ProjectDetail() {
                       projectId={params.id as string}
                       project={project}
                       onUpdate={fetchProject}
+                    />
+                  )}
+                  {activeSettingsTab === 'domains' && (
+                    <DomainManagement
+                      projectId={project?.id || ''}
+                      teamId={project?.teamId}
                     />
                   )}
                   {activeSettingsTab === 'resources' && (
