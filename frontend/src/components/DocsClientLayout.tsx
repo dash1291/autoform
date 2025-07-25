@@ -95,18 +95,18 @@ export default function DocsClientLayout({ children }: DocsClientLayoutProps) {
         <main className="flex-1 pt-16 flex flex-col items-center">
           <div className="w-full max-w-4xl mx-auto px-6 py-8 lg:py-12">
             {/* Breadcrumb */}
-            <nav className="flex items-center text-sm text-gray-500 mb-8 mt-12 lg:mt-0">
-              <Link href="/" className="hover:text-gray-700">
+            <nav className="flex items-center text-sm mb-8 mt-12 lg:mt-0">
+              <Link href="/" className="hover:text-muted-foreground">
                 Home
               </Link>
               <ChevronRight className="h-4 w-4 mx-2" />
-              <Link href="/docs" className="hover:text-gray-700">
+              <Link href="/docs" className="hover:text-muted-foreground">
                 Docs
               </Link>
               {pathname !== '/docs' && (
                 <>
                   <ChevronRight className="h-4 w-4 mx-2" />
-                  <span className="text-gray-900">
+                  <span className="">
                     {pathname.split('/').pop()?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                   </span>
                 </>
