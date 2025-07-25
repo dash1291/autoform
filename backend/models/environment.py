@@ -32,7 +32,11 @@ class Environment(BaseModel, table=True):
     ecs_service_arn: Optional[str] = None
     alb_arn: Optional[str] = None
     alb_name: Optional[str] = None
-    domain: Optional[str] = None
+    domain: Optional[str] = None  # ALB DNS name
+    custom_domain: Optional[str] = None  # User's custom domain
+    certificate_arn: Optional[str] = None
+    auto_provision_certificate: bool = Field(default=True)
+    use_route53_validation: bool = Field(default=False)
     task_definition_arn: Optional[str] = None
     secrets_arn: Optional[str] = None
 

@@ -22,7 +22,9 @@ import {
   Server, 
   Globe,
   Cpu,
-  MemoryStick
+  MemoryStick,
+  Lock,
+  ExternalLink
 } from 'lucide-react'
 
 interface EnvironmentManagementProps {
@@ -65,6 +67,7 @@ export default function EnvironmentManagement({ projectId, teamId, onEnvironment
   useEffect(() => {
     fetchEnvironments()
   }, [projectId])
+
 
   useEffect(() => {
     if (success) {
@@ -205,26 +208,51 @@ export default function EnvironmentManagement({ projectId, teamId, onEnvironment
     setSuccess('')
 
     try {
-      const submitData = {
-        name: formData.name,
-        branch: formData.branch,
-        awsConfigId: formData.awsConfigId,
-        awsConfigType: 'team',
-        cpu: formData.cpu,
-        memory: formData.memory,
-        diskSize: formData.diskSize,
-        port: formData.port,
-        healthCheckPath: formData.healthCheckPath,
-        subdirectory: formData.subdirectory || null,
-        existingVpcId: formData.existingVpcId || null,
-        existingSubnetIds: selectedSubnets.length > 0 ? JSON.stringify(selectedSubnets) : null,
-        existingClusterArn: formData.existingClusterArn || null
-      }
+      let submitData: any = {}
 
       if (editingEnvironment) {
+        // For updates, send modifiable fields
+        const modifiableFields = {
+          name: formData.name,
+          branch: formData.branch,
+          // AWS credentials can always be updated (for rotation/account switching)
+          awsConfigId: formData.awsConfigId,
+          awsConfigType: 'team',
+        }
+
+        // Only include infrastructure fields if environment is not deployed
+        const isDeployed = editingEnvironment.status === 'DEPLOYED' || editingEnvironment.ecsServiceArn
+        if (!isDeployed) {
+          Object.assign(modifiableFields, {
+            cpu: formData.cpu,
+            memory: formData.memory,
+            diskSize: formData.diskSize,
+            existingVpcId: formData.existingVpcId || null,
+            existingSubnetIds: selectedSubnets.length > 0 ? JSON.stringify(selectedSubnets) : null,
+            existingClusterArn: formData.existingClusterArn || null
+          })
+        }
+
+        submitData = modifiableFields
         await apiClient.updateEnvironment(editingEnvironment.id, submitData)
         setSuccess(`Environment "${formData.name}" updated successfully`)
       } else {
+        // For creation, include all fields
+        submitData = {
+          name: formData.name,
+          branch: formData.branch,
+          awsConfigId: formData.awsConfigId,
+          awsConfigType: 'team',
+          cpu: formData.cpu,
+          memory: formData.memory,
+          diskSize: formData.diskSize,
+          port: formData.port,
+          healthCheckPath: formData.healthCheckPath,
+          subdirectory: formData.subdirectory || null,
+          existingVpcId: formData.existingVpcId || null,
+          existingSubnetIds: selectedSubnets.length > 0 ? JSON.stringify(selectedSubnets) : null,
+          existingClusterArn: formData.existingClusterArn || null
+        }
         await apiClient.createEnvironment(projectId, submitData)
         setSuccess(`Environment "${formData.name}" created successfully`)
       }
@@ -307,6 +335,7 @@ export default function EnvironmentManagement({ projectId, teamId, onEnvironment
         </Alert>
       )}
 
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg">Deployment Environments</h2>
@@ -385,6 +414,7 @@ export default function EnvironmentManagement({ projectId, teamId, onEnvironment
                 )}
               </div>
 
+
               <div className="flex justify-end space-x-2 pt-4">
                 <Button size="sm" type="button" variant="outline" onClick={() => setShowForm(false)}>
                   Cancel
@@ -430,14 +460,19 @@ export default function EnvironmentManagement({ projectId, teamId, onEnvironment
                         </span>
                         {environment.domain && (
                           <a 
-                            href={`http://${environment.domain}`}
+                            href={`${environment.enableHttps ? 'https' : 'http'}://${environment.domain}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center text-blue-600 hover:text-blue-800 hover:underline"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <Globe className="h-3 w-3 mr-1" />
+                            {environment.enableHttps ? (
+                              <Lock className="h-3 w-3 mr-1 text-green-600" />
+                            ) : (
+                              <Globe className="h-3 w-3 mr-1" />
+                            )}
                             {environment.domain}
+                            <ExternalLink className="h-3 w-3 ml-1" />
                           </a>
                         )}
                       </CardDescription>

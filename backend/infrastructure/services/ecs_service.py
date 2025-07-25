@@ -1,6 +1,7 @@
 import boto3
 import json
 import logging
+import time
 from typing import List, Dict, Any
 
 from infrastructure.types import EnvironmentVariable
@@ -69,6 +70,10 @@ class ECSService:
 
         # Create or update ECS service
         self.service_arn = await self._create_or_update_service()
+        
+        # Validate that we got a valid service ARN
+        if not self.service_arn:
+            raise Exception("Failed to create or update ECS service: service_arn is None")
 
     async def _check_existing_service_config(self):
         """Check if service exists and get its container name"""
@@ -199,6 +204,8 @@ class ECSService:
         """Create or update ECS service"""
         service_name = f"{self.project_name}-service"
         service_exists = False
+        
+        logger.info(f"Starting service creation/update for: {service_name}")
 
         try:
             # Check if service already exists
@@ -217,44 +224,54 @@ class ECSService:
                 logger.info(f"Found existing service with status: {service_status}")
 
                 # Try to update any existing service, regardless of status
-                logger.info(
-                    f"Attempting to update existing service: {existing_service.get('serviceArn', 'unknown arn')}"
-                )
-                try:
-                    container_name = (
-                        getattr(self, "_existing_container_name", None)
-                        or self.project_name
-                    )
-                    update_response = self.ecs.update_service(
-                        cluster=self.cluster_arn,
-                        service=service_name,
-                        taskDefinition=self.task_definition_arn,
-                        desiredCount=1,
-                        enableExecuteCommand=True,
-                        loadBalancers=[
-                            {
-                                "targetGroupArn": self.target_group_arn,
-                                "containerName": container_name,
-                                "containerPort": self.container_port,
-                            }
-                        ],
-                    )
-                    logger.info("Service updated successfully")
-                    return update_response["service"]["serviceArn"]
-                except Exception as update_error:
-                    logger.warning(
-                        f"Failed to update existing service: {str(update_error)}"
-                    )
-
-                # If we get here, the initial update attempt failed
-                logger.info(
-                    "Initial update failed, checking if we need to wait for service to stabilize..."
-                )
-
-                if service_status in ["DRAINING", "PENDING"]:
+                if service_exists:
+                    # Try to update any existing service, regardless of status
                     logger.info(
-                        f"Service is {service_status}. Waiting for it to stabilize..."
+                        f"Attempting to update existing service: {existing_service.get('serviceArn', 'unknown arn')}"
                     )
+                    try:
+                        container_name = (
+                            getattr(self, "_existing_container_name", None)
+                            or self.project_name
+                        )
+                        update_response = self.ecs.update_service(
+                            cluster=self.cluster_arn,
+                            service=service_name,
+                            taskDefinition=self.task_definition_arn,
+                            desiredCount=1,
+                            enableExecuteCommand=True,
+                            loadBalancers=[
+                                {
+                                    "targetGroupArn": self.target_group_arn,
+                                    "containerName": container_name,
+                                    "containerPort": self.container_port,
+                                }
+                            ],
+                        )
+                        service_arn = update_response["service"]["serviceArn"]
+                        logger.info(f"Service updated successfully: {service_arn}")
+                        logger.info(f"Returning service ARN: {service_arn}")
+                        return service_arn
+                    except Exception as update_error:
+                        logger.error(
+                            f"Failed to update existing service: {str(update_error)}"
+                        )
+                        logger.error(f"Update error type: {type(update_error).__name__}")
+                        # Log more details about the service state
+                        logger.error(f"Service ARN: {existing_service.get('serviceArn', 'unknown')}")
+                        logger.error(f"Service status: {existing_service.get('status', 'unknown')}")
+                        logger.error(f"Task definition: {existing_service.get('taskDefinition', 'unknown')}")
+                        logger.error(f"Load balancers: {existing_service.get('loadBalancers', [])}")
+
+                    # If we get here, the initial update attempt failed
+                    logger.info(
+                        "Initial update failed, checking if we need to wait for service to stabilize..."
+                    )
+
+                    if service_status in ["DRAINING", "PENDING"]:
+                        logger.info(
+                            f"Service is {service_status}. Waiting for it to stabilize..."
+                        )
                     try:
                         # Wait for the service to stabilize before trying again
                         waiter = self.ecs.get_waiter("services_stable")
@@ -287,10 +304,10 @@ class ECSService:
                         logger.info("Service updated after stabilization")
                         return update_response["service"]["serviceArn"]
                     except Exception as stabilize_error:
-                        logger.warning(
+                        logger.error(
                             f"Failed to update service after stabilization: {str(stabilize_error)}"
                         )
-                        return None
+                        # Don't return None - let it fall through to service deletion/recreation logic
                 # If all update attempts failed, we have a configuration problem - don't try to create new service
                 logger.error(
                     "All update attempts failed. Cannot create new service when one already exists."
@@ -339,14 +356,19 @@ class ECSService:
                         logger.error(
                             f"Failed to update service found via list: {str(list_update_error)}"
                         )
+                        logger.error(f"List update error type: {type(list_update_error).__name__}")
+                        if hasattr(list_update_error, 'response'):
+                            logger.error(f"AWS error response: {list_update_error.response}")
             except Exception as list_error:
                 logger.error(f"Failed to list services: {str(list_error)}")
 
-        # Only create service if one doesn't exist
+        # If we get here, either no service exists or all update attempts failed
         if service_exists:
-            logger.error("Cannot create new service - one already exists!")
+            logger.error(f"Service '{service_name}' exists but cannot be updated. This may be because it's in an INACTIVE state.")
+            logger.error("ACTION REQUIRED: Please manually delete the existing service and retry the deployment.")
+            logger.error(f"Command to delete: aws ecs delete-service --cluster {self.cluster_arn} --service {service_name} --force")
             raise Exception(
-                "Service already exists but all update attempts failed. Cannot create duplicate service."
+                f"Service '{service_name}' exists but cannot be updated. Please manually delete it and retry deployment."
             )
 
         logger.info(f"No existing service found. Creating new service: {service_name}")
@@ -377,10 +399,16 @@ class ECSService:
             )
 
             service_arn = response["service"]["serviceArn"]
-            logger.info(f"ECS service created: {service_arn}")
+            logger.info(f"ECS service created successfully: {service_arn}")
+            logger.info(f"Returning service ARN: {service_arn}")
             return service_arn
 
         except Exception as create_error:
+            logger.error(f"Service creation failed: {str(create_error)}")
+            logger.error(f"Create error type: {type(create_error).__name__}")
+            if hasattr(create_error, 'response'):
+                logger.error(f"AWS error response: {create_error.response}")
+                
             if "not idempotent" in str(create_error).lower():
                 logger.info(
                     "Service creation failed due to existing service. Attempting to update instead..."

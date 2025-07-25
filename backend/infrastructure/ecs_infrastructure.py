@@ -79,6 +79,11 @@ class ECSInfrastructure:
                 container_port=self.container_port,
                 health_check_path=self.health_check_path,
                 aws_credentials=self.aws_credentials,
+                certificate_arn=self.args.certificate_arn,
+                redirect_http_to_https=self.args.redirect_http_to_https,
+                domain_name=self.args.domain_name,
+                auto_provision_certificate=self.args.auto_provision_certificate,
+                use_route53_validation=self.args.use_route53_validation,
             )
             await self.load_balancer_service.initialize()
 
@@ -105,6 +110,14 @@ class ECSInfrastructure:
 
             logger.info("✅ Infrastructure setup complete!")
 
+            # Determine the application URL
+            application_url = None
+            if self.args.domain_name:
+                protocol = "https" if self.load_balancer_service.certificate_arn else "http"
+                application_url = f"{protocol}://{self.args.domain_name}"
+            else:
+                application_url = f"http://{self.load_balancer_service.load_balancer_dns}"
+            
             return ECSInfrastructureOutput(
                 cluster_arn=self.ecs_service.cluster_arn,
                 service_arn=self.ecs_service.service_arn,
@@ -113,6 +126,9 @@ class ECSInfrastructure:
                 load_balancer_name=self.load_balancer_service.load_balancer_name,
                 vpc_id=self.vpc_service.vpc_id,
                 subnet_ids=self.vpc_service.subnet_ids,
+                domain_name=self.args.domain_name,
+                application_url=application_url,
+                certificate_arn=self.load_balancer_service.certificate_arn,
             )
 
         except Exception as error:

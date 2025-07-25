@@ -202,6 +202,10 @@ class ApiClient {
     return this.request<{ teamConfigs: Array<{ id: string; name: string; region: string; type: string }> }>(`/environments/environments/${environmentId}/available-aws-configs`)
   }
 
+  async getCertificateStatus(environmentId: string): Promise<{ status: string; message: string }> {
+    return this.request<{ status: string; message: string }>(`/environments/environments/${environmentId}/certificate-status`)
+  }
+
   async deployEnvironment(environmentId: string): Promise<{ message: string; deploymentId: string }> {
     return this.request<{ message: string; deploymentId: string }>(`/deployments/environments/${environmentId}/deploy`, {
       method: 'POST',

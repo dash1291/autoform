@@ -1117,6 +1117,11 @@ phases:
             existing_vpc_id=environment_network.get("existing_vpc_id"),
             existing_subnet_ids=environment_network.get("existing_subnet_ids"),
             existing_cluster_arn=environment_network.get("existing_cluster_arn"),
+            domain_name=environment_network.get("domain"),
+            certificate_arn=environment_network.get("certificate_arn"),
+            auto_provision_certificate=environment_network.get("auto_provision_certificate", True),
+            use_route53_validation=environment_network.get("use_route53_validation", True),
+            redirect_http_to_https=True,
         )
 
         # Add existing network resources if configured
@@ -1186,7 +1191,10 @@ phases:
         if result.load_balancer_arn:
             environment_update_data["albArn"] = result.load_balancer_arn
         if result.load_balancer_dns:
+            # Always store ALB DNS in domain field
             environment_update_data["domain"] = result.load_balancer_dns
+        if result.certificate_arn:
+            environment_update_data["certificate_arn"] = result.certificate_arn
         if result.vpc_id and not environment_network.get("existing_vpc_id"):
             # Only update VPC if it wasn't using an existing one
             environment_update_data["existingVpcId"] = result.vpc_id
@@ -1634,6 +1642,10 @@ phases:
                     "disk_size": environment.disk_size or 21,
                     "port": project.port if project else 3000,
                     "health_check_path": project.health_check_path if project else "/",
+                    "domain": environment.domain,
+                    "certificate_arn": environment.certificate_arn,
+                    "auto_provision_certificate": environment.auto_provision_certificate,
+                    "use_route53_validation": environment.use_route53_validation,
                 }
         except Exception as error:
             logger.error(f"Error fetching environment configuration: {error}")

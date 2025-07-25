@@ -142,6 +142,10 @@ export interface Environment {
   branch: string
   status: ProjectStatus
   domain?: string
+  certificateArn?: string
+  enableHttps?: boolean
+  autoProvisionCertificate?: boolean
+  useRoute53Validation?: boolean
   cpu: number
   memory: number
   diskSize?: number
@@ -155,6 +159,7 @@ export interface Environment {
   ecsClusterArn?: string
   ecsServiceArn?: string
   albArn?: string
+  albDns?: string
   awsConfig: {
     id: string
     name: string
