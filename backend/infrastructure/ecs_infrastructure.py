@@ -80,7 +80,6 @@ class ECSInfrastructure:
                 health_check_path=self.health_check_path,
                 aws_credentials=self.aws_credentials,
                 certificate_arn=self.args.certificate_arn,
-                enable_https=self.args.enable_https,
                 redirect_http_to_https=self.args.redirect_http_to_https,
                 domain_name=self.args.domain_name,
                 auto_provision_certificate=self.args.auto_provision_certificate,
@@ -114,7 +113,7 @@ class ECSInfrastructure:
             # Determine the application URL
             application_url = None
             if self.args.domain_name:
-                protocol = "https" if self.load_balancer_service.enable_https else "http"
+                protocol = "https" if self.load_balancer_service.certificate_arn else "http"
                 application_url = f"{protocol}://{self.args.domain_name}"
             else:
                 application_url = f"http://{self.load_balancer_service.load_balancer_dns}"

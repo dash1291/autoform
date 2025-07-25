@@ -19,7 +19,6 @@ class LoadBalancerService:
         health_check_path: str = "/",
         aws_credentials=None,
         certificate_arn: str = None,
-        enable_https: bool = False,
         redirect_http_to_https: bool = True,
         domain_name: Optional[str] = None,
         auto_provision_certificate: bool = True,
@@ -34,7 +33,6 @@ class LoadBalancerService:
         self.health_check_path = health_check_path
         self.aws_credentials = aws_credentials
         self.certificate_arn = certificate_arn
-        self.enable_https = enable_https
         self.redirect_http_to_https = redirect_http_to_https
         self.domain_name = domain_name
         self.auto_provision_certificate = auto_provision_certificate
@@ -70,12 +68,10 @@ class LoadBalancerService:
                 try:
                     # During deployment, wait for validation to complete
                     self.certificate_arn = await self.acm_service.get_or_create_certificate(wait_for_validation=True)
-                    self.enable_https = True
                     logger.info(f"Certificate provisioned successfully: {self.certificate_arn}")
                 except Exception as e:
                     logger.error(f"Failed to auto-provision certificate: {e}")
                     logger.warning("Continuing without HTTPS...")
-                    self.enable_https = False
         
         # Create or find load balancer
         lb_result = await self._create_or_find_load_balancer()
@@ -247,7 +243,7 @@ class LoadBalancerService:
         self.listener_arn = await self._create_http_listener()
         
         # Create HTTPS listener if certificate is provided
-        if self.enable_https and self.certificate_arn:
+        if self.certificate_arn:
             self.https_listener_arn = await self._create_https_listener()
             logger.info(f"HTTPS listener created with certificate: {self.certificate_arn}")
         
@@ -264,7 +260,7 @@ class LoadBalancerService:
             for listener in response.get("Listeners", []):
                 if listener.get("Port") == 80:
                     # Update existing HTTP listener
-                    if self.redirect_http_to_https and self.enable_https and self.certificate_arn:
+                    if self.redirect_http_to_https and self.certificate_arn:
                         # Configure redirect to HTTPS
                         self.elbv2.modify_listener(
                             ListenerArn=listener["ListenerArn"],
@@ -292,7 +288,7 @@ class LoadBalancerService:
             logger.info(f"Error checking for existing HTTP listener: {e}")
 
         # Create new HTTP listener
-        if self.redirect_http_to_https and self.enable_https and self.certificate_arn:
+        if self.redirect_http_to_https and self.certificate_arn:
             # Create with redirect action
             default_actions = [{
                 "Type": "redirect",

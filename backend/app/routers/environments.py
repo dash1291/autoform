@@ -214,7 +214,6 @@ async def create_environment(
             existing_subnet_ids=environment_data.get("existingSubnetIds"),
             existing_cluster_arn=environment_data.get("existingClusterArn"),
             custom_domain=environment_data.get("domain"),
-            enable_https=environment_data.get("enableHttps", False),
             auto_provision_certificate=environment_data.get("autoProvisionCertificate", True),
             use_route53_validation=environment_data.get("useRoute53Validation", False),
             status=EnvironmentStatus.CREATED,
@@ -473,16 +472,14 @@ async def update_environment(
             environment.existing_cluster_arn = environment_data["existingClusterArn"]
         if "domain" in environment_data:
             environment.custom_domain = environment_data["domain"]
-        if "enableHttps" in environment_data:
-            environment.enable_https = environment_data["enableHttps"]
         if "autoProvisionCertificate" in environment_data:
             environment.auto_provision_certificate = environment_data["autoProvisionCertificate"]
         if "useRoute53Validation" in environment_data:
             environment.use_route53_validation = environment_data["useRoute53Validation"]
 
-        # Handle certificate provisioning if domain and HTTPS settings changed
+        # Handle certificate provisioning if domain settings changed
         certificate_info = None
-        if environment.custom_domain and environment.enable_https and environment.auto_provision_certificate:
+        if environment.custom_domain and environment.auto_provision_certificate:
             try:
                 from infrastructure.services.acm_service import ACMService
                 from services.encryption_service import encryption_service
@@ -683,8 +680,8 @@ async def get_certificate_status(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
             )
         
-        # If no domain or HTTPS not enabled, return not applicable
-        if not environment.custom_domain or not environment.enable_https:
+        # If no domain configured, return not applicable
+        if not environment.custom_domain:
             return {
                 "status": "not_applicable",
                 "message": "HTTPS not configured for this environment"

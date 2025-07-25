@@ -29,7 +29,6 @@ class ECSInfrastructureArgs(BaseModel):
     disk_size: int = Field(21, alias="diskSize")
     domain_name: Optional[str] = Field(None, alias="domainName")
     certificate_arn: Optional[str] = Field(None, alias="certificateArn")
-    enable_https: bool = Field(False, alias="enableHttps")
     auto_provision_certificate: bool = Field(True, alias="autoProvisionCertificate")
     use_route53_validation: bool = Field(True, alias="useRoute53Validation")
     redirect_http_to_https: bool = Field(True, alias="redirectHttpToHttps")

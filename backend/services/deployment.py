@@ -1119,7 +1119,6 @@ phases:
             existing_cluster_arn=environment_network.get("existing_cluster_arn"),
             domain_name=environment_network.get("domain"),
             certificate_arn=environment_network.get("certificate_arn"),
-            enable_https=environment_network.get("enable_https", False),
             auto_provision_certificate=environment_network.get("auto_provision_certificate", True),
             use_route53_validation=environment_network.get("use_route53_validation", True),
             redirect_http_to_https=True,
@@ -1645,7 +1644,6 @@ phases:
                     "health_check_path": project.health_check_path if project else "/",
                     "domain": environment.domain,
                     "certificate_arn": environment.certificate_arn,
-                    "enable_https": environment.enable_https,
                     "auto_provision_certificate": environment.auto_provision_certificate,
                     "use_route53_validation": environment.use_route53_validation,
                 }

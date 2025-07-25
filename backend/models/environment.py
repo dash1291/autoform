@@ -35,7 +35,6 @@ class Environment(BaseModel, table=True):
     domain: Optional[str] = None  # ALB DNS name
     custom_domain: Optional[str] = None  # User's custom domain
     certificate_arn: Optional[str] = None
-    enable_https: bool = Field(default=False)
     auto_provision_certificate: bool = Field(default=True)
     use_route53_validation: bool = Field(default=False)
     task_definition_arn: Optional[str] = None
