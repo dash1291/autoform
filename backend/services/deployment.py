@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import re
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from utils.aws_client import create_client
@@ -153,6 +154,32 @@ class DeploymentService:
             return True
         return False
 
+    def mask_sensitive_command(self, command: str) -> str:
+        """Mask sensitive information in commands before logging"""
+        # Mask GitHub tokens in URLs (both gho_ and ghp_ patterns)
+        masked = re.sub(
+            r'https://([^@]+)@github\.com',
+            r'https://***@github.com',
+            command
+        )
+        
+        # Mask AWS credentials
+        masked = re.sub(
+            r'(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN)=\S+',
+            r'\1=***',
+            masked
+        )
+        
+        # Mask generic tokens/passwords in environment variables
+        masked = re.sub(
+            r'(PASSWORD|TOKEN|SECRET|KEY|APIKEY|API_KEY)=\S+',
+            r'\1=***',
+            masked,
+            flags=re.IGNORECASE
+        )
+        
+        return masked
+
     async def execute_with_logging(
         self,
         command: str,
@@ -166,7 +193,8 @@ class DeploymentService:
             raise Exception("Deployment aborted by user")
             
         if deployment_id:
-            await self.log_to_database(deployment_id, f"Executing: {command}")
+            masked_command = self.mask_sensitive_command(command)
+            await self.log_to_database(deployment_id, f"Executing: {masked_command}")
 
         try:
             result = subprocess.run(

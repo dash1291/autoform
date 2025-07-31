@@ -92,7 +92,7 @@ export default function NewProject() {
           }))
         }
       } else {
-        setError(data.detail || 'Unknown error occurred')
+        setError(data.error || 'Unknown error occurred')
         
         // If re-authentication is needed, show special message
         if (data.needsReauth) {
