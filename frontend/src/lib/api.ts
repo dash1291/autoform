@@ -52,13 +52,13 @@ class ApiClient {
         // If refresh fails, clear the token and throw the original error
         useJwtStore.getState().clearJwtToken()
         const error = await response.json().catch(() => ({ message: 'Authentication failed' }))
-        throw new Error(error.message || `HTTP ${response.status}`)
+        throw new Error(error.message || error.detail || `HTTP ${response.status}`)
       }
     }
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: 'Network error' }))
-      throw new Error(error.message || `HTTP ${response.status}`)
+      throw new Error(error.message || error.detail || `HTTP ${response.status}`)
     }
 
     return response.json()

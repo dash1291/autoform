@@ -92,7 +92,7 @@ export default function NewProject() {
           }))
         }
       } else {
-        setError(data.error || 'Unknown error occurred')
+        setError(data.detail || 'Unknown error occurred')
         
         // If re-authentication is needed, show special message
         if (data.needsReauth) {
@@ -167,13 +167,6 @@ export default function NewProject() {
             </p>
           </div>
           <div className="shadow rounded-lg py-6">
-            <div className="mb-6">
-              <CheckCircle className="h-4 w-4 mr-1" />
-              <h2 className="text-md mb-2">Create Your First Environment</h2>
-              <p className="text-sm text-muted-foreground">
-                Environments allow you to deploy your application to different stages like production, staging, or development.
-              </p>
-            </div>
             <div className="space-y-4">
               <Button 
                 onClick={() => router.push(`/projects/${projectCreated.id}?tab=environments`)}

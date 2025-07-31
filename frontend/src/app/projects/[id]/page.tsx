@@ -57,8 +57,17 @@ export default function ProjectDetail() {
   // Handle tab query parameter
   useEffect(() => {
     const tab = searchParams.get('tab')
-    if (tab && ['overview', 'environments', 'deployments', 'logs', 'settings', 'shell'].includes(tab)) {
-      setActiveTab(tab as any)
+    if (tab) {
+      // Handle nested tabs like "settings_environments"
+      if (tab.startsWith('settings_')) {
+        setActiveTab('settings')
+        const settingsSubTab = tab.replace('settings_', '')
+        if (['environment', 'environments', 'repository', 'resources', 'domains'].includes(settingsSubTab)) {
+          setActiveSettingsTab(settingsSubTab as any)
+        }
+      } else if (['overview', 'deployments', 'logs', 'settings', 'shell'].includes(tab)) {
+        setActiveTab(tab as any)
+      }
     }
   }, [searchParams])
 
