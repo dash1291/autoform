@@ -124,7 +124,7 @@ async def _deploy_project_async(self, config: Dict[str, Any], deployment_id: str
                 deployment = await error_session.get(Deployment, deployment_id)
                 if deployment:
                     current_logs = deployment.logs or ""
-                    error_msg = f"\n\n❌ Error: {str(e)}\n\nFull traceback:\n{traceback.format_exc()}"
+                    error_msg = f"\n\n❌ Error: {str(e)}"
                     
                     # Update deployment status to failed
                     deployment.status = DeploymentStatus.FAILED
