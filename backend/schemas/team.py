@@ -72,7 +72,7 @@ class TeamMemberBase(BaseModel):
 
 
 class TeamMember(TeamMemberBase):
-    id: str
+    id: Optional[str] = None  # Owner doesn't have a TeamMember entry, so id can be null
     team_id: str = Field(alias="teamId")
     joined_at: datetime = Field(alias="joinedAt")
     user: Optional[dict] = None  # Will include user info
