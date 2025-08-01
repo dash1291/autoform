@@ -58,7 +58,7 @@ class GitHubUserService:
         try:
             async with get_async_session() as session:
                 # Check if user already exists in our database
-                existing_user_result = await session.exec(
+                existing_user_result = await session.execute(
                     select(User).where(User.github_id == github_id)
                 )
                 existing_user = existing_user_result.scalar_one_or_none()
@@ -95,7 +95,7 @@ class GitHubUserService:
         """Get the GitHub access token for a user"""
         try:
             async with get_async_session() as session:
-                account_result = await session.exec(
+                account_result = await session.execute(
                     select(Account).where(
                         and_(Account.user_id == user_id, Account.provider == "github")
                     )

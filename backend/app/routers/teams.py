@@ -52,10 +52,54 @@ async def get_user_teams(current_user: UserSchema = Depends(get_current_user)):
         
         # Process owned teams
         for team in owned_teams.scalars().all():
-            # Get member count
-            member_count_result = await session.execute(
-                select(TeamMemberModel).where(TeamMemberModel.team_id == team.id)
+            # Get owner info (current user in this case)
+            owner_result = await session.execute(
+                select(UserModel).where(UserModel.id == team.owner_id)
             )
+            owner = owner_result.scalar_one_or_none()
+            
+            members = []
+            
+            # Add owner as first member
+            if owner:
+                members.append({
+                    "id": None,
+                    "teamId": team.id,
+                    "userId": owner.id,
+                    "role": TeamMemberRole.OWNER,
+                    "joinedAt": team.created_at,
+                    "user": {
+                        "id": owner.id,
+                        "name": owner.name,
+                        "email": owner.email,
+                        "image": owner.image,
+                        "githubId": owner.github_id,
+                    }
+                })
+            
+            # Get team members with user info
+            members_result = await session.execute(
+                select(TeamMemberModel, UserModel).where(
+                    TeamMemberModel.team_id == team.id
+                ).join(UserModel, TeamMemberModel.user_id == UserModel.id)
+            )
+            
+            for member, user in members_result.all():
+                members.append({
+                    "id": member.id,
+                    "teamId": member.team_id,
+                    "userId": member.user_id,
+                    "role": member.role,
+                    "joinedAt": member.joined_at,
+                    "user": {
+                        "id": user.id,
+                        "name": user.name,
+                        "email": user.email,
+                        "image": user.image,
+                        "githubId": user.github_id,
+                    }
+                })
+            
             all_teams[team.id] = {
                 "id": team.id,
                 "name": team.name,
@@ -63,26 +107,67 @@ async def get_user_teams(current_user: UserSchema = Depends(get_current_user)):
                 "createdAt": team.created_at,
                 "updatedAt": team.updated_at,
                 "ownerId": team.owner_id,
-                "memberCount": len(member_count_result.scalars().all()),
+                "members": members,
+                "memberCount": len(members),
                 "userRole": TeamMemberRole.OWNER,
             }
         
         # Process member teams
         for team in member_teams.scalars().all():
             if team.id not in all_teams:
-                # Get user's role in this team
-                user_member_result = await session.execute(
-                    select(TeamMemberModel).where(
-                        and_(TeamMemberModel.team_id == team.id, TeamMemberModel.user_id == current_user.id)
-                    )
+                # Get owner info first
+                owner_result = await session.execute(
+                    select(UserModel).where(UserModel.id == team.owner_id)
                 )
-                user_member = user_member_result.scalar_one_or_none()
-                role = user_member.role if user_member else TeamMemberRole.MEMBER
+                owner = owner_result.scalar_one_or_none()
                 
-                # Get member count
-                member_count_result = await session.execute(
-                    select(TeamMemberModel).where(TeamMemberModel.team_id == team.id)
+                members = []
+                
+                # Add owner as first member
+                if owner:
+                    members.append({
+                        "id": None,
+                        "teamId": team.id,
+                        "userId": owner.id,
+                        "role": TeamMemberRole.OWNER,
+                        "joinedAt": team.created_at,
+                        "user": {
+                            "id": owner.id,
+                            "name": owner.name,
+                            "email": owner.email,
+                            "image": owner.image,
+                            "githubId": owner.github_id,
+                        }
+                    })
+                
+                # Get team members with user info
+                members_result = await session.execute(
+                    select(TeamMemberModel, UserModel).where(
+                        TeamMemberModel.team_id == team.id
+                    ).join(UserModel, TeamMemberModel.user_id == UserModel.id)
                 )
+                
+                user_role = TeamMemberRole.MEMBER
+                for member, user in members_result.all():
+                    member_dict = {
+                        "id": member.id,
+                        "teamId": member.team_id,
+                        "userId": member.user_id,
+                        "role": member.role,
+                        "joinedAt": member.joined_at,
+                        "user": {
+                            "id": user.id,
+                            "name": user.name,
+                            "email": user.email,
+                            "image": user.image,
+                            "githubId": user.github_id,
+                        }
+                    }
+                    members.append(member_dict)
+                    
+                    # Update user's role if they're in the members list
+                    if member.user_id == current_user.id:
+                        user_role = member.role
                 
                 all_teams[team.id] = {
                     "id": team.id,
@@ -91,8 +176,9 @@ async def get_user_teams(current_user: UserSchema = Depends(get_current_user)):
                     "createdAt": team.created_at,
                     "updatedAt": team.updated_at,
                     "ownerId": team.owner_id,
-                    "memberCount": len(member_count_result.scalars().all()),
-                    "userRole": role,
+                    "members": members,
+                    "memberCount": len(members),
+                    "userRole": user_role,
                 }
         
         return list(all_teams.values())
@@ -176,29 +262,64 @@ async def get_team(team_id: str, current_user: User = Depends(get_current_user))
                 status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
             )
 
-        # Get member count
-        member_count_result = await session.execute(
-            select(func.count(TeamMemberModel.id)).where(
-                TeamMemberModel.team_id == team_id
-            )
+        # Get owner info first
+        owner_result = await session.execute(
+            select(UserModel).where(UserModel.id == team.owner_id)
         )
-        member_count = member_count_result.scalar_one()
+        owner = owner_result.scalar_one_or_none()
+        
+        members = []
+        
+        # Add owner as first member
+        if owner:
+            members.append({
+                "id": f"owner-{team.owner_id}",  # Generate a unique ID for the owner entry
+                "teamId": team.id,
+                "userId": owner.id,
+                "role": TeamMemberRole.OWNER,
+                "joinedAt": team.created_at,  # Use team creation date as owner's join date
+                "user": {
+                    "id": owner.id,
+                    "name": owner.name,
+                    "email": owner.email,
+                    "image": owner.image,
+                    "githubId": owner.github_id,
+                }
+            })
+        
+        # Get team members with user info
+        members_result = await session.execute(
+            select(TeamMemberModel, UserModel).where(
+                TeamMemberModel.team_id == team_id
+            ).join(UserModel, TeamMemberModel.user_id == UserModel.id)
+        )
+        
+        for member, user in members_result.all():
+            members.append({
+                "id": member.id,
+                "teamId": member.team_id,
+                "userId": member.user_id,
+                "role": member.role,
+                "joinedAt": member.joined_at,
+                "user": {
+                    "id": user.id,
+                    "name": user.name,
+                    "email": user.email,
+                    "image": user.image,
+                    "githubId": user.github_id,
+                }
+            })
+
+        # Get member count
+        member_count = len(members)
 
         # Determine user's role
         user_role = TeamMemberRole.OWNER if team.owner_id == current_user.id else TeamMemberRole.MEMBER
         
         if team.owner_id != current_user.id:
-            user_member_result = await session.execute(
-                select(TeamMemberModel).where(
-                    and_(
-                        TeamMemberModel.team_id == team_id,
-                        TeamMemberModel.user_id == current_user.id
-                    )
-                )
-            )
-            user_member = user_member_result.scalar_one_or_none()
+            user_member = next((m for m in members if m["userId"] == current_user.id), None)
             if user_member:
-                user_role = user_member.role
+                user_role = user_member["role"]
 
         return {
             "id": team.id,
@@ -207,6 +328,7 @@ async def get_team(team_id: str, current_user: User = Depends(get_current_user))
             "createdAt": team.created_at,
             "updatedAt": team.updated_at,
             "ownerId": team.owner_id,
+            "members": members,
             "memberCount": member_count,
             "userRole": user_role
         }
