@@ -33,7 +33,6 @@ export default function TeamDetail() {
   useEffect(() => {
     if (isAuthenticated && !authLoading && teamId) {
       fetchTeam()
-      fetchMembers()
     }
   }, [isAuthenticated, authLoading, teamId])
 
@@ -41,6 +40,8 @@ export default function TeamDetail() {
     try {
       const data = await apiClient.getTeam(teamId)
       setTeam(data)
+      setMembers(data.members || [])
+      setMembersLoading(false)
     } catch (error: any) {
       setError(error.message || 'Failed to fetch team')
     } finally {
@@ -62,7 +63,7 @@ export default function TeamDetail() {
   const handleAddMember = async (githubUsername: string, role: TeamMemberRole) => {
     try {
       await apiClient.addTeamMember(teamId, { githubUsername, role })
-      fetchMembers() // Refresh members list
+      fetchTeam() // Refresh team data including members
     } catch (error: any) {
       setError(error.message || 'Failed to add member')
     }
@@ -72,7 +73,7 @@ export default function TeamDetail() {
     if (confirm('Are you sure you want to remove this member from the team?')) {
       try {
         await apiClient.removeTeamMember(teamId, memberId)
-        fetchMembers() // Refresh members
+        fetchTeam() // Refresh team data including members
       } catch (error: any) {
         setError(error.message || 'Failed to remove member')
       }
@@ -129,9 +130,9 @@ export default function TeamDetail() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Error</h1>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <Button onClick={() => router.push('/dashboard')}>
+          <h1 className="text-2xl font-normal mb-4">Error</h1>
+          <p className="text-muted-foreground mb-4">{error}</p>
+          <Button size="sm" onClick={() => router.push('/dashboard')}>
             Back to Dashboard
           </Button>
         </div>
@@ -301,7 +302,7 @@ function MembersList({
   return (
     <div className="space-y-4">
       {members.map((member) => (
-        <div key={member.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+        <div key={member.id} className="flex items-center justify-between p-4 border border-bordee rounded-lg">
           <div className="flex items-center space-x-3">
             <div className="flex-shrink-0">
               {member.user?.image ? (
@@ -311,22 +312,22 @@ function MembersList({
                   alt={member.user.name || 'User'} 
                 />
               ) : (
-                <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                  <User className="h-6 w-6 text-gray-600" />
+                <div className="h-10 w-10 rounded-full flex items-center justify-center">
+                  <User className="h-6 w-6" />
                 </div>
               )}
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-900">
+              <p className="text-sm font-medium">
                 {member.user?.name || 'Unknown User'}
               </p>
-              <p className="text-sm text-gray-500">{member.user?.email}</p>
+              <p className="text-sm text-muted-foreground">{member.user?.email}</p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
             <div className="flex items-center space-x-1">
               {getRoleIcon(member.role)}
-              <span className="text-sm text-gray-600">{member.role}</span>
+              <span className="text-sm text-muted-foreground">{member.role}</span>
             </div>
             {canManageMembers && member.role !== TeamMemberRole.OWNER && (
               <Button
