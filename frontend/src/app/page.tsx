@@ -68,7 +68,7 @@ export default function Home() {
             <span className="text-muted-foreground">in minutes</span>
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed">
-            Autoform makes it easy for developers to deploy applications to AWS so that developers can focus on building.
+            Autoform makes it easy to deploy applications to AWS so that developers can focus on building.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
