@@ -51,7 +51,7 @@ export default function Home() {
     {
       icon: Users,
       title: "Team Collaboration",
-      description: "Share projects and environments with your team. Built-in access controls and deployment history for better collaboration.",
+      description: "Share projects and environments with your team within Autoform. Built-in access controls and deployment history for better collaboration. No need to manage the complexity of AWS IAM roles and policies.",
       iconColor: "text-green-600",
       iconBg: "bg-green-50"
     }
@@ -68,8 +68,7 @@ export default function Home() {
             <span className="text-muted-foreground">in minutes</span>
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed">
-            Connect your GitHub repository and deploy to production-ready AWS infrastructure. 
-            No DevOps expertise required.
+            Autoform makes it easy for developers to deploy applications to AWS so that developers can focus on building.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
@@ -87,7 +86,7 @@ export default function Home() {
       <section className="py-20 bg-muted/20">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-16">
-            <h2 className="text-3xl font-normal text-foreground mb-8">
+            <h2 className="text-3xl text-center font-normal text-foreground mb-8">
               Everything you need in a platform to ship fast
             </h2>
           </div>

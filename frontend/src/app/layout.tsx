@@ -9,6 +9,9 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'Autoform',
   description: 'Deploy to your cloud with ease',
+  icons: {
+    icon: '/favicon.png',
+  },
 }
 
 export default function RootLayout({
