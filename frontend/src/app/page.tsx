@@ -36,7 +36,7 @@ export default function Home() {
     },
     {
       icon: Expand,
-      title: "Autoscaling",
+      title: "Ready to Scale",
       description: "Autoform makes your application ready to scale when the traffic arrives. You can scale your application automatically based on industry standards or control it yourself.",
       iconColor: "text-purple-600",
       iconBg: "bg-purple-100"
