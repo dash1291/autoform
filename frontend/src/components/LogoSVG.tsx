@@ -7,7 +7,7 @@ interface LogoSVGProps {
   color?: string
 }
 
-export function LogoSVG({ className = "h-8 w-8", color = "white" }: LogoSVGProps) {
+export function LogoSVG({ className = "h-8 w-8" }: LogoSVGProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -24,11 +24,11 @@ export function LogoSVG({ className = "h-8 w-8", color = "white" }: LogoSVGProps
   // Simple approach: use img tag with CSS filters to make it white
   return (
     <img 
-      src="/logo.svg" 
+      src="/logo.png" 
       alt="Autoform Logo" 
       className={className}
       style={{ 
-        filter: 'brightness(0) invert(1)',
+        //filter: 'brightness(0) invert(1)',
         display: isLoading ? 'none' : 'block'
       }}
       onError={() => setError('Failed to load logo')}

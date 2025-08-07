@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: 'Autoform',
   description: 'Deploy to your cloud with ease',
   icons: {
-    icon: '/favicon.png',
+    icon: '/logo.png',
   },
 }
 
