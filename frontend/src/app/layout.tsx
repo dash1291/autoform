@@ -7,8 +7,8 @@ import Navbar from '@/components/Navbar'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Autoform',
-  description: 'Deploy to your cloud with ease',
+  title: 'Autoform - Deploy applications to your cloud with ease',
+  description: 'An easy-to-use platform to deploy and manage applications on your AWS account with minimal infrastructure knowledge.',
   icons: {
     icon: '/logo.png',
   },
