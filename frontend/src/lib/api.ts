@@ -117,8 +117,29 @@ class ApiClient {
     })
   }
 
-  async deleteProject(id: string): Promise<{ message: string }> {
-    return this.request<{ message: string }>(`/projects/${id}`, {
+  async deleteProject(id: string, deleteInfrastructure: boolean = true): Promise<{ 
+    message: string; 
+    infrastructure_deletion?: {
+      infrastructure_deleted: boolean;
+      resources: {
+        deleted?: string[];
+        failed?: string[];
+        errors?: string[];
+      }
+    }
+  }> {
+    const params = new URLSearchParams({ delete_infrastructure: deleteInfrastructure.toString() })
+    return this.request<{ 
+      message: string; 
+      infrastructure_deletion?: {
+        infrastructure_deleted: boolean;
+        resources: {
+          deleted?: string[];
+          failed?: string[];
+          errors?: string[];
+        }
+      }
+    }>(`/projects/${id}?${params}`, {
       method: 'DELETE',
     })
   }

@@ -14,6 +14,7 @@ import SimpleShell from '@/components/SimpleShell'
 import NetworkConfiguration from '@/components/NetworkConfiguration'
 import ResourceConfiguration from '@/components/ResourceConfiguration'
 import RepositoryConfiguration from '@/components/RepositoryConfiguration'
+import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -43,6 +44,7 @@ export default function ProjectDetail() {
   const [awsRegion, setAwsRegion] = useState<string | null>(null)
   const [environmentStatuses, setEnvironmentStatuses] = useState<Record<string, any>>({})
   const [deploymentModalOpen, setDeploymentModalOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
   useEffect(() => {
     if (isAuthenticated && !authLoading && params.id) {
@@ -256,15 +258,12 @@ export default function ProjectDetail() {
     }
   }
 
-  const handleDelete = async () => {
-    if (!project || !confirm('Are you sure you want to delete this project?')) return
-    
-    try {
-      await apiClient.deleteProject(project.id)
-      router.push('/dashboard')
-    } catch (err) {
-      setError('Failed to delete project')
-    }
+  const handleDelete = () => {
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteSuccess = () => {
+    router.push('/dashboard')
   }
 
   if (!authLoading && !isAuthenticated) {
@@ -923,6 +922,17 @@ export default function ProjectDetail() {
         onClose={() => setDeploymentModalOpen(false)}
         onDeploymentStarted={handleDeploymentStarted}
       />
+      
+      {/* Delete Project Dialog */}
+      {project && (
+        <DeleteProjectDialog
+          isOpen={deleteDialogOpen}
+          onClose={() => setDeleteDialogOpen(false)}
+          projectId={project.id}
+          projectName={project.name}
+          onSuccess={handleDeleteSuccess}
+        />
+      )}
     </div>
   )
 }

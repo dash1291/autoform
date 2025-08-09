@@ -404,25 +404,68 @@ async def update_project(
 
 @router.delete("/{project_id}")
 async def delete_project(
-    project_id: str, current_user: UserSchema = Depends(get_current_user)
+    project_id: str, 
+    delete_infrastructure: bool = True,
+    current_user: UserSchema = Depends(get_current_user)
 ):
-    """Delete a project"""
+    """Delete a project and optionally its infrastructure"""
     # Check if project exists and user has access through team
     if not await check_project_access(project_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
 
-    # TODO: Clean up AWS resources before deleting
-
-    # Delete the project
     async with get_async_session() as session:
         project = await session.get(ProjectModel, project_id)
-        if project:
-            await session.delete(project)
-            await session.commit()
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+        
+        deletion_summary = {"infrastructure_deleted": False, "resources": {}}
+        
+        # Delete AWS infrastructure if requested
+        if delete_infrastructure:
+            try:
+                from services.project_deletion_service import ProjectDeletionService
+                
+                # Get AWS credentials for the project
+                project_credentials = await get_project_aws_credentials(project)
+                region = project_credentials["region"] if project_credentials else os.getenv("AWS_REGION", "us-east-1")
+                
+                # Initialize deletion service
+                deletion_service = ProjectDeletionService(
+                    region=region,
+                    aws_credentials=project_credentials
+                )
+                
+                # Delete infrastructure
+                logger.info(f"Deleting infrastructure for project {project_id}")
+                deletion_result = await deletion_service.delete_project_infrastructure(project_id)
+                
+                deletion_summary["infrastructure_deleted"] = deletion_result["success"]
+                deletion_summary["resources"] = {
+                    "deleted": deletion_result["deleted_resources"],
+                    "failed": deletion_result["failed_resources"],
+                    "errors": deletion_result["errors"]
+                }
+                
+                if not deletion_result["success"] and deletion_result["failed_resources"]:
+                    logger.warning(f"Some resources failed to delete for project {project_id}: {deletion_result['failed_resources']}")
+                    
+            except Exception as e:
+                logger.error(f"Error deleting infrastructure for project {project_id}: {e}")
+                deletion_summary["infrastructure_deleted"] = False
+                deletion_summary["resources"]["errors"] = [str(e)]
+        
+        # Delete the project from database
+        await session.delete(project)
+        await session.commit()
 
-    return {"message": "Project deleted successfully"}
+    return {
+        "message": "Project deleted successfully",
+        "infrastructure_deletion": deletion_summary
+    }
 
 
 @router.get("/{project_id}/service-status")
