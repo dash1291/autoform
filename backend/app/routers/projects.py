@@ -456,7 +456,39 @@ async def delete_project(
                 deletion_summary["infrastructure_deleted"] = False
                 deletion_summary["resources"]["errors"] = [str(e)]
         
-        # Delete the project from database
+        # Delete all related records first to avoid foreign key constraints
+        # Delete environment variables
+        from models.environment import EnvironmentVariable as EnvVarModel
+        env_vars = await session.execute(
+            select(EnvVarModel).where(EnvVarModel.project_id == project_id)
+        )
+        for env_var in env_vars.scalars().all():
+            await session.delete(env_var)
+        
+        # Delete deployments
+        from models.deployment import Deployment
+        deployments = await session.execute(
+            select(Deployment).where(Deployment.project_id == project_id)
+        )
+        for deployment in deployments.scalars().all():
+            await session.delete(deployment)
+        
+        # Delete environments
+        environments = await session.execute(
+            select(Environment).where(Environment.project_id == project_id)
+        )
+        for environment in environments.scalars().all():
+            await session.delete(environment)
+        
+        # Delete webhooks
+        from models.webhook import Webhook
+        webhooks = await session.execute(
+            select(Webhook).where(Webhook.project_id == project_id)
+        )
+        for webhook in webhooks.scalars().all():
+            await session.delete(webhook)
+        
+        # Finally, delete the project
         await session.delete(project)
         await session.commit()
 
