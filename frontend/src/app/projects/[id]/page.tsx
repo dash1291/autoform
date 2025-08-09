@@ -37,7 +37,7 @@ export default function ProjectDetail() {
   const [activeDeploymentId, setActiveDeploymentId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'deployments' | 'logs' | 'settings' | 'shell'>('overview')
   const [selectedEnvironment, setSelectedEnvironment] = useState<Environment | null>(null)
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'environment' | 'environments' | 'repository' | 'resources' | 'domains'>('repository')
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'environment' | 'environments' | 'repository' | 'resources' | 'domains' | 'danger'>('repository')
   const [environments, setEnvironments] = useState<Environment[]>([])
   const [selectedEnvironmentForVars, setSelectedEnvironmentForVars] = useState<string | null>(null)
   const [serviceStatus, setServiceStatus] = useState<any>(null)
@@ -64,7 +64,7 @@ export default function ProjectDetail() {
       if (tab.startsWith('settings_')) {
         setActiveTab('settings')
         const settingsSubTab = tab.replace('settings_', '')
-        if (['environment', 'environments', 'repository', 'resources', 'domains'].includes(settingsSubTab)) {
+        if (['environment', 'environments', 'repository', 'resources', 'domains', 'danger'].includes(settingsSubTab)) {
           setActiveSettingsTab(settingsSubTab as any)
         }
       } else if (['overview', 'deployments', 'logs', 'settings', 'shell'].includes(tab)) {
@@ -678,6 +678,13 @@ export default function ProjectDetail() {
                     >
                       AWS Resources
                     </Button>
+                    <Button
+                      variant={'ghost'}
+                      onClick={() => setActiveSettingsTab('danger')}
+                      className={`${activeSettingsTab === 'danger' ? 'text-foreground' : 'text-muted-foreground'} hover:text-foreground w-full justify-start text-sm`}
+                    >
+                      Danger Zone
+                    </Button>
                   </nav>
                 </div>
                 {/* Content area */}
@@ -860,6 +867,33 @@ export default function ProjectDetail() {
                           <p className="text-muted-foreground">Select an environment to view its AWS resources.</p>
                         </div>
                       )}
+                    </div>
+                  )}
+                  {activeSettingsTab === 'danger' && (
+                    <div className="space-y-6">
+                      <div>
+                        <h3 className="text-lg font-medium text-foreground">Danger Zone</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Irreversible and destructive actions.
+                        </p>
+                      </div>
+                      <div className="border border-red-200 dark:border-red-800 rounded-lg p-6 bg-red-50 dark:bg-red-950/20">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-1">
+                            <h4 className="text-sm font-medium text-red-900 dark:text-red-100">Delete this project</h4>
+                            <p className="text-sm text-red-700 dark:text-red-300">
+                              Once deleted, this project and all its associated AWS infrastructure will be permanently removed. This action cannot be undone.
+                            </p>
+                          </div>
+                          <Button
+                            variant="destructive"
+                            onClick={handleDelete}
+                            className="ml-4"
+                          >
+                            Delete Project
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
