@@ -404,25 +404,99 @@ async def update_project(
 
 @router.delete("/{project_id}")
 async def delete_project(
-    project_id: str, current_user: UserSchema = Depends(get_current_user)
+    project_id: str, 
+    delete_infrastructure: bool = True,
+    current_user: UserSchema = Depends(get_current_user)
 ):
-    """Delete a project"""
+    """Delete a project and optionally its infrastructure"""
     # Check if project exists and user has access through team
     if not await check_project_access(project_id, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
 
-    # TODO: Clean up AWS resources before deleting
-
-    # Delete the project
     async with get_async_session() as session:
         project = await session.get(ProjectModel, project_id)
-        if project:
-            await session.delete(project)
-            await session.commit()
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+        
+        deletion_summary = {"infrastructure_deleted": False, "resources": {}}
+        
+        # Delete AWS infrastructure if requested
+        if delete_infrastructure:
+            try:
+                from services.project_deletion import delete_project_infrastructure
+                
+                # Get AWS credentials for the project
+                project_credentials = await get_project_aws_credentials(project)
+                region = project_credentials["region"] if project_credentials else os.getenv("AWS_REGION", "us-east-1")
+                
+                # Delete infrastructure
+                logger.info(f"Deleting infrastructure for project {project_id}")
+                deletion_result = await delete_project_infrastructure(
+                    project_id=project_id,
+                    region=region,
+                    aws_credentials=project_credentials
+                )
+                
+                deletion_summary["infrastructure_deleted"] = deletion_result["success"]
+                deletion_summary["resources"] = {
+                    "deleted": deletion_result["deleted_resources"],
+                    "failed": deletion_result["failed_resources"],
+                    "errors": deletion_result["errors"]
+                }
+                
+                if not deletion_result["success"] and deletion_result["failed_resources"]:
+                    logger.warning(f"Some resources failed to delete for project {project_id}: {deletion_result['failed_resources']}")
+                    
+            except Exception as e:
+                logger.error(f"Error deleting infrastructure for project {project_id}: {e}")
+                deletion_summary["infrastructure_deleted"] = False
+                deletion_summary["resources"]["errors"] = [str(e)]
+        
+        # Delete all related records first to avoid foreign key constraints
+        # Delete environment variables
+        from models.environment import EnvironmentVariable as EnvVarModel
+        env_vars = await session.execute(
+            select(EnvVarModel).where(EnvVarModel.project_id == project_id)
+        )
+        for env_var in env_vars.scalars().all():
+            await session.delete(env_var)
+        
+        # Delete deployments
+        from models.deployment import Deployment
+        deployments = await session.execute(
+            select(Deployment).where(Deployment.project_id == project_id)
+        )
+        for deployment in deployments.scalars().all():
+            await session.delete(deployment)
+        
+        # Delete environments
+        environments = await session.execute(
+            select(Environment).where(Environment.project_id == project_id)
+        )
+        for environment in environments.scalars().all():
+            await session.delete(environment)
+        
+        # Delete webhooks (if they match the project's git repo URL)
+        if project.git_repo_url:
+            from models.webhook import Webhook
+            webhooks = await session.execute(
+                select(Webhook).where(Webhook.git_repo_url == project.git_repo_url)
+            )
+            for webhook in webhooks.scalars().all():
+                await session.delete(webhook)
+        
+        # Finally, delete the project
+        await session.delete(project)
+        await session.commit()
 
-    return {"message": "Project deleted successfully"}
+    return {
+        "message": "Project deleted successfully",
+        "infrastructure_deletion": deletion_summary
+    }
 
 
 @router.get("/{project_id}/service-status")

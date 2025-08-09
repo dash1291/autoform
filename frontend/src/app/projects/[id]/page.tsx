@@ -14,6 +14,7 @@ import SimpleShell from '@/components/SimpleShell'
 import NetworkConfiguration from '@/components/NetworkConfiguration'
 import ResourceConfiguration from '@/components/ResourceConfiguration'
 import RepositoryConfiguration from '@/components/RepositoryConfiguration'
+import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -36,13 +37,14 @@ export default function ProjectDetail() {
   const [activeDeploymentId, setActiveDeploymentId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'deployments' | 'logs' | 'settings' | 'shell'>('overview')
   const [selectedEnvironment, setSelectedEnvironment] = useState<Environment | null>(null)
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'environment' | 'environments' | 'repository' | 'resources' | 'domains'>('repository')
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'environment' | 'environments' | 'repository' | 'resources' | 'domains' | 'danger'>('repository')
   const [environments, setEnvironments] = useState<Environment[]>([])
   const [selectedEnvironmentForVars, setSelectedEnvironmentForVars] = useState<string | null>(null)
   const [serviceStatus, setServiceStatus] = useState<any>(null)
   const [awsRegion, setAwsRegion] = useState<string | null>(null)
   const [environmentStatuses, setEnvironmentStatuses] = useState<Record<string, any>>({})
   const [deploymentModalOpen, setDeploymentModalOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
   useEffect(() => {
     if (isAuthenticated && !authLoading && params.id) {
@@ -62,7 +64,7 @@ export default function ProjectDetail() {
       if (tab.startsWith('settings_')) {
         setActiveTab('settings')
         const settingsSubTab = tab.replace('settings_', '')
-        if (['environment', 'environments', 'repository', 'resources', 'domains'].includes(settingsSubTab)) {
+        if (['environment', 'environments', 'repository', 'resources', 'domains', 'danger'].includes(settingsSubTab)) {
           setActiveSettingsTab(settingsSubTab as any)
         }
       } else if (['overview', 'deployments', 'logs', 'settings', 'shell'].includes(tab)) {
@@ -256,15 +258,12 @@ export default function ProjectDetail() {
     }
   }
 
-  const handleDelete = async () => {
-    if (!project || !confirm('Are you sure you want to delete this project?')) return
-    
-    try {
-      await apiClient.deleteProject(project.id)
-      router.push('/dashboard')
-    } catch (err) {
-      setError('Failed to delete project')
-    }
+  const handleDelete = () => {
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteSuccess = () => {
+    router.push('/dashboard')
   }
 
   if (!authLoading && !isAuthenticated) {
@@ -679,6 +678,13 @@ export default function ProjectDetail() {
                     >
                       AWS Resources
                     </Button>
+                    <Button
+                      variant={'ghost'}
+                      onClick={() => setActiveSettingsTab('danger')}
+                      className={`${activeSettingsTab === 'danger' ? 'text-foreground' : 'text-muted-foreground'} hover:text-foreground w-full justify-start text-sm`}
+                    >
+                      Danger Zone
+                    </Button>
                   </nav>
                 </div>
                 {/* Content area */}
@@ -863,6 +869,34 @@ export default function ProjectDetail() {
                       )}
                     </div>
                   )}
+                  {activeSettingsTab === 'danger' && (
+                    <div className="space-y-6">
+                      <div>
+                        <h3 className="text-lg font-medium text-foreground">Danger Zone</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Irreversible and destructive actions.
+                        </p>
+                      </div>
+                      <div className="border border-destructive dark:border-red-800 rounded-lg p-6 dark:bg-red-950/20">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-1">
+                            <h4 className="text-sm font-medium text-destructive">Delete this project</h4>
+                            <p className="text-sm text-muted-foreground">
+                              Once deleted, this project and all its associated AWS infrastructure will be permanently removed. This action cannot be undone.
+                            </p>
+                          </div>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={handleDelete}
+                            className="ml-4"
+                          >
+                            Delete Project
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -923,6 +957,17 @@ export default function ProjectDetail() {
         onClose={() => setDeploymentModalOpen(false)}
         onDeploymentStarted={handleDeploymentStarted}
       />
+      
+      {/* Delete Project Dialog */}
+      {project && (
+        <DeleteProjectDialog
+          isOpen={deleteDialogOpen}
+          onClose={() => setDeleteDialogOpen(false)}
+          projectId={project.id}
+          projectName={project.name}
+          onSuccess={handleDeleteSuccess}
+        />
+      )}
     </div>
   )
 }
