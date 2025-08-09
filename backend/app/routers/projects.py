@@ -427,21 +427,19 @@ async def delete_project(
         # Delete AWS infrastructure if requested
         if delete_infrastructure:
             try:
-                from services.project_deletion_service import ProjectDeletionService
+                from services.project_deletion import delete_project_infrastructure
                 
                 # Get AWS credentials for the project
                 project_credentials = await get_project_aws_credentials(project)
                 region = project_credentials["region"] if project_credentials else os.getenv("AWS_REGION", "us-east-1")
                 
-                # Initialize deletion service
-                deletion_service = ProjectDeletionService(
+                # Delete infrastructure
+                logger.info(f"Deleting infrastructure for project {project_id}")
+                deletion_result = await delete_project_infrastructure(
+                    project_id=project_id,
                     region=region,
                     aws_credentials=project_credentials
                 )
-                
-                # Delete infrastructure
-                logger.info(f"Deleting infrastructure for project {project_id}")
-                deletion_result = await deletion_service.delete_project_infrastructure(project_id)
                 
                 deletion_summary["infrastructure_deleted"] = deletion_result["success"]
                 deletion_summary["resources"] = {
