@@ -197,19 +197,33 @@ async def _delete_ecs_service(service_arn: str, cluster_arn: Optional[str], ecs)
         
         # First, update service to have 0 desired count
         logger.info(f"Scaling down ECS service: {service_name}")
-        ecs.update_service(
-            cluster=cluster_name,
-            service=service_name,
-            desiredCount=0
-        )
+        try:
+            ecs.update_service(
+                cluster=cluster_name,
+                service=service_name,
+                desiredCount=0
+            )
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            if error_code in ["ClusterNotFoundException", "ServiceNotFoundException"]:
+                logger.info(f"ECS service or cluster already deleted: {service_name}")
+                return {"success": True, "resource": f"ECS Service: {service_name} (already deleted)"}
+            raise
         
         # Delete the service
         logger.info(f"Deleting ECS service: {service_name}")
-        ecs.delete_service(
-            cluster=cluster_name,
-            service=service_name,
-            force=True  # Force delete even if there are active tasks
-        )
+        try:
+            ecs.delete_service(
+                cluster=cluster_name,
+                service=service_name,
+                force=True  # Force delete even if there are active tasks
+            )
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            if error_code in ["ClusterNotFoundException", "ServiceNotFoundException"]:
+                logger.info(f"ECS service or cluster already deleted: {service_name}")
+                return {"success": True, "resource": f"ECS Service: {service_name} (already deleted)"}
+            raise
         
         return {"success": True, "resource": f"ECS Service: {service_name}"}
         

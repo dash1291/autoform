@@ -877,16 +877,17 @@ export default function ProjectDetail() {
                           Irreversible and destructive actions.
                         </p>
                       </div>
-                      <div className="border border-red-200 dark:border-red-800 rounded-lg p-6 bg-red-50 dark:bg-red-950/20">
+                      <div className="border border-destructive dark:border-red-800 rounded-lg p-6 dark:bg-red-950/20">
                         <div className="flex items-start justify-between">
                           <div className="space-y-1">
-                            <h4 className="text-sm font-medium text-red-900 dark:text-red-100">Delete this project</h4>
-                            <p className="text-sm text-red-700 dark:text-red-300">
+                            <h4 className="text-sm font-medium text-destructive">Delete this project</h4>
+                            <p className="text-sm text-muted-foreground">
                               Once deleted, this project and all its associated AWS infrastructure will be permanently removed. This action cannot be undone.
                             </p>
                           </div>
                           <Button
                             variant="destructive"
+                            size="sm"
                             onClick={handleDelete}
                             className="ml-4"
                           >

@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -30,7 +29,6 @@ export function DeleteProjectDialog({
   projectName,
   onSuccess,
 }: DeleteProjectDialogProps) {
-  const [deleteInfrastructure, setDeleteInfrastructure] = useState(true)
   const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deletionResult, setDeletionResult] = useState<{
@@ -45,7 +43,8 @@ export function DeleteProjectDialog({
     setDeletionResult(null)
 
     try {
-      const result = await apiClient.deleteProject(projectId, deleteInfrastructure)
+      // Always delete infrastructure
+      const result = await apiClient.deleteProject(projectId, true)
       
       if (result.infrastructure_deletion?.resources) {
         setDeletionResult({
@@ -96,42 +95,30 @@ export function DeleteProjectDialog({
         {!deletionResult && (
           <>
             <div className="space-y-4">
-              <Alert>
+              <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
-                  This action cannot be undone. The project and all its data will be permanently deleted.
+                  <strong>This action cannot be undone.</strong> All project data and AWS infrastructure will be permanently deleted.
                 </AlertDescription>
               </Alert>
 
-              <div className="flex items-start space-x-2">
-                <Checkbox
-                  id="delete-infrastructure"
-                  checked={deleteInfrastructure}
-                  onCheckedChange={(checked: boolean | 'indeterminate') => setDeleteInfrastructure(checked === true)}
-                  disabled={isDeleting}
-                />
-                <div className="space-y-1">
-                  <label
-                    htmlFor="delete-infrastructure"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    Delete AWS Infrastructure
-                  </label>
-                  <p className="text-sm text-muted-foreground">
-                    Remove all associated AWS resources including:
-                  </p>
-                  <ul className="text-sm text-muted-foreground ml-4 list-disc">
-                    <li>ECS services and tasks</li>
-                    <li>Load balancers and target groups</li>
-                    <li>Security groups (project-specific only)</li>
-                    <li>ECR repository and images</li>
-                    <li>CloudWatch logs</li>
-                    <li>S3 build artifacts</li>
-                  </ul>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    <strong>Note:</strong> Shared resources like VPC, subnets, and ECS clusters will be preserved.
-                  </p>
-                </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">The following will be deleted:</p>
+                <ul className="text-sm text-muted-foreground ml-4 list-disc space-y-1">
+                  <li>Project database records and configuration</li>
+                  <li>All deployments and environment data</li>
+                  <li>ECS services and tasks</li>
+                  <li>Load balancers and target groups</li>
+                  <li>Security groups (project-specific)</li>
+                  <li>ECR repository and container images</li>
+                  <li>CloudWatch logs</li>
+                  <li>S3 build artifacts</li>
+                </ul>
+                <Alert className="mt-4">
+                  <AlertDescription className="text-sm">
+                    <strong>Note:</strong> Shared resources (VPC, subnets, ECS clusters) will be preserved for use by other projects.
+                  </AlertDescription>
+                </Alert>
               </div>
             </div>
 

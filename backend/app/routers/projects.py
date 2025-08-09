@@ -480,13 +480,14 @@ async def delete_project(
         for environment in environments.scalars().all():
             await session.delete(environment)
         
-        # Delete webhooks
-        from models.webhook import Webhook
-        webhooks = await session.execute(
-            select(Webhook).where(Webhook.project_id == project_id)
-        )
-        for webhook in webhooks.scalars().all():
-            await session.delete(webhook)
+        # Delete webhooks (if they match the project's git repo URL)
+        if project.git_repo_url:
+            from models.webhook import Webhook
+            webhooks = await session.execute(
+                select(Webhook).where(Webhook.git_repo_url == project.git_repo_url)
+            )
+            for webhook in webhooks.scalars().all():
+                await session.delete(webhook)
         
         # Finally, delete the project
         await session.delete(project)
