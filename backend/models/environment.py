@@ -39,6 +39,7 @@ class Environment(BaseModel, table=True):
     use_route53_validation: bool = Field(default=False)
     task_definition_arn: Optional[str] = None
     secrets_arn: Optional[str] = None
+    desired_instance_count: int = Field(default=1)
 
 
 class EnvironmentVariable(BaseModel, table=True):

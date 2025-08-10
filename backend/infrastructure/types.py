@@ -32,6 +32,7 @@ class ECSInfrastructureArgs(BaseModel):
     auto_provision_certificate: bool = Field(True, alias="autoProvisionCertificate")
     use_route53_validation: bool = Field(True, alias="useRoute53Validation")
     redirect_http_to_https: bool = Field(True, alias="redirectHttpToHttps")
+    desired_instance_count: int = Field(1, alias="desiredInstanceCount")
 
     class Config:
         populate_by_name = True

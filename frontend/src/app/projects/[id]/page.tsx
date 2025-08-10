@@ -18,7 +18,8 @@ import { DeleteProjectDialog } from '@/components/DeleteProjectDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Clock, GitCommit, Server } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Clock, GitCommit, Server, Edit2, Check, X } from 'lucide-react'
 import { useAuth } from '@/lib/auth-client'
 import { apiClient } from '@/lib/api'
 import { formatToLocalTime, formatDeploymentTime, processDeploymentLogs } from '@/lib/dateUtils'
@@ -45,6 +46,9 @@ export default function ProjectDetail() {
   const [environmentStatuses, setEnvironmentStatuses] = useState<Record<string, any>>({})
   const [deploymentModalOpen, setDeploymentModalOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [editingInstanceCount, setEditingInstanceCount] = useState<string | null>(null)
+  const [instanceCountValue, setInstanceCountValue] = useState<number>(1)
+  const [updatingInstanceCount, setUpdatingInstanceCount] = useState<string | null>(null)
 
   useEffect(() => {
     if (isAuthenticated && !authLoading && params.id) {
@@ -266,6 +270,42 @@ export default function ProjectDetail() {
     router.push('/dashboard')
   }
 
+  const handleInstanceCountEdit = (envId: string, currentCount: number) => {
+    setEditingInstanceCount(envId)
+    setInstanceCountValue(currentCount)
+  }
+
+  const handleInstanceCountSave = async (envId: string) => {
+    setUpdatingInstanceCount(envId)
+    try {
+      const response = await apiClient.updateEnvironment(envId, {
+        desiredInstanceCount: instanceCountValue
+      })
+      
+      // Update the environment in state
+      const updatedEnv = environments.find(e => e.id === envId)
+      if (updatedEnv) {
+        updatedEnv.desiredInstanceCount = instanceCountValue
+        setEnvironments([...environments])
+      }
+      
+      // Refresh environment status to get updated service info
+      fetchEnvironmentStatuses(environments)
+      
+      setEditingInstanceCount(null)
+    } catch (err) {
+      console.error('Failed to update instance count:', err)
+      setEditingInstanceCount(null)
+    } finally {
+      setUpdatingInstanceCount(null)
+    }
+  }
+
+  const handleInstanceCountCancel = () => {
+    setEditingInstanceCount(null)
+    setInstanceCountValue(1)
+  }
+
   if (!authLoading && !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -402,10 +442,66 @@ export default function ProjectDetail() {
                             <div className="space-y-2">
                               <p className="text-sm text-muted-foreground">{envStatus.message}</p>
                               
+                              {/* Instance Count Editor */}
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xs text-muted-foreground">Number of Instances:</span>
+                                {editingInstanceCount === env.id ? (
+                                  <div className="flex items-center space-x-1">
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      max="10"
+                                      value={instanceCountValue}
+                                      onChange={(e) => setInstanceCountValue(Number(e.target.value))}
+                                      className="h-6 w-16 text-xs"
+                                      disabled={updatingInstanceCount === env.id}
+                                    />
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleInstanceCountSave(env.id)}
+                                      disabled={updatingInstanceCount === env.id}
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      {updatingInstanceCount === env.id ? (
+                                        <Spinner className="h-3 w-3" />
+                                      ) : (
+                                        <Check className="h-3 w-3" />
+                                      )}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={handleInstanceCountCancel}
+                                      disabled={updatingInstanceCount === env.id}
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center space-x-1">
+                                    <span className="text-xs font-medium">
+                                      {env.desiredInstanceCount || 1}
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleInstanceCountEdit(env.id, env.desiredInstanceCount || 1)}
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <Edit2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                              
                               {envStatus.service && (
                                 <div className="text-xs text-muted-foreground">
-                                  Tasks: {envStatus.service.runningCount}/{envStatus.service.desiredCount} running
+                                  Running Tasks: {envStatus.service.runningCount}/{envStatus.service.desiredCount}
                                   {envStatus.service.pendingCount > 0 && ` (${envStatus.service.pendingCount} pending)`}
+                                  {updatingInstanceCount === env.id && (
+                                    <span className="ml-2 text-blue-600">Updating...</span>
+                                  )}
                                 </div>
                               )}
                               

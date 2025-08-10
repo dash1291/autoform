@@ -28,6 +28,7 @@ class ECSService:
         task_role_arn: str = "",
         target_group_arn: str = "",
         aws_credentials=None,
+        desired_instance_count: int = 1,
     ):
         self.project_name = project_name
         self.environment_variables = environment_variables
@@ -45,6 +46,7 @@ class ECSService:
         self.task_role_arn = task_role_arn
         self.target_group_arn = target_group_arn
         self.aws_credentials = aws_credentials
+        self.desired_instance_count = desired_instance_count
 
         # Initialize AWS clients with custom credentials if provided
         from utils.aws_client import create_client
@@ -238,7 +240,7 @@ class ECSService:
                             cluster=self.cluster_arn,
                             service=service_name,
                             taskDefinition=self.task_definition_arn,
-                            desiredCount=1,
+                            desiredCount=self.desired_instance_count,
                             enableExecuteCommand=True,
                             loadBalancers=[
                                 {
@@ -290,7 +292,7 @@ class ECSService:
                             cluster=self.cluster_arn,
                             service=service_name,
                             taskDefinition=self.task_definition_arn,
-                            desiredCount=1,
+                            desiredCount=self.desired_instance_count,
                             enableExecuteCommand=True,
                             loadBalancers=[
                                 {
@@ -338,7 +340,7 @@ class ECSService:
                             cluster=self.cluster_arn,
                             service=service_name,
                             taskDefinition=self.task_definition_arn,
-                            desiredCount=1,
+                            desiredCount=self.desired_instance_count,
                             enableExecuteCommand=True,
                             loadBalancers=[
                                 {

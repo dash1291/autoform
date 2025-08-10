@@ -45,6 +45,7 @@ class DeploymentConfig:
         cpu: int = 256,
         memory: int = 512,
         disk_size: int = 21,
+        desired_instance_count: int = 1,
         aws_region: Optional[str] = None,
         aws_credentials: Optional[dict] = None,
     ):
@@ -60,6 +61,7 @@ class DeploymentConfig:
         self.cpu = cpu
         self.memory = memory
         self.disk_size = disk_size
+        self.desired_instance_count = desired_instance_count
         self.aws_region = aws_region or os.getenv("AWS_REGION", "us-east-1")
         self.aws_credentials = aws_credentials
     
@@ -78,6 +80,7 @@ class DeploymentConfig:
             "cpu": self.cpu,
             "memory": self.memory,
             "disk_size": self.disk_size,
+            "desired_instance_count": self.desired_instance_count,
             "aws_region": self.aws_region,
             "aws_credentials": self.aws_credentials,
         }
@@ -1150,6 +1153,7 @@ phases:
             auto_provision_certificate=environment_network.get("auto_provision_certificate", True),
             use_route53_validation=environment_network.get("use_route53_validation", True),
             redirect_http_to_https=True,
+            desired_instance_count=config.desired_instance_count,
         )
 
         # Add existing network resources if configured
