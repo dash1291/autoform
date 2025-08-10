@@ -1,19 +1,104 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
+from typing import List, Optional, Dict, Any
 import logging
 
 from core.database import get_async_session
 from core.security import get_current_user
 from schemas import User, ProjectStatus, TeamMemberRole, EnvironmentStatus
 from sqlmodel import select, and_
+from sqlmodel.ext.asyncio.session import AsyncSession
 from models.project import Project
 from models.team import Team, TeamMember, TeamAwsConfig
 from models.environment import Environment
 from models.deployment import Deployment
+from services.encryption_service import encryption_service
+from utils.aws_client import create_client
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def update_ecs_service_instance_count(
+    environment: Environment,
+    desired_count: int,
+    session: AsyncSession
+) -> Dict[str, Any]:
+    """Update the ECS service instance count for a deployed environment."""
+    
+    # Validate instance count
+    if not isinstance(desired_count, int) or desired_count < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="desiredInstanceCount must be a non-negative integer"
+        )
+    
+    if desired_count > 10:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="desiredInstanceCount cannot exceed 10 instances"
+        )
+    
+    # Update the environment model
+    environment.desired_instance_count = desired_count
+    
+    # If environment is not deployed, just save the desired count
+    if not (environment.ecs_service_arn and environment.ecs_cluster_arn):
+        return {
+            "instanceCountUpdated": True,
+            "message": f"Instance count will be set to {desired_count} when deployed",
+            "desiredCount": desired_count,
+            "status": "NOT_DEPLOYED"
+        }
+    
+    # Environment is deployed, update the ECS service
+    try:
+        # Get AWS credentials
+        team_aws_config = await session.get(TeamAwsConfig, environment.team_aws_config_id)
+        if not team_aws_config:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="AWS configuration not found for environment"
+            )
+        
+        # Decrypt credentials
+        access_key = encryption_service.decrypt(team_aws_config.aws_access_key_id)
+        secret_key = encryption_service.decrypt(team_aws_config.aws_secret_access_key)
+        aws_credentials = {"access_key": access_key, "secret_key": secret_key}
+        
+        # Update ECS service
+        ecs_client = create_client("ecs", team_aws_config.aws_region, aws_credentials)
+        
+        # Extract service name and cluster name from ARNs
+        service_name = environment.ecs_service_arn.split("/")[-1]
+        cluster_name = environment.ecs_cluster_arn.split("/")[-1]
+        
+        # Update the service's desired count
+        response = ecs_client.update_service(
+            cluster=cluster_name,
+            service=service_name,
+            desiredCount=desired_count
+        )
+        
+        if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
+            return {
+                "instanceCountUpdated": True,
+                "message": f"Instance count updated to {desired_count}",
+                "desiredCount": desired_count,
+                "status": "UPDATING"
+            }
+        else:
+            raise Exception("Failed to update ECS service")
+        
+    except Exception as e:
+        logger.error(f"Error updating ECS service instance count: {e}")
+        # Still save the desired count in DB even if ECS update fails
+        return {
+            "instanceCountUpdated": False,
+            "message": f"Instance count saved but ECS update failed: {str(e)}",
+            "desiredCount": desired_count,
+            "status": "ERROR"
+        }
 
 
 @router.get("/projects/{project_id}/environments")
@@ -482,76 +567,9 @@ async def update_environment(
         ecs_update_response = None
         if "desiredInstanceCount" in environment_data:
             desired_count = environment_data["desiredInstanceCount"]
-            
-            # Validate instance count
-            if not isinstance(desired_count, int) or desired_count < 0:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="desiredInstanceCount must be a non-negative integer"
-                )
-            
-            if desired_count > 10:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="desiredInstanceCount cannot exceed 10 instances"
-                )
-            
-            environment.desired_instance_count = desired_count
-            
-            # If environment is deployed, update the ECS service
-            if environment.ecs_service_arn and environment.ecs_cluster_arn:
-                try:
-                    # Get AWS credentials
-                    team_aws_config = await session.get(TeamAwsConfig, environment.team_aws_config_id)
-                    if team_aws_config:
-                        # Decrypt credentials
-                        from services.encryption_service import encryption_service
-                        access_key = encryption_service.decrypt(team_aws_config.aws_access_key_id)
-                        secret_key = encryption_service.decrypt(team_aws_config.aws_secret_access_key)
-                        aws_credentials = {"access_key": access_key, "secret_key": secret_key}
-                        
-                        # Update ECS service
-                        from utils.aws_client import create_client
-                        ecs_client = create_client("ecs", team_aws_config.aws_region, aws_credentials)
-                        
-                        # Extract service name and cluster name from ARNs
-                        service_name = environment.ecs_service_arn.split("/")[-1]
-                        cluster_name = environment.ecs_cluster_arn.split("/")[-1]
-                        
-                        # Update the service's desired count
-                        response = ecs_client.update_service(
-                            cluster=cluster_name,
-                            service=service_name,
-                            desiredCount=desired_count
-                        )
-                        
-                        if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
-                            ecs_update_response = {
-                                "instanceCountUpdated": True,
-                                "message": f"Instance count updated to {desired_count}",
-                                "desiredCount": desired_count,
-                                "status": "UPDATING"
-                            }
-                        else:
-                            raise Exception("Failed to update ECS service")
-                        
-                except Exception as e:
-                    logger.error(f"Error updating ECS service instance count: {e}")
-                    # Still save the desired count in DB even if ECS update fails
-                    ecs_update_response = {
-                        "instanceCountUpdated": False,
-                        "message": f"Instance count saved but ECS update failed: {str(e)}",
-                        "desiredCount": desired_count,
-                        "status": "ERROR"
-                    }
-            else:
-                # Environment not deployed yet, just save the desired count
-                ecs_update_response = {
-                    "instanceCountUpdated": True,
-                    "message": f"Instance count will be set to {desired_count} when deployed",
-                    "desiredCount": desired_count,
-                    "status": "NOT_DEPLOYED"
-                }
+            ecs_update_response = await update_ecs_service_instance_count(
+                environment, desired_count, session
+            )
 
         # Handle certificate provisioning if domain settings changed
         certificate_info = None
