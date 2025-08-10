@@ -92,6 +92,7 @@ async def get_project_environments(
                     "cpu": env.cpu,
                     "memory": env.memory,
                     "diskSize": env.disk_size,
+                    "desiredInstanceCount": env.desired_instance_count if hasattr(env, 'desired_instance_count') else 1,
                     "subdirectory": project.subdirectory,
                     "port": project.port,
                     "healthCheckPath": project.health_check_path,
@@ -476,6 +477,81 @@ async def update_environment(
             environment.auto_provision_certificate = environment_data["autoProvisionCertificate"]
         if "useRoute53Validation" in environment_data:
             environment.use_route53_validation = environment_data["useRoute53Validation"]
+        
+        # Handle desired instance count update
+        ecs_update_response = None
+        if "desiredInstanceCount" in environment_data:
+            desired_count = environment_data["desiredInstanceCount"]
+            
+            # Validate instance count
+            if not isinstance(desired_count, int) or desired_count < 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="desiredInstanceCount must be a non-negative integer"
+                )
+            
+            if desired_count > 10:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="desiredInstanceCount cannot exceed 10 instances"
+                )
+            
+            environment.desired_instance_count = desired_count
+            
+            # If environment is deployed, update the ECS service
+            if environment.ecs_service_arn and environment.ecs_cluster_arn:
+                try:
+                    # Get AWS credentials
+                    team_aws_config = await session.get(TeamAwsConfig, environment.team_aws_config_id)
+                    if team_aws_config:
+                        # Decrypt credentials
+                        from services.encryption_service import encryption_service
+                        access_key = encryption_service.decrypt(team_aws_config.aws_access_key_id)
+                        secret_key = encryption_service.decrypt(team_aws_config.aws_secret_access_key)
+                        aws_credentials = {"access_key": access_key, "secret_key": secret_key}
+                        
+                        # Update ECS service
+                        from utils.aws_client import create_client
+                        ecs_client = create_client("ecs", team_aws_config.aws_region, aws_credentials)
+                        
+                        # Extract service name and cluster name from ARNs
+                        service_name = environment.ecs_service_arn.split("/")[-1]
+                        cluster_name = environment.ecs_cluster_arn.split("/")[-1]
+                        
+                        # Update the service's desired count
+                        response = ecs_client.update_service(
+                            cluster=cluster_name,
+                            service=service_name,
+                            desiredCount=desired_count
+                        )
+                        
+                        if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
+                            ecs_update_response = {
+                                "instanceCountUpdated": True,
+                                "message": f"Instance count updated to {desired_count}",
+                                "desiredCount": desired_count,
+                                "status": "UPDATING"
+                            }
+                        else:
+                            raise Exception("Failed to update ECS service")
+                        
+                except Exception as e:
+                    logger.error(f"Error updating ECS service instance count: {e}")
+                    # Still save the desired count in DB even if ECS update fails
+                    ecs_update_response = {
+                        "instanceCountUpdated": False,
+                        "message": f"Instance count saved but ECS update failed: {str(e)}",
+                        "desiredCount": desired_count,
+                        "status": "ERROR"
+                    }
+            else:
+                # Environment not deployed yet, just save the desired count
+                ecs_update_response = {
+                    "instanceCountUpdated": True,
+                    "message": f"Instance count will be set to {desired_count} when deployed",
+                    "desiredCount": desired_count,
+                    "status": "NOT_DEPLOYED"
+                }
 
         # Handle certificate provisioning if domain settings changed
         certificate_info = None
@@ -569,6 +645,9 @@ async def update_environment(
         
         if certificate_info:
             response["certificate"] = certificate_info
+        
+        if ecs_update_response:
+            response["instanceCount"] = ecs_update_response
             
         return response
 
@@ -1078,3 +1157,5 @@ async def get_environment_service_status(
                 "failureReasons": [f"API Error: {str(e)}"],
                 "crashLoopDetected": False,
             }
+
+

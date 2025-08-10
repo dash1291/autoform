@@ -105,6 +105,7 @@ class ECSInfrastructure:
                 task_role_arn=self.iam_service.task_role_arn,
                 target_group_arn=self.load_balancer_service.target_group_arn,
                 aws_credentials=self.aws_credentials,
+                desired_instance_count=self.args.desired_instance_count,
             )
             await self.ecs_service.initialize()
 

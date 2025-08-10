@@ -149,6 +149,7 @@ export interface Environment {
   cpu: number
   memory: number
   diskSize?: number
+  desiredInstanceCount?: number
   port: number
   healthCheckPath: string
   subdirectory?: string

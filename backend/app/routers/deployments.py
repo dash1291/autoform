@@ -275,6 +275,7 @@ async def deploy_environment(
             cpu=environment.cpu or 256,
             memory=environment.memory or 512,
             disk_size=environment.disk_size or 21,
+            desired_instance_count=environment.desired_instance_count if hasattr(environment, 'desired_instance_count') else 1,
             aws_region=aws_region,
             aws_credentials=aws_credentials
         )
