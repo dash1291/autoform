@@ -300,7 +300,15 @@ class DeploymentService:
                 deployment_id,
             )
 
-            # Step 2: Build and push Docker image
+            # Step 2: Ensure CodeBuild role exists
+            if deployment_id:
+                await self.log_to_database(
+                    deployment_id, "🔐 Ensuring CodeBuild IAM role exists..."
+                )
+            
+            await self.ensure_codebuild_role(config.project_name)
+            
+            # Step 3: Build and push Docker image
             if deployment_id:
                 await self.log_to_database(
                     deployment_id, "🐳 Building and pushing Docker image..."
@@ -319,7 +327,7 @@ class DeploymentService:
                 config.subdirectory,
             )
 
-            # Step 3: Deploy infrastructure using AWS API
+            # Step 4: Deploy infrastructure using AWS API
             if deployment_id:
                 await self.log_to_database(
                     deployment_id, "☁️ Provisioning AWS infrastructure..."
@@ -889,7 +897,7 @@ phases:
             "logsConfig": {
                 "cloudWatchLogs": {"status": "ENABLED", "groupName": log_group_name}
             },
-            "serviceRole": await self.get_codebuild_role(),
+            "serviceRole": await self.get_codebuild_role(project_name),
         }
 
         # Create or update CodeBuild project
@@ -1102,11 +1110,28 @@ phases:
 
         return f"{bucket_name}/{key_name}"
 
-    async def get_codebuild_role(self) -> str:
+    async def ensure_codebuild_role(self, project_name: str) -> str:
+        """Ensure CodeBuild service role exists and return its ARN"""
+        from infrastructure.services.iam_service import IAMService
+        
+        # Create IAM service to ensure role exists
+        iam_service = IAMService(
+            project_name=project_name,
+            region=self.region,
+            aws_credentials=self.aws_credentials
+        )
+        
+        # This will create the CodeBuild role if it doesn't exist
+        await iam_service._create_codebuild_role()
+        
+        return iam_service.codebuild_role_arn
+    
+    async def get_codebuild_role(self, project_name: str) -> str:
         """Get CodeBuild service role ARN"""
         response = self.sts.get_caller_identity()
         account_id = response["Account"]
-        return f"arn:aws:iam::{account_id}:role/CodeBuildServiceRole"
+        # Use the same role naming convention as iam_service.py
+        return f"arn:aws:iam::{account_id}:role/{project_name}-codebuild-role"
 
     async def deploy_infrastructure(
         self,
