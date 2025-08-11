@@ -68,7 +68,8 @@ async def check_aws_credentials(
                 team_aws_config_result = await session.execute(
                     select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
                 )
-                team_aws_config = team_aws_config_result.first()
+                result = team_aws_config_result.first()
+                team_aws_config = result[0] if result else None
 
                 if not team_aws_config:
                     return {
@@ -120,7 +121,8 @@ async def check_aws_credentials(
                     team_aws_config_result = await session.execute(
                         select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
                     )
-                    team_aws_config = team_aws_config_result.first()
+                    result = team_aws_config_result.first()
+                    team_aws_config = result[0] if result else None
 
                     if team_aws_config:
                         access_key = encryption_service.decrypt(
@@ -278,7 +280,8 @@ async def get_aws_resources(
                 team_aws_config_result = await session.execute(
                     select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team_id, TeamAwsConfig.is_active == True))
                 )
-                team_aws_config = team_aws_config_result.first()
+                result = team_aws_config_result.first()
+                team_aws_config = result[0] if result else None
 
                 if not team_aws_config:
                     return {
@@ -332,7 +335,8 @@ async def get_aws_resources(
                     team_aws_config_result = await session.execute(
                         select(TeamAwsConfig).where(and_(TeamAwsConfig.team_id == team.id, TeamAwsConfig.is_active == True))
                     )
-                    team_aws_config = team_aws_config_result.first()
+                    result = team_aws_config_result.first()
+                    team_aws_config = result[0] if result else None
 
                     if team_aws_config:
                         access_key = encryption_service.decrypt(

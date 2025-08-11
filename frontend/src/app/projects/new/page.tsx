@@ -169,7 +169,7 @@ export default function NewProject() {
           <div className="shadow rounded-lg py-6">
             <div className="space-y-4">
               <Button 
-                onClick={() => router.push(`/projects/${projectCreated.id}?tab=environments`)}
+                onClick={() => router.push(`/projects/${projectCreated.id}?tab=settings_environments`)}
                 className=""
               >
                 Set Up Environment
