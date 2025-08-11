@@ -101,6 +101,40 @@ class DeploymentService:
         self.codebuild = create_client("codebuild", region, aws_credentials)
         self.cloudwatch_logs = create_client("logs", region, aws_credentials)
         self.secretsmanager = create_client("secretsmanager", region, aws_credentials)
+        
+    async def _get_codebuild_env_vars(self):
+        """Get environment variables for CodeBuild, including Autoform's Docker Hub credentials"""
+        env_vars = []
+        
+        try:
+            # Read Autoform's Docker Hub credentials using default/autoform credentials
+            from utils.aws_client import create_client
+            autoform_secrets_client = create_client("secretsmanager", self.region, None)  # Autoform's credentials
+            
+            # Get Docker Hub credentials from Autoform's Secrets Manager
+            response = autoform_secrets_client.get_secret_value(SecretId="dockerhub-credentials")
+            import json
+            docker_creds = json.loads(response["SecretString"])
+            
+            env_vars.extend([
+                {
+                    "name": "DOCKERHUB_USERNAME",
+                    "value": docker_creds.get("username", ""),
+                    "type": "PLAINTEXT"
+                },
+                {
+                    "name": "DOCKERHUB_PASSWORD", 
+                    "value": docker_creds.get("password", ""),
+                    "type": "PLAINTEXT"
+                }
+            ])
+            
+        except Exception as e:
+            # If can't get Docker Hub credentials, just log and continue without them
+            logger.warning(f"Could not retrieve Autoform Docker Hub credentials: {e}")
+        
+        return env_vars
+        
 
     async def log_to_database(self, deployment_id: str, message: str):
         """Log message to database and local storage"""
@@ -778,16 +812,18 @@ phases:
 phases:
   pre_build:
     commands:
-      - echo Checking for Docker Hub credentials...
+      - echo Logging in to Docker Hub...
       - |
-        if aws secretsmanager describe-secret --secret-id dockerhub-credentials --region {self.region} >/dev/null 2>&1; then
-          echo "Docker Hub credentials found, logging in..."
-          DOCKERHUB_USERNAME=$(aws secretsmanager get-secret-value --secret-id dockerhub-credentials --region {self.region} --query SecretString --output text | jq -r .username)
-          DOCKERHUB_PASSWORD=$(aws secretsmanager get-secret-value --secret-id dockerhub-credentials --region {self.region} --query SecretString --output text | jq -r .password)
-          echo "$DOCKERHUB_PASSWORD" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
-          echo "Docker Hub login successful"
+        if [ ! -z "$DOCKERHUB_USERNAME" ] && [ ! -z "$DOCKERHUB_PASSWORD" ]; then
+          echo "Docker Hub credentials provided, logging in..."
+          echo "$DOCKERHUB_PASSWORD" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin >/dev/null 2>&1
+          if [ $? -eq 0 ]; then
+            echo "Docker Hub login successful"
+          else
+            echo "Docker Hub login failed, proceeding without authentication"
+          fi
         else
-          echo "No Docker Hub credentials found, proceeding without authentication"
+          echo "No Docker Hub credentials provided, proceeding without authentication"
         fi
       - echo Logging in to Amazon ECR...
       - aws ecr get-login-password --region {self.region} | docker login --username AWS --password-stdin {ecr_registry}"""
@@ -892,6 +928,7 @@ phases:
                 "image": "aws/codebuild/amazonlinux2-x86_64-standard:4.0",
                 "computeType": "BUILD_GENERAL1_SMALL",
                 "privilegedMode": True,
+                "environmentVariables": await self._get_codebuild_env_vars(),
             },
             "cache": {"type": "LOCAL", "modes": ["LOCAL_DOCKER_LAYER_CACHE"]},
             "logsConfig": {
