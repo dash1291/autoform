@@ -206,7 +206,9 @@ class IAMService:
                     "Action": ["s3:GetObject", "s3:PutObject"],
                     "Resource": [
                         f"arn:aws:s3:::{self.project_name.lower()}-builds-{self.region}/*",
-                        f"arn:aws:s3:::codebuild-{self.region}-{account_id}-*/*"
+                        f"arn:aws:s3:::codebuild-{self.region}-{account_id}-*/*",
+                        # Add wildcard pattern to handle various project name formats
+                        f"arn:aws:s3:::*-builds-{self.region}/*"
                     ],
                 },
                 {
@@ -214,7 +216,9 @@ class IAMService:
                     "Action": ["s3:ListBucket"],
                     "Resource": [
                         f"arn:aws:s3:::{self.project_name.lower()}-builds-{self.region}",
-                        f"arn:aws:s3:::codebuild-{self.region}-{account_id}-*"
+                        f"arn:aws:s3:::codebuild-{self.region}-{account_id}-*",
+                        # Add wildcard pattern to handle various project name formats
+                        f"arn:aws:s3:::*-builds-{self.region}"
                     ],
                 },
                 {
