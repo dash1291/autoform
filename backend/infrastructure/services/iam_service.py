@@ -159,36 +159,38 @@ class IAMService:
         """Create CodeBuild service role"""
         role_name = f"{self.project_name}-codebuild-role"
         account_id = await self._get_account_id()
+        role_arn = None
+        role_exists = False
 
         try:
             # Check if role exists
             response = self.iam.get_role(RoleName=role_name)
-            logger.info(f"Found existing CodeBuild role: {response['Role']['Arn']}")
-            return response["Role"]["Arn"]
+            role_arn = response["Role"]["Arn"]
+            role_exists = True
+            logger.info(f"Found existing CodeBuild role: {role_arn}")
         except self.iam.exceptions.NoSuchEntityException:
-            pass
+            # Role doesn't exist, create it
+            trust_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": {"Service": "codebuild.amazonaws.com"},
+                        "Action": "sts:AssumeRole",
+                    }
+                ],
+            }
 
-        # Create new role
-        trust_policy = {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Principal": {"Service": "codebuild.amazonaws.com"},
-                    "Action": "sts:AssumeRole",
-                }
-            ],
-        }
+            response = self.iam.create_role(
+                RoleName=role_name,
+                AssumeRolePolicyDocument=json.dumps(trust_policy),
+                Tags=[{"Key": "Name", "Value": role_name}],
+            )
+            role_arn = response["Role"]["Arn"]
+            logger.info(f"Created new CodeBuild role: {role_arn}")
 
-        response = self.iam.create_role(
-            RoleName=role_name,
-            AssumeRolePolicyDocument=json.dumps(trust_policy),
-            Tags=[{"Key": "Name", "Value": role_name}],
-        )
-
-        role_arn = response["Role"]["Arn"]
-
-        # Create and attach inline policy
+        # Always update the policy (for both new and existing roles)
+        # This ensures existing roles get updated permissions
         codebuild_policy = {
             "Version": "2012-10-17",
             "Statement": [
