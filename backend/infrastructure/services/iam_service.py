@@ -204,7 +204,18 @@ class IAMService:
                 {
                     "Effect": "Allow",
                     "Action": ["s3:GetObject", "s3:PutObject"],
-                    "Resource": f"arn:aws:s3:::codebuild-{self.region}-{account_id}-*/*",
+                    "Resource": [
+                        f"arn:aws:s3:::{self.project_name.lower()}-builds-{self.region}/*",
+                        f"arn:aws:s3:::codebuild-{self.region}-{account_id}-*/*"
+                    ],
+                },
+                {
+                    "Effect": "Allow",
+                    "Action": ["s3:ListBucket"],
+                    "Resource": [
+                        f"arn:aws:s3:::{self.project_name.lower()}-builds-{self.region}",
+                        f"arn:aws:s3:::codebuild-{self.region}-{account_id}-*"
+                    ],
                 },
                 {
                     "Effect": "Allow",
