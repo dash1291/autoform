@@ -26,7 +26,8 @@
         "ec2:AuthorizeSecurityGroupIngress",
         "ec2:ModifyVpcAttribute",
         "ec2:ModifySubnetAttribute",
-        "ec2:Describe*"
+        "ec2:Describe*",
+        "ec2:GetSecurityGroupsForVpc"
       ],
       "Resource": "*"
     },
@@ -57,10 +58,16 @@
       "Sid": "ServiceLinkedRoleCreation",
       "Effect": "Allow",
       "Action": "iam:CreateServiceLinkedRole",
-      "Resource": "arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing",
+      "Resource": [
+        "arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing",
+        "arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
+      ],
       "Condition": {
         "StringEquals": {
-          "iam:AWSServiceName": "elasticloadbalancing.amazonaws.com"
+          "iam:AWSServiceName": [
+            "elasticloadbalancing.amazonaws.com",
+            "ecs.amazonaws.com"
+          ]
         }
       }
     },

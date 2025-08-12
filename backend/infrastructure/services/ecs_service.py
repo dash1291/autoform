@@ -54,6 +54,7 @@ class ECSService:
         self.ecs = create_client("ecs", region, aws_credentials)
         self.secretsmanager = create_client("secretsmanager", region, aws_credentials)
         self.sts = create_client("sts", region, aws_credentials)
+        self.iam = create_client("iam", region, aws_credentials)
 
         self.cluster_arn: str = ""
         self.service_arn: str = ""
@@ -61,6 +62,9 @@ class ECSService:
 
     async def initialize(self):
         """Initialize ECS resources"""
+        # Ensure ECS service-linked role exists
+        await self._ensure_service_linked_role()
+        
         # Set up or find ECS cluster
         self.cluster_arn = await self._create_or_find_cluster()
 
@@ -106,6 +110,36 @@ class ECSService:
         except Exception as e:
             # Continue with defaults if service doesn't exist
             pass
+
+    async def _ensure_service_linked_role(self):
+        """Ensure ECS service-linked role exists"""
+        service_role_name = "AWSServiceRoleForECS"
+        
+        try:
+            # Check if the service-linked role already exists
+            self.iam.get_role(RoleName=service_role_name)
+            logger.info("ECS service-linked role already exists")
+            return
+        except self.iam.exceptions.NoSuchEntityException:
+            logger.info("ECS service-linked role doesn't exist, creating it...")
+        except Exception as error:
+            logger.warning(f"Error checking for ECS service-linked role: {error}")
+            # Continue to try creating it
+        
+        try:
+            # Create the ECS service-linked role
+            response = self.iam.create_service_linked_role(
+                AWSServiceName="ecs.amazonaws.com"
+            )
+            logger.info(f"Created ECS service-linked role: {response.get('Role', {}).get('RoleName', 'Unknown')}")
+        except self.iam.exceptions.InvalidInputException as error:
+            if "already exists" in str(error):
+                logger.info("ECS service-linked role already exists")
+            else:
+                logger.warning(f"Could not create ECS service-linked role: {error}")
+        except Exception as error:
+            logger.warning(f"Could not create ECS service-linked role: {error}")
+            # Don't fail the entire deployment for this - AWS might create it automatically
 
     async def _create_or_find_cluster(self) -> str:
         """Create or find ECS cluster"""
