@@ -505,15 +505,15 @@ export default function ProjectDetail() {
                                 </div>
                               )}
                               
-                              {env.domain && (
+                              {(env.domain || env.albDns) && (
                                 <div className="mt-2">
                                   <a
-                                    href={`http://${env.domain}`}
+                                    href={`${env.domain ? 'https' : 'http'}://${env.domain || env.albDns}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-xs text-muted-foreground hover:text-foreground underline"
                                   >
-                                    {env.domain}
+                                    {env.domain || env.albDns}
                                   </a>
                                 </div>
                               )}

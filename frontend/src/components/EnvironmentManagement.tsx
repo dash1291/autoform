@@ -458,16 +458,18 @@ export default function EnvironmentManagement({ projectId, teamId, onEnvironment
                           <GitBranch className="h-3 w-3 mr-1" />
                           {environment.branch}
                         </span>
-                        {environment.domain && (
+                        {(environment.domain || environment.albDns) && (
                           <a 
-                            href={`https://${environment.domain}`}
+                            href={`${environment.domain ? 'https' : 'http'}://${environment.domain || environment.albDns}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center text-blue-600 hover:text-blue-800 hover:underline"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <Lock className="h-3 w-3 mr-1 text-green-600" />
-                            {environment.domain}
+                            {environment.domain ? (
+                              <Lock className="h-3 w-3 mr-1 text-green-600" />
+                            ) : null}
+                            {environment.domain || environment.albDns}
                             <ExternalLink className="h-3 w-3 ml-1" />
                           </a>
                         )}

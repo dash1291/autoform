@@ -400,7 +400,7 @@ async def get_environment(
             "ecsServiceArn": environment.ecs_service_arn,
             "albArn": environment.alb_arn,
             "domain": environment.custom_domain,
-            "albDns": environment.custom_domain,
+            "albDns": environment.domain,
             "existingVpcId": environment.existing_vpc_id,
             "existingSubnetIds": environment.existing_subnet_ids,
             "existingClusterArn": environment.existing_cluster_arn,
