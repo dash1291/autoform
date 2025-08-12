@@ -90,6 +90,23 @@ async def create_aws_client(project, service: str, region: str = None):
     return create_client(service, region, project_credentials)
 
 
+async def get_deployed_environment_region(deployed_env) -> str:
+    """Get the AWS region from a deployed environment's AWS config"""
+    if not deployed_env or not deployed_env.team_aws_config_id:
+        return None
+    
+    async with get_async_session() as session:
+        aws_config_result = await session.execute(
+            select(TeamAwsConfig).where(TeamAwsConfig.id == deployed_env.team_aws_config_id)
+        )
+        aws_config = aws_config_result.scalar_one_or_none()
+        
+        if aws_config and aws_config.aws_region:
+            return aws_config.aws_region
+    
+    return None
+
+
 async def check_project_access(project_id: str, user_id: str) -> bool:
     """Check if user has access to project (through team membership)"""
     async with get_async_session() as session:
@@ -810,10 +827,16 @@ async def check_exec_availability(
         }
 
     # Check if there are running tasks
-    import os
     from botocore.exceptions import ClientError
 
-    region = os.getenv("AWS_REGION", "us-east-1")
+    # Get the correct region from the deployed environment's AWS config
+    region = await get_deployed_environment_region(deployed_env)
+    if not region:
+        return {
+            "available": False,
+            "status": "configuration_error",
+            "reason": "Unable to determine AWS region for deployed environment",
+        }
 
     try:
         ecs_client = await create_aws_client(project, "ecs", region)
@@ -1123,7 +1146,6 @@ async def get_project_deployed_resources(
             )
         
         # Get the TeamAwsConfig to find the correct region
-        from models.team import TeamAwsConfig
         aws_config_result = await session.execute(
             select(TeamAwsConfig).where(TeamAwsConfig.id == deployed_env.team_aws_config_id)
         )
@@ -1684,10 +1706,16 @@ async def check_environment_exec_availability(
         }
 
     # Check if there are running tasks
-    import os
     from botocore.exceptions import ClientError
 
-    region = os.getenv("AWS_REGION", "us-east-1")
+    # Get the correct region from the deployed environment's AWS config
+    region = await get_deployed_environment_region(environment)
+    if not region:
+        return {
+            "available": False,
+            "status": "configuration_error",
+            "reason": "Unable to determine AWS region for deployed environment",
+        }
 
     try:
         ecs_client = await create_aws_client(project, "ecs", region)
