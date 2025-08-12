@@ -743,9 +743,13 @@ class DeploymentService:
             # Fallback to project variables if no environment specified
             environment_variables = await self.get_environment_variables(project_id)
         
-        # Create .env file in the clone directory with all non-secret environment variables
+        # Create .env file in .autoform directory with all non-secret environment variables
         if environment_variables:
-            env_file_path = os.path.join(clone_dir, ".env")
+            # Create .autoform directory if it doesn't exist
+            autoform_dir = os.path.join(clone_dir, ".autoform")
+            os.makedirs(autoform_dir, exist_ok=True)
+            
+            env_file_path = os.path.join(autoform_dir, ".env")
             env_content = []
             
             for env_var in environment_variables:
@@ -762,7 +766,7 @@ class DeploymentService:
                 if deployment_id:
                     await self.log_to_database(
                         deployment_id, 
-                        f"📄 Created .env file with {len(env_content)} environment variable(s)"
+                        f"📄 Created .autoform/.env file with {len(env_content)} environment variable(s)"
                     )
         
         # Upload source to S3 (now including the .env file)
@@ -1166,9 +1170,14 @@ phases:
                     arc_name = os.path.relpath(file_path, clone_dir)
                     zipf.write(file_path, arc_name)
 
-        # Upload to S3
+        # Upload to S3 using put_object for better error handling
         with open(zip_path, "rb") as f:
-            self.s3.upload_fileobj(f, bucket_name, key_name)
+            file_content = f.read()
+            self.s3.put_object(
+                Bucket=bucket_name,
+                Key=key_name,
+                Body=file_content
+            )
 
         # Clean up local zip
         os.remove(zip_path)
