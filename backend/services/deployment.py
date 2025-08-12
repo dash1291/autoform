@@ -109,7 +109,6 @@ class DeploymentService:
         try:
             # Try to get Docker Hub credentials from user's Secrets Manager
             response = self.secretsmanager.get_secret_value(SecretId="dockerhub-credentials")
-            import json
             docker_creds = json.loads(response["SecretString"])
             
             env_vars.extend([
@@ -815,16 +814,18 @@ phases:
     commands:
       - echo Logging in to Amazon ECR...
       - aws ecr get-login-password --region {self.region} | docker login --username AWS --password-stdin {ecr_registry}
-      - echo Checking for Docker Hub credentials...
+      - echo Logging in to Docker Hub...
       - |
-        if aws secretsmanager describe-secret --secret-id dockerhub-credentials --region {self.region} >/dev/null 2>&1; then
-          echo "Docker Hub credentials found, logging in..."
-          DOCKERHUB_USERNAME=$(aws secretsmanager get-secret-value --secret-id dockerhub-credentials --region {self.region} --query SecretString --output text | jq -r .username)
-          DOCKERHUB_PASSWORD=$(aws secretsmanager get-secret-value --secret-id dockerhub-credentials --region {self.region} --query SecretString --output text | jq -r .password)
-          echo "$DOCKERHUB_PASSWORD" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
-          echo "Docker Hub login successful"
+        if [ ! -z "$DOCKERHUB_USERNAME" ] && [ ! -z "$DOCKERHUB_PASSWORD" ]; then
+          echo "Docker Hub credentials provided, logging in..."
+          echo "$DOCKERHUB_PASSWORD" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin >/dev/null 2>&1
+          if [ $? -eq 0 ]; then
+            echo "Docker Hub login successful"
+          else
+            echo "Docker Hub login failed, proceeding without authentication"
+          fi
         else
-          echo "No Docker Hub credentials found, proceeding without authentication"
+          echo "No Docker Hub credentials provided, proceeding without authentication"
         fi"""
         else:
             # Dockerfile-based build
@@ -1175,6 +1176,7 @@ phases:
     async def ensure_codebuild_role(self, project_name: str) -> str:
         """Ensure CodeBuild service role exists and return its ARN"""
         from infrastructure.services.iam_service import IAMService
+        import asyncio
         
         # Create IAM service to ensure role exists
         iam_service = IAMService(
@@ -1185,6 +1187,18 @@ phases:
         
         # This will create the CodeBuild role if it doesn't exist and return the ARN
         role_arn = await iam_service._create_codebuild_role()
+        
+        if not role_arn:
+            # Fallback to constructing the ARN if not returned
+            response = self.sts.get_caller_identity()
+            account_id = response["Account"]
+            role_arn = f"arn:aws:iam::{account_id}:role/{project_name}-codebuild-role"
+            logger.warning(f"Role ARN was empty, using constructed ARN: {role_arn}")
+        
+        logger.info(f"Using CodeBuild role ARN: {role_arn}")
+        
+        # Add a small delay to allow IAM role propagation
+        await asyncio.sleep(2)
         
         return role_arn
     
@@ -1319,7 +1333,6 @@ phases:
             environment_update_data["existingVpcId"] = result.vpc_id
         if result.subnet_ids and not environment_network.get("existing_subnet_ids"):
             # Only update subnets if it wasn't using existing ones
-            import json
             environment_update_data["existingSubnetIds"] = json.dumps(result.subnet_ids)
 
         if environment_update_data and config.environment_id:
