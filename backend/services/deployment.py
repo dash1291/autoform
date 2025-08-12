@@ -334,15 +334,7 @@ class DeploymentService:
                 deployment_id,
             )
 
-            # Step 2: Ensure CodeBuild role exists
-            if deployment_id:
-                await self.log_to_database(
-                    deployment_id, "🔐 Ensuring CodeBuild IAM role exists..."
-                )
-            
-            await self.ensure_codebuild_role(config.project_name)
-            
-            # Step 3: Build and push Docker image
+            # Step 2: Build and push Docker image
             if deployment_id:
                 await self.log_to_database(
                     deployment_id, "🐳 Building and pushing Docker image..."
@@ -966,7 +958,7 @@ phases:
             "logsConfig": {
                 "cloudWatchLogs": {"status": "ENABLED", "groupName": log_group_name}
             },
-            "serviceRole": await self.get_codebuild_role(project_name),
+            "serviceRole": await self.ensure_codebuild_role(project_name),
         }
 
         # Create or update CodeBuild project
@@ -1195,10 +1187,10 @@ phases:
             aws_credentials=self.aws_credentials
         )
         
-        # This will create the CodeBuild role if it doesn't exist
-        await iam_service._create_codebuild_role()
+        # This will create the CodeBuild role if it doesn't exist and return the ARN
+        role_arn = await iam_service._create_codebuild_role()
         
-        return iam_service.codebuild_role_arn
+        return role_arn
     
     async def get_codebuild_role(self, project_name: str) -> str:
         """Get CodeBuild service role ARN"""
