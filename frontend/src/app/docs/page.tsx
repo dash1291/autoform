@@ -1,6 +1,7 @@
 import { getDocBySlug } from '@/lib/docs'
 import { notFound } from 'next/navigation'
 import AuthGuard from '@/components/AuthGuard'
+import DocsContentWrapper from '@/components/DocsContentWrapper'
 
 export default async function DocsPage() {
   const doc = await getDocBySlug('')
@@ -11,10 +12,7 @@ export default async function DocsPage() {
 
   return (
     <AuthGuard>
-      <div 
-        className="prose prose-gray max-w-none"
-        dangerouslySetInnerHTML={{ __html: doc.content }}
-      />
+      <DocsContentWrapper content={doc.content} />
     </AuthGuard>
   )
 }

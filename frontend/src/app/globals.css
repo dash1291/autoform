@@ -127,6 +127,8 @@
   
   .prose pre code {
     @apply bg-transparent p-0 text-card-foreground;
+    white-space: pre;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   }
   
   .prose blockquote {

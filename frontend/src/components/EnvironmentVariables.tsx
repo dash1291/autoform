@@ -43,6 +43,10 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
     value: '',
     isSecret: false
   })
+  const [importedVars, setImportedVars] = useState<EnvVarState[]>([])
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [envFileContent, setEnvFileContent] = useState('')
+  const [showPreview, setShowPreview] = useState(false)
 
   useEffect(() => {
     fetchEnvironmentVariables()
@@ -188,12 +192,115 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
     return regex.test(key)
   }
 
+  const parseEnvFile = (content: string): EnvVarState[] => {
+    const lines = content.split('\n')
+    const vars: EnvVarState[] = []
+    
+    for (const line of lines) {
+      // Skip empty lines and comments
+      const trimmedLine = line.trim()
+      if (!trimmedLine || trimmedLine.startsWith('#')) {
+        continue
+      }
+      
+      // Parse KEY=VALUE format
+      const equalIndex = trimmedLine.indexOf('=')
+      if (equalIndex > 0) {
+        const key = trimmedLine.substring(0, equalIndex).trim()
+        let value = trimmedLine.substring(equalIndex + 1).trim()
+        
+        // Remove surrounding quotes if present
+        if ((value.startsWith('"') && value.endsWith('"')) || 
+            (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1)
+        }
+        
+        // Only add valid keys
+        if (validateKey(key)) {
+          vars.push({
+            key,
+            value,
+            isSecret: false
+          })
+        }
+      }
+    }
+    
+    return vars
+  }
+
+  const handleParseEnvContent = () => {
+    if (!envFileContent.trim()) {
+      setError('Please paste your .env file content')
+      return
+    }
+    
+    const parsed = parseEnvFile(envFileContent)
+    
+    if (parsed.length === 0) {
+      setError('No valid environment variables found in the content')
+      return
+    }
+    
+    // Filter out variables that already exist
+    const existingKeys = new Set(envVars.map(v => v.key))
+    const newVarsToImport = parsed.filter(v => !existingKeys.has(v.key))
+    
+    if (newVarsToImport.length === 0) {
+      setError('All variables in the content already exist')
+      return
+    }
+    
+    setImportedVars(newVarsToImport)
+    setShowPreview(true)
+    setError(null)
+  }
+
+  const handleImportConfirm = async () => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      // Import all variables
+      for (const varToImport of importedVars) {
+        await apiClient.createEnvironmentVariable(environmentId, varToImport)
+      }
+      
+      await fetchEnvironmentVariables()
+      setShowImportModal(false)
+      setShowPreview(false)
+      setImportedVars([])
+      setEnvFileContent('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to import environment variables')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleImportCancel = () => {
+    setShowImportModal(false)
+    setShowPreview(false)
+    setImportedVars([])
+    setEnvFileContent('')
+    setError(null)
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header with Add Button */}
-      <Button size="sm" onClick={() => setIsAdding(true)}>
-        Add Variable
-      </Button>
+      {/* Header with Add and Import Buttons */}
+      <div className="flex gap-2">
+        <Button size="sm" onClick={() => setIsAdding(true)}>
+          Add Variable
+        </Button>
+        <Button 
+          size="sm" 
+          variant="outline"
+          onClick={() => setShowImportModal(true)}
+        >
+          Import from .env
+        </Button>
+      </div>
       {/* Error Message */}
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
@@ -413,6 +520,110 @@ export default function EnvironmentVariables({ environmentId }: EnvironmentVaria
               ))}
             </tbody>
           </table>
+          </div>
+        </div>
+      )}
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-background border border-gray-700 rounded-lg p-6 max-w-3xl w-full max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4">Import Environment Variables</h3>
+            
+            {!showPreview ? (
+              <>
+                <p className="text-sm text-gray-500 mb-4">
+                  Paste your .env file content below. Lines should be in KEY=VALUE format.
+                </p>
+                
+                <textarea
+                  value={envFileContent}
+                  onChange={(e) => setEnvFileContent(e.target.value)}
+                  className="w-full h-64 bg-background border border-gray-700 rounded-lg p-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                
+                <div className="flex justify-end gap-2 mt-4">
+                  <Button
+                    variant="outline"
+                    onClick={handleImportCancel}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleParseEnvContent}
+                    disabled={!envFileContent.trim()}
+                  >
+                    Preview Import
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground mb-4">
+                  The following {importedVars.length} variable(s) will be imported:
+                </p>
+                
+                <div className="border border-gray-700 rounded-lg overflow-hidden mb-4">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-700">
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Variable Name</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importedVars.map((v, index) => (
+                        <tr key={index} className="border-b border-gray-700">
+                          <td className="px-4 py-2">
+                            <code className="text-sm font-mono">{v.key}</code>
+                          </td>
+                          <td className="px-4 py-2">
+                            <code className="text-xs bg-background px-2 py-1 rounded truncate block max-w-xs">
+                              {v.value.length > 50 ? v.value.substring(0, 50) + '...' : v.value}
+                            </code>
+                          </td>
+                          <td className="px-4 py-2">
+                            <div className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={v.isSecret}
+                                onChange={(e) => {
+                                  const updated = [...importedVars]
+                                  updated[index].isSecret = e.target.checked
+                                  setImportedVars(updated)
+                                }}
+                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-700 rounded mr-2"
+                              />
+                              <span className="text-xs">Secret</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowPreview(false)
+                      setImportedVars([])
+                    }}
+                    disabled={loading}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    onClick={handleImportConfirm}
+                    disabled={loading}
+                  >
+                    {loading ? 'Importing...' : 'Import All'}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

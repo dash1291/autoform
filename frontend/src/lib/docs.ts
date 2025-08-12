@@ -3,6 +3,7 @@ import path from 'path'
 import matter from 'gray-matter'
 import { remark } from 'remark'
 import html from 'remark-html'
+import gfm from 'remark-gfm'
 
 export interface DocMeta {
   title: string
@@ -50,8 +51,12 @@ async function processDynamicContent(content: string): Promise<string> {
           
           if (fs.existsSync(publicPath)) {
             const jsonContent = fs.readFileSync(publicPath, 'utf8');
-            // Format JSON for display in markdown
-            const formattedJson = '```json\n' + JSON.stringify(JSON.parse(jsonContent), null, 2) + '\n```';
+            // Format JSON for display in markdown with copy button HTML
+            // Escape the JSON content for HTML attributes
+            const escapedJsonContent = jsonContent.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            const copyButtonHtml = `<div class="copy-button-container mb-4"><button class="copy-policy-btn bg-white border border-gray-300 rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" data-copy-content="${escapedJsonContent}"><svg class="copy-icon h-4 w-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>Copy Policy</button></div>`;
+            // Create HTML directly to ensure proper formatting is preserved
+            const formattedJson = copyButtonHtml + '\n\n<pre><code class="language-json">' + jsonContent.trim() + '</code></pre>\n\n';
             processedContent = processedContent.replace(match, formattedJson);
           } else {
             console.warn(`JSON file not found: ${publicPath}`);
@@ -86,6 +91,7 @@ export async function getDocBySlug(slug: string): Promise<{ meta: DocMeta; conte
     
     // Process markdown content to HTML
     const processedContent = await remark()
+      .use(gfm)
       .use(html, { sanitize: false })
       .process(dynamicContent)
     const contentHtml = processedContent.toString()

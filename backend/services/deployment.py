@@ -20,7 +20,7 @@ from core.database import get_async_session
 from sqlmodel import select, Session
 from models.deployment import Deployment, DeploymentStatus
 from models.project import Project
-from models.environment import Environment
+from models.environment import Environment, EnvironmentVariable as EnvVarModel
 from models.user import Account
 from models.team import Team, TeamMember
 from services.encryption_service import encryption_service
@@ -735,16 +735,44 @@ class DeploymentService:
         subdirectory: Optional[str] = None,
     ) -> str:
         """Start CodeBuild project"""
-        # Upload source to S3 first
+        # Get environment variables for the specific environment (not project)
+        environment_variables = []
+        if hasattr(self, 'config') and self.config.environment_id:
+            environment_variables = await self.get_environment_variables_for_environment(self.config.environment_id)
+        else:
+            # Fallback to project variables if no environment specified
+            environment_variables = await self.get_environment_variables(project_id)
+        
+        # Create .env file in the clone directory with all non-secret environment variables
+        if environment_variables:
+            env_file_path = os.path.join(clone_dir, ".env")
+            env_content = []
+            
+            for env_var in environment_variables:
+                # Only include non-secret variables with values
+                if env_var.value and not env_var.is_secret:
+                    # Format as KEY=VALUE for .env file
+                    env_content.append(f"{env_var.key}={env_var.value}")
+            
+            if env_content:
+                with open(env_file_path, "w") as env_file:
+                    env_file.write("\n".join(env_content))
+                    env_file.write("\n")  # Add trailing newline
+                
+                if deployment_id:
+                    await self.log_to_database(
+                        deployment_id, 
+                        f"📄 Created .env file with {len(env_content)} environment variable(s)"
+                    )
+        
+        # Upload source to S3 (now including the .env file)
         source_location = await self.upload_source_to_s3(
             clone_dir, project_name, commit_sha
         )
 
-        import re
-
         build_project_name = f"{re.sub(r'[^a-z0-9-]', '-', project_name.lower())}-build"
 
-        # Get environment variables for the project to use as build args
+        # Get environment variables again for build args (if needed for Docker build args)
         environment_variables = await self.get_environment_variables(project_id)
 
         # Build docker build args from environment variables
@@ -1685,6 +1713,30 @@ phases:
                 ]
         except Exception as error:
             logger.error(f"Error fetching environment variables: {error}")
+            return []
+
+    async def get_environment_variables_for_environment(
+        self, environment_id: str
+    ) -> List[EnvironmentVariable]:
+        """Get environment variables for a specific environment"""
+        try:
+            async with get_async_session() as session:
+                result = await session.execute(
+                    select(EnvVarModel).where(EnvVarModel.environment_id == environment_id)
+                )
+                env_vars = result.scalars().all()
+
+                return [
+                    EnvironmentVariable(
+                        key=env_var.key,
+                        value=env_var.value if not env_var.is_secret else None,
+                        is_secret=env_var.is_secret,
+                        secret_key=env_var.secret_key if env_var.is_secret else None,
+                    )
+                    for env_var in env_vars
+                ]
+        except Exception as error:
+            logger.error(f"Error fetching environment variables for environment: {error}")
             return []
 
     async def get_environment_network_config(self, environment_id: str) -> Dict:
