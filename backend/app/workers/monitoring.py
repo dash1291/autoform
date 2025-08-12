@@ -1,6 +1,7 @@
 """Monitoring utilities for Celery tasks and deployments."""
 
 import asyncio
+import sys
 from typing import Dict, Any, Optional
 from celery import states
 from app.workers.celery_app import app
@@ -85,8 +86,6 @@ async def get_worker_stats() -> Dict[str, Any]:
 
 # CLI utility for monitoring
 if __name__ == "__main__":
-    import sys
-    
     async def main():
         if len(sys.argv) < 2:
             print("Usage: python monitoring.py <command> [args]")

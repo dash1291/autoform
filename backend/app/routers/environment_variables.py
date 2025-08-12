@@ -18,6 +18,7 @@ from schemas import (
     User,
 )
 from services.encryption_service import encryption_service
+from utils.aws_client import create_client
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -61,7 +62,6 @@ async def get_project_aws_credentials(project) -> dict:
 
 async def create_aws_client(project, service: str, region: str = None):
     """Create AWS client with appropriate project credentials"""
-    from utils.aws_client import create_client
     
     if region is None:
         region = settings.aws_region

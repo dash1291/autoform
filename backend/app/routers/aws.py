@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Dict, Any
 import logging
+import boto3
+import os
+from botocore.exceptions import ClientError, NoCredentialsError
 
 from core.database import get_async_session
 from core.security import get_current_user
@@ -8,6 +11,8 @@ from sqlmodel import select, and_, or_, func
 from models.user import User as UserModel
 from models.team import Team as TeamModel, TeamMember as TeamMemberModel, TeamAwsConfig
 from schemas import User
+from services.encryption_service import encryption_service
+from utils.aws_client import create_client
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +25,6 @@ async def check_aws_credentials(
     current_user: User = Depends(get_current_user),
 ):
     """Check AWS credentials and permissions (type: auto/personal/team/default)"""
-    import boto3
-    import os
-    from botocore.exceptions import ClientError, NoCredentialsError
-    from services.encryption_service import encryption_service
-
     region = os.getenv("AWS_REGION", "us-east-1")
     aws_credentials = None
     credential_source = "default"
@@ -143,8 +143,6 @@ async def check_aws_credentials(
             # No fallback to personal credentials since they don't exist anymore
 
         # Initialize AWS clients with LocalStack support
-        from utils.aws_client import create_client
-        
         # Convert credentials format for our create_client function
         client_credentials = None
         if aws_credentials:
@@ -224,11 +222,6 @@ async def get_aws_resources(
     current_user: User = Depends(get_current_user),
 ):
     """Get available AWS resources (VPCs, subnets, clusters, etc.) using specified credentials"""
-    import boto3
-    import os
-    from botocore.exceptions import ClientError, NoCredentialsError
-    from services.encryption_service import encryption_service
-
     region = os.getenv("AWS_REGION", "us-east-1")
 
     try:
@@ -361,8 +354,6 @@ async def get_aws_resources(
                 logger.info("Using default AWS credentials")
 
         # Initialize AWS clients with LocalStack support
-        from utils.aws_client import create_client
-        
         # Convert credentials format for our create_client function
         client_credentials = None
         if aws_credentials:

@@ -6,6 +6,7 @@ from core.security import get_current_user
 from sqlmodel import select
 from models.user import User
 from models.project import Project
+from models.team import Team, TeamMember
 from schemas import User as UserSchema
 
 logger = logging.getLogger(__name__)
@@ -64,7 +65,6 @@ async def debug_current_user_projects(current_user: UserSchema = Depends(get_cur
     try:
         async with get_async_session() as session:
             # Get team IDs where user is owner or member
-            from models.team import Team, TeamMember
             owned_teams = await session.execute(
                 select(Team.id).where(Team.owner_id == current_user.id)
             )

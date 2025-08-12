@@ -1,5 +1,6 @@
 import boto3
 import logging
+import os
 from typing import List
 
 from infrastructure.types import (
@@ -11,14 +12,13 @@ from infrastructure.services.vpc_service import VPCService
 from infrastructure.services.iam_service import IAMService
 from infrastructure.services.load_balancer_service import LoadBalancerService
 from infrastructure.services.ecs_service import ECSService
+from utils.aws_client import create_client
 
 logger = logging.getLogger(__name__)
 
 
 class ECSInfrastructure:
     def __init__(self, args: ECSInfrastructureArgs, aws_credentials=None):
-        import os
-
         self.region = args.region or os.getenv("AWS_REGION", "us-east-1")
         self.project_name = args.project_name
         self.image_uri = args.image_uri
@@ -31,8 +31,6 @@ class ECSInfrastructure:
         self.aws_credentials = aws_credentials
 
         # Initialize AWS clients with LocalStack support
-        from utils.aws_client import create_client
-        
         self.logs = create_client("logs", self.region, aws_credentials)
 
         # Service instances will be initialized during setup

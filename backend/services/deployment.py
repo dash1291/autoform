@@ -6,8 +6,12 @@ import subprocess
 import tempfile
 import time
 import re
+import zipfile
+import asyncio
+import boto3
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
+from botocore.exceptions import ClientError
 from utils.aws_client import create_client
 
 from infrastructure.types import (
@@ -1143,9 +1147,6 @@ phases:
             pass  # Bucket already exists
 
         # Create zip of source code using Python
-        import zipfile
-        import os
-
         zip_path = f"/tmp/{commit_sha}.zip"
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
             for root, dirs, files in os.walk(clone_dir):
@@ -1178,7 +1179,6 @@ phases:
     async def ensure_codebuild_role(self, project_name: str) -> str:
         """Ensure CodeBuild service role exists and return its ARN"""
         from infrastructure.services.iam_service import IAMService
-        import asyncio
         
         # Create IAM service to ensure role exists
         iam_service = IAMService(
@@ -1384,9 +1384,6 @@ phases:
         self, environment_id: str, deployment_id: str, max_wait_minutes: int = 15
     ) -> bool:
         """Wait for ECS service to become healthy using environment data"""
-        import boto3
-        import asyncio
-        from botocore.exceptions import ClientError
 
         # Track logged events to avoid duplicates
         logged_events = set()
@@ -1532,7 +1529,6 @@ phases:
                         return True
 
                     # Check if we should abort
-                    from services.deployment_manager import deployment_manager
                     if deployment_manager.is_deployment_aborted(deployment_id):
                         await self.log_to_database(
                             deployment_id, "🛑 Health check aborted by user"
@@ -1564,9 +1560,6 @@ phases:
         self, project_id: str, deployment_id: str, max_wait_minutes: int = 15
     ) -> bool:
         """Wait for ECS service to become healthy"""
-        import boto3
-        import asyncio
-        from botocore.exceptions import ClientError
 
         try:
             # Get project details
@@ -1723,7 +1716,6 @@ phases:
     ) -> List[EnvironmentVariable]:
         """Get environment variables for project"""
         try:
-            from models.environment import EnvironmentVariable as EnvVarModel
             
             async with get_async_session() as session:
                 result = await session.execute(

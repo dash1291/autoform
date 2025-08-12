@@ -1,3 +1,4 @@
+import re
 from pydantic import BaseModel, Field, validator
 from typing import Optional
 from datetime import datetime
@@ -11,8 +12,6 @@ class ProjectBase(BaseModel):
 
     @validator("git_repo_url")
     def validate_github_url(cls, v):
-        import re
-
         pattern = r"^https://github\.com/[\w.-]+/[\w.-]+(?:\.git)?$"
         if not re.match(pattern, v):
             raise ValueError("Please provide a valid GitHub repository URL")

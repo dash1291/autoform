@@ -6,6 +6,7 @@ import time
 from typing import List, Dict, Any
 
 from infrastructure.types import EnvironmentVariable
+from utils.aws_client import create_client
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +51,6 @@ class ECSService:
         self.desired_instance_count = desired_instance_count
 
         # Initialize AWS clients with custom credentials if provided
-        from utils.aws_client import create_client
-        
         self.ecs = create_client("ecs", region, aws_credentials)
         self.secretsmanager = create_client("secretsmanager", region, aws_credentials)
         self.sts = create_client("sts", region, aws_credentials)

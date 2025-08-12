@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional, Dict, Any
 import logging
+import boto3
 
 from core.database import get_async_session
 from core.security import get_current_user
@@ -12,6 +13,8 @@ from models.team import Team, TeamMember, TeamAwsConfig
 from models.environment import Environment
 from models.deployment import Deployment
 from services.encryption_service import encryption_service
+from services.deployment import DeploymentService
+from infrastructure.services.acm_service import ACMService
 from utils.aws_client import create_client
 
 logger = logging.getLogger(__name__)
@@ -145,7 +148,6 @@ async def get_project_environments(
         environments_response = []
         for env in environments.scalars().all():
             # Get AWS config info
-            from models.team import TeamAwsConfig
             aws_config = await session.get(TeamAwsConfig, env.team_aws_config_id)
             aws_config_info = {
                 "type": "team",
@@ -575,9 +577,6 @@ async def update_environment(
         certificate_info = None
         if environment.custom_domain and environment.auto_provision_certificate:
             try:
-                from infrastructure.services.acm_service import ACMService
-                from services.encryption_service import encryption_service
-                
                 # Get team AWS credentials
                 team_aws_config = await session.get(TeamAwsConfig, environment.team_aws_config_id)
                 aws_credentials = None
@@ -792,9 +791,6 @@ async def get_certificate_status(
             }
         
         try:
-            from infrastructure.services.acm_service import ACMService
-            from services.encryption_service import encryption_service
-            
             # Get team AWS credentials
             team_aws_config = await session.get(TeamAwsConfig, environment.team_aws_config_id)
             if not team_aws_config:
@@ -1001,10 +997,6 @@ async def get_environment_service_status(
             }
 
         try:
-            # Import here to avoid circular import
-            from services.deployment import DeploymentService
-            from services.encryption_service import encryption_service
-            
             # Get team AWS credentials for this environment
             if not team_aws_config:
                 return {
@@ -1035,9 +1027,6 @@ async def get_environment_service_status(
             cluster_name = cluster_arn.split("/")[-1]
 
             # Use the same logic as project service status
-            import boto3
-            from utils.aws_client import create_client
-
             ecs_client = create_client("ecs", team_aws_config.aws_region, aws_credentials)
 
             # Get service details

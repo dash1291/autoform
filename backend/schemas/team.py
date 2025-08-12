@@ -1,3 +1,4 @@
+import re
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime
@@ -19,8 +20,6 @@ class TeamMemberAdd(BaseModel):
         if len(v.strip()) < 1:
             raise ValueError("GitHub username is required")
         # Basic GitHub username validation
-        import re
-
         if not re.match(
             r"^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$", v.strip()
         ):

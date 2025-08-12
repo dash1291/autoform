@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from botocore.exceptions import ClientError, NoCredentialsError
+from utils.aws_client import create_client
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +54,6 @@ class CloudWatchLogsService:
                 logger.warning("No AWS credentials found!")
 
             # Use LocalStack-aware client creation
-            from utils.aws_client import create_client
-            
             self.logs_client = create_client("logs", region_name, aws_credentials)
             self.ecs_client = create_client("ecs", region_name, aws_credentials)
 
@@ -510,9 +509,6 @@ class CloudWatchLogsService:
         logger.info(f"Fetching logs from log group: {log_group_name}")
         
         try:
-            from datetime import datetime, timedelta
-            from botocore.exceptions import ClientError
-
             # Calculate time range
             end_time = datetime.now()
             start_time = end_time - timedelta(hours=hours_back)

@@ -24,6 +24,8 @@ from schemas.team import (
 )
 from services.github_user_service import github_user_service
 from services.encryption_service import encryption_service
+from utils.aws_client import create_client
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
@@ -1031,9 +1033,6 @@ async def test_team_aws_config(
         )
 
     # Test AWS credentials
-    from utils.aws_client import create_client
-    from botocore.exceptions import ClientError
-
     try:
         # Create credentials dict for AWS client
         aws_credentials = {
@@ -1542,9 +1541,6 @@ async def test_specific_team_aws_config(
             )
 
     # Test AWS credentials
-    from utils.aws_client import create_client
-    from botocore.exceptions import ClientError
-
     try:
         # Create credentials dict for AWS client
         aws_credentials = {

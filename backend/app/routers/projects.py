@@ -3,8 +3,8 @@ from typing import List, Optional
 import json
 import logging
 import os
+import secrets
 from botocore.exceptions import ClientError, NoCredentialsError
-
 
 from core.database import get_async_session
 from core.security import get_current_user
@@ -12,9 +12,11 @@ from core.config import settings
 from sqlmodel import select, and_
 from models.project import Project as ProjectModel, ProjectStatus
 from models.team import Team, TeamMember, TeamAwsConfig
-from models.environment import Environment
+from models.environment import Environment, EnvironmentVariable as EnvVarModel
 from models.webhook import Webhook
+from models.deployment import Deployment
 from schemas import Project, ProjectCreate, ProjectUpdate, User as UserSchema
+from services.project_deletion import delete_project_infrastructure
 from services.cloudwatch_service import CloudWatchLogsService
 from services.encryption_service import encryption_service
 from services.github_webhook import GitHubWebhookService
@@ -162,7 +164,6 @@ async def get_user_accessible_projects(user_id: str):
             team = await session.get(Team, project.team_id)
             
             # Check webhook status
-            from models.webhook import Webhook
             webhook = await session.execute(
                 select(Webhook).where(Webhook.git_repo_url == project.git_repo_url)
             )
@@ -444,7 +445,6 @@ async def delete_project(
         # Delete AWS infrastructure if requested
         if delete_infrastructure:
             try:
-                from services.project_deletion import delete_project_infrastructure
                 
                 # Get AWS credentials for the project
                 project_credentials = await get_project_aws_credentials(project)
@@ -475,7 +475,6 @@ async def delete_project(
         
         # Delete all related records first to avoid foreign key constraints
         # Delete environment variables
-        from models.environment import EnvironmentVariable as EnvVarModel
         env_vars = await session.execute(
             select(EnvVarModel).where(EnvVarModel.project_id == project_id)
         )
@@ -483,7 +482,6 @@ async def delete_project(
             await session.delete(env_var)
         
         # Delete deployments
-        from models.deployment import Deployment
         deployments = await session.execute(
             select(Deployment).where(Deployment.project_id == project_id)
         )
@@ -499,7 +497,6 @@ async def delete_project(
         
         # Delete webhooks (if they match the project's git repo URL)
         if project.git_repo_url:
-            from models.webhook import Webhook
             webhooks = await session.execute(
                 select(Webhook).where(Webhook.git_repo_url == project.git_repo_url)
             )
@@ -551,9 +548,6 @@ async def get_service_status(
             "message": "Service not deployed",
             "healthy": False,
         }
-
-    import os
-    from botocore.exceptions import ClientError
 
     region = os.getenv("AWS_REGION", "us-east-1")
 
@@ -827,8 +821,6 @@ async def check_exec_availability(
         }
 
     # Check if there are running tasks
-    from botocore.exceptions import ClientError
-
     try:
         ecs_client = await create_aws_client(deployed_env, "ecs")
 
@@ -960,8 +952,6 @@ async def execute_command(
     command = command_data.get("command", "")
     if not command:
         return {"success": False, "message": "No command provided"}
-
-    from botocore.exceptions import ClientError
 
     try:
         ecs_client = await create_aws_client(deployed_env, "ecs")
@@ -1437,8 +1427,6 @@ async def configure_webhook(
         webhook_obj = webhook.scalar_one_or_none()
 
         if not webhook_obj:
-            import secrets
-
             webhook_secret = secrets.token_urlsafe(32)
 
             webhook_obj = Webhook(
@@ -1809,8 +1797,6 @@ async def execute_environment_command(
     if not command:
         return {"success": False, "message": "No command provided"}
 
-    from botocore.exceptions import ClientError
-
     try:
         ecs_client = await create_aws_client(environment, "ecs")
 
@@ -1909,5 +1895,4 @@ async def create_cloudwatch_service_for_environment(environment):
             }
             region = team_aws_config.aws_region
 
-    from services.cloudwatch_service import CloudWatchLogsService
     return CloudWatchLogsService(region_name=region, aws_credentials=aws_credentials)

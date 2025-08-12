@@ -4,10 +4,14 @@ import os
 import sys
 import asyncio
 import signal
+import traceback
+import gc
+from datetime import datetime, timedelta
 from typing import Dict, Any
 from celery import Task
 from celery.signals import task_prerun, task_postrun, task_failure
 from celery.exceptions import SoftTimeLimitExceeded
+from sqlmodel import select
 
 # Add the backend directory to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -22,6 +26,9 @@ from app.workers.celery_app import app
 from core.database import get_async_session
 from models.deployment import Deployment, DeploymentStatus
 from models.project import ProjectStatus
+from models.environment import Environment as EnvironmentModel
+from services.deployment import DeploymentConfig, DeploymentService
+from services.deployment_manager import deployment_manager
 
 
 class DeploymentTask(Task):
@@ -81,7 +88,6 @@ async def _deploy_project_async(self, config: Dict[str, Any], deployment_id: str
         print(f"Updated deployment {deployment_id} status to DEPLOYING")
         
         # Create DeploymentConfig from dict
-        from services.deployment import DeploymentConfig, DeploymentService
         deployment_config = DeploymentConfig(**config)
         print(f"Created deployment config for project {deployment_config.project_id}")
         
@@ -115,7 +121,6 @@ async def _deploy_project_async(self, config: Dict[str, Any], deployment_id: str
         raise Exception(error_msg)
     except Exception as e:
         print(f"Deployment {deployment_id} failed with error: {str(e)}")
-        import traceback
         print(f"Full traceback: {traceback.format_exc()}")
         
         # Update deployment status to failed
@@ -136,8 +141,6 @@ async def _deploy_project_async(self, config: Dict[str, Any], deployment_id: str
                     # Also update environment status if this deployment was for an environment  
                     if deployment.environment_id:
                         # Check if there are any other active deployments for this environment
-                        from sqlmodel import select
-                        from models.environment import Environment as EnvironmentModel
                         
                         result = await error_session.execute(
                             select(Deployment).where(
@@ -171,7 +174,6 @@ async def _deploy_project_async(self, config: Dict[str, Any], deployment_id: str
     finally:
         # Ensure all async resources are properly cleaned up
         try:
-            import gc
             gc.collect()  # Force garbage collection to clean up async resources
         except Exception as cleanup_error:
             print(f"Cleanup error (non-critical): {cleanup_error}")
@@ -215,7 +217,6 @@ async def _abort_deployment_async(deployment_id: str):
                 app.control.revoke(deployment.celery_task_id, terminate=True)
             
             # Use deployment manager to abort
-            from services.deployment_manager import deployment_manager
             success = deployment_manager.abort_deployment(deployment_id)
             
             if success:
@@ -236,16 +237,12 @@ def cleanup_old_deployments():
     """
     Periodic task to clean up old deployment records and logs.
     """
-    from datetime import datetime, timedelta
-    
     return asyncio.run(_cleanup_old_deployments_async())
 
 
 async def _cleanup_old_deployments_async():
     """Async implementation of cleanup logic."""
     try:
-        from datetime import datetime, timedelta
-        
         async with get_async_session() as session:
             # Delete deployments older than 30 days
             cutoff_date = datetime.utcnow() - timedelta(days=30)

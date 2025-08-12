@@ -15,7 +15,7 @@ from models.environment import Environment
 from models.deployment import Deployment
 from models.team import Team, TeamAwsConfig
 from app.workers.tasks import deploy_project as deploy_project_task
-from services.encryption_service import encryption_service
+from services.encryption_service import encryption_service, EncryptionService
 from schemas import DeploymentStatus, EnvironmentStatus
 from datetime import datetime
 
@@ -302,8 +302,6 @@ async def trigger_auto_deployment(project_id: str, webhook_payload: Dict[str, An
             return
 
         # Decrypt team credentials
-        from services.encryption_service import EncryptionService
-
         encryption_service = EncryptionService()
         access_key = encryption_service.decrypt(team_aws_config.aws_access_key_id)
         secret_key = encryption_service.decrypt(team_aws_config.aws_secret_access_key)
