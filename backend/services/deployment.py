@@ -103,16 +103,12 @@ class DeploymentService:
         self.secretsmanager = create_client("secretsmanager", region, aws_credentials)
         
     async def _get_codebuild_env_vars(self):
-        """Get environment variables for CodeBuild, including Autoform's Docker Hub credentials"""
+        """Get environment variables for CodeBuild, including Docker Hub credentials"""
         env_vars = []
         
         try:
-            # Read Autoform's Docker Hub credentials using default/autoform credentials
-            from utils.aws_client import create_client
-            autoform_secrets_client = create_client("secretsmanager", self.region, None)  # Autoform's credentials
-            
-            # Get Docker Hub credentials from Autoform's Secrets Manager
-            response = autoform_secrets_client.get_secret_value(SecretId="dockerhub-credentials")
+            # Try to get Docker Hub credentials from user's Secrets Manager
+            response = self.secretsmanager.get_secret_value(SecretId="dockerhub-credentials")
             import json
             docker_creds = json.loads(response["SecretString"])
             
