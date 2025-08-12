@@ -18,7 +18,6 @@ from schemas import Project, ProjectCreate, ProjectUpdate, User as UserSchema
 from services.cloudwatch_service import CloudWatchLogsService
 from services.encryption_service import encryption_service
 from services.github_webhook import GitHubWebhookService
-from utils.encryption import decrypt_data
 from utils.aws_client import create_client
 
 logger = logging.getLogger(__name__)
@@ -97,10 +96,10 @@ async def create_aws_client(environment, service: str):
         
         # Get credentials for this AWS config
         aws_credentials = None
-        if aws_config.encrypted_access_key and aws_config.encrypted_secret_key:
+        if aws_config.aws_access_key_id and aws_config.aws_secret_access_key:
             aws_credentials = {
-                "access_key": decrypt_data(aws_config.encrypted_access_key),
-                "secret_key": decrypt_data(aws_config.encrypted_secret_key),
+                "access_key": encryption_service.decrypt(aws_config.aws_access_key_id),
+                "secret_key": encryption_service.decrypt(aws_config.aws_secret_access_key),
             }
         
         return create_client(service, region, aws_credentials)
