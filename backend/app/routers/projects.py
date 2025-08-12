@@ -865,7 +865,6 @@ async def check_exec_availability(
                 "debug": {
                     "serviceName": service_name,
                     "clusterName": cluster_name,
-                    "region": region,
                 },
             }
 
@@ -880,6 +879,14 @@ async def check_exec_availability(
 
             # Get the first container name (main container)
             container_name = containers[0] if containers else "app"
+
+            # Get region from the environment's AWS config
+            async with get_async_session() as session:
+                aws_config_result = await session.execute(
+                    select(TeamAwsConfig).where(TeamAwsConfig.id == deployed_env.team_aws_config_id)
+                )
+                aws_config = aws_config_result.scalar_one_or_none()
+                region = aws_config.aws_region if aws_config else "us-east-1"
 
             return {
                 "available": True,
@@ -954,10 +961,7 @@ async def execute_command(
     if not command:
         return {"success": False, "message": "No command provided"}
 
-    import os
     from botocore.exceptions import ClientError
-
-    region = os.getenv("AWS_REGION", "us-east-1")
 
     try:
         ecs_client = await create_aws_client(deployed_env, "ecs")
@@ -1746,6 +1750,14 @@ async def check_environment_exec_availability(
         # Get the first container name (main container)
         container_name = containers[0] if containers else "app"
 
+        # Get region from the environment's AWS config
+        async with get_async_session() as session:
+            aws_config_result = await session.execute(
+                select(TeamAwsConfig).where(TeamAwsConfig.id == environment.team_aws_config_id)
+            )
+            aws_config = aws_config_result.scalar_one_or_none()
+            region = aws_config.aws_region if aws_config else "us-east-1"
+
         return {
             "available": True,
             "status": "ready",
@@ -1797,13 +1809,10 @@ async def execute_environment_command(
     if not command:
         return {"success": False, "message": "No command provided"}
 
-    import os
     from botocore.exceptions import ClientError
 
-    region = os.getenv("AWS_REGION", "us-east-1")
-
     try:
-        ecs_client = await create_aws_client(deployed_env, "ecs")
+        ecs_client = await create_aws_client(environment, "ecs")
 
         # Extract cluster ARN or use default
         cluster_arn = environment.ecs_cluster_arn or "default"
