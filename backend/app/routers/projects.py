@@ -1098,11 +1098,45 @@ async def get_project_deployed_resources(
             )
 
     try:
-        # Get region from team config or environment
-        region = os.getenv("AWS_REGION", "us-east-1")
-        project_credentials = await get_project_aws_credentials(project)
-        if project_credentials and project_credentials.get("region"):
-            region = project_credentials["region"]
+        # Get deployed environment first to get the correct region
+        deployed_environment = await session.execute(
+            select(Environment).where(
+                and_(
+                    Environment.project_id == project_id,
+                    Environment.ecs_service_arn.isnot(None)
+                )
+            )
+        )
+        deployed_env = deployed_environment.scalar_one_or_none()
+        
+        # Get region from the deployed environment's AWS config
+        if not deployed_env:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail="No deployed environment found for this project"
+            )
+        
+        if not deployed_env.team_aws_config_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Deployed environment has no AWS configuration"
+            )
+        
+        # Get the TeamAWSConfig to find the correct region
+        from models.team import TeamAWSConfig
+        aws_config_result = await session.execute(
+            select(TeamAWSConfig).where(TeamAWSConfig.id == deployed_env.team_aws_config_id)
+        )
+        aws_config = aws_config_result.scalar_one_or_none()
+        
+        if not aws_config or not aws_config.aws_region:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="AWS configuration missing or has no region configured"
+            )
+        
+        region = aws_config.aws_region
+        logger.info(f"Using region {region} from deployed environment's AWS config")
 
         logger.info(
             f"Getting deployed resources for project {project_id} in region {region}"
@@ -1120,17 +1154,6 @@ async def get_project_deployed_resources(
             "service": None,
             "loadBalancer": None,
         }
-
-        # Get deployed environment
-        deployed_environment = await session.execute(
-            select(Environment).where(
-                and_(
-                    Environment.project_id == project_id,
-                    Environment.ecs_service_arn.isnot(None)
-                )
-            )
-        )
-        deployed_env = deployed_environment.scalar_one_or_none()
 
         # If deployed environment has stored network configuration, use that
         if deployed_env and deployed_env.existing_vpc_id:
