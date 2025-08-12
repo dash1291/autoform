@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Tuple
@@ -188,6 +189,9 @@ class IAMService:
             )
             role_arn = response["Role"]["Arn"]
             logger.info(f"Created new CodeBuild role: {role_arn}")
+            
+            # Add delay after creating new role to allow for IAM propagation
+            await asyncio.sleep(10)
 
         # Always update the policy (for both new and existing roles)
         # This ensures existing roles get updated permissions
