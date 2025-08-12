@@ -1122,10 +1122,10 @@ async def get_project_deployed_resources(
                 detail="Deployed environment has no AWS configuration"
             )
         
-        # Get the TeamAWSConfig to find the correct region
-        from models.team import TeamAWSConfig
+        # Get the TeamAwsConfig to find the correct region
+        from models.team import TeamAwsConfig
         aws_config_result = await session.execute(
-            select(TeamAWSConfig).where(TeamAWSConfig.id == deployed_env.team_aws_config_id)
+            select(TeamAwsConfig).where(TeamAwsConfig.id == deployed_env.team_aws_config_id)
         )
         aws_config = aws_config_result.scalar_one_or_none()
         
