@@ -1697,7 +1697,7 @@ async def check_environment_exec_availability(
         }
 
     try:
-        ecs_client = await create_aws_client(deployed_env, "ecs")
+        ecs_client = await create_aws_client(environment, "ecs")
 
         # Extract cluster name from ARN or use default
         cluster_name = environment.ecs_cluster_arn or "default"
