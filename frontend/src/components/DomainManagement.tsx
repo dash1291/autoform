@@ -97,12 +97,9 @@ export default function DomainManagement({
       const data = await apiClient.getProjectEnvironments(projectId);
       setEnvironments(data);
 
-      // Auto-select first deployed environment
-      const deployedEnv = data.find(
-        (env) => env.status === "DEPLOYED" || env.status === "DEPLOYING" || env.ecsServiceArn
-      );
-      if (deployedEnv && !selectedEnvironmentId) {
-        setSelectedEnvironmentId(deployedEnv.id);
+      // Auto-select first environment (regardless of status)
+      if (data.length > 0 && !selectedEnvironmentId) {
+        setSelectedEnvironmentId(data[0].id);
       }
     } catch (error: any) {
       setError("Failed to load environments");
@@ -177,9 +174,8 @@ export default function DomainManagement({
     setSuccess("Copied to clipboard!");
   };
 
-  const deployedEnvironments = environments.filter(
-    (env) => env.status === "DEPLOYED" || env.status === "DEPLOYING" || env.ecsServiceArn
-  );
+  // Show all environments, not just deployed ones
+  const deployedEnvironments = environments;
 
   if (loading) {
     return (
