@@ -18,8 +18,12 @@ from services import (
     deployment_manager,
     encryption_service,
 )
+
 from .github import get_branch_commit_sha
 from app.workers.tasks import deploy_project as deploy_project_task, abort_deployment as abort_deployment_task
+from models.team import TeamAwsConfig
+from services.deployment_manager import deployment_manager
+from app.workers.celery_app import app
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +215,6 @@ async def deploy_environment(
             commit_sha = f"deploy-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
 
         # Create deployment record
-        from datetime import datetime
         deployment = Deployment(
             project_id=project.id,
             environment_id=environment_id,
@@ -232,8 +235,7 @@ async def deploy_environment(
         session.add(environment)
         await session.commit()
 
-        # Get environment's specific AWS credentials
-        from models.team import TeamAwsConfig
+
         team_aws_config_result = await session.execute(
             select(TeamAwsConfig).where(TeamAwsConfig.id == environment.team_aws_config_id)
         )
@@ -419,12 +421,10 @@ async def abort_deployment(
 
         # Revoke the celery task if it exists
         if deployment.celery_task_id:
-            from app.workers.celery_app import app
             app.control.revoke(deployment.celery_task_id, terminate=True)
 
         # Also try to abort using deployment manager
         try:
-            from services.deployment_manager import deployment_manager
             deployment_manager.abort_deployment_by_id(deployment_id, deployment.project_id)
         except:
             pass  # Ignore errors from deployment manager

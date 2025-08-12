@@ -18,6 +18,8 @@ from schemas import Project, ProjectCreate, ProjectUpdate, User as UserSchema
 from services.cloudwatch_service import CloudWatchLogsService
 from services.encryption_service import encryption_service
 from services.github_webhook import GitHubWebhookService
+from utils.encryption import decrypt_data
+from utils.aws_client import create_client
 
 logger = logging.getLogger(__name__)
 
@@ -73,38 +75,37 @@ async def create_cloudwatch_service(project) -> CloudWatchLogsService:
         return CloudWatchLogsService()
 
 
-async def create_aws_client(project, service: str, region: str = None):
-    """Create AWS client with team credentials if available"""
-    from utils.aws_client import create_client
-    import os
-
-    if region is None:
-        region = os.getenv("AWS_REGION", "us-east-1")
-
-    project_credentials = await get_project_aws_credentials(project)
-
-    # Use team's preferred region if different
-    if project_credentials and project_credentials["region"] != region:
-        region = project_credentials["region"]
-
-    return create_client(service, region, project_credentials)
-
-
-async def get_deployed_environment_region(deployed_env) -> str:
-    """Get the AWS region from a deployed environment's AWS config"""
-    if not deployed_env or not deployed_env.team_aws_config_id:
-        return None
+async def create_aws_client(environment, service: str):
+    """Create AWS client using environment's specific AWS configuration"""
+    if not environment or not environment.team_aws_config_id:
+        raise ValueError("Environment must have a team_aws_config_id")
     
+    # Get the AWS config for this specific environment
     async with get_async_session() as session:
         aws_config_result = await session.execute(
-            select(TeamAwsConfig).where(TeamAwsConfig.id == deployed_env.team_aws_config_id)
+            select(TeamAwsConfig).where(TeamAwsConfig.id == environment.team_aws_config_id)
         )
         aws_config = aws_config_result.scalar_one_or_none()
         
-        if aws_config and aws_config.aws_region:
-            return aws_config.aws_region
-    
-    return None
+        if not aws_config:
+            raise ValueError(f"AWS config not found for environment {environment.id}")
+        
+        # Use the environment's specific region and credentials
+        region = aws_config.aws_region
+        if not region:
+            raise ValueError(f"AWS region not set for environment {environment.id}")
+        
+        # Get credentials for this AWS config
+        aws_credentials = None
+        if aws_config.encrypted_access_key and aws_config.encrypted_secret_key:
+            aws_credentials = {
+                "access_key": decrypt_data(aws_config.encrypted_access_key),
+                "secret_key": decrypt_data(aws_config.encrypted_secret_key),
+            }
+        
+        return create_client(service, region, aws_credentials)
+
+
 
 
 async def check_project_access(project_id: str, user_id: str) -> bool:
@@ -558,7 +559,7 @@ async def get_service_status(
     region = os.getenv("AWS_REGION", "us-east-1")
 
     try:
-        ecs_client = await create_aws_client(project, "ecs", region)
+        ecs_client = await create_aws_client(deployed_env, "ecs")
 
         # Get cluster and service identifiers from the deployed environment
         cluster_identifier = deployed_env.ecs_cluster_arn or "default"
@@ -829,17 +830,8 @@ async def check_exec_availability(
     # Check if there are running tasks
     from botocore.exceptions import ClientError
 
-    # Get the correct region from the deployed environment's AWS config
-    region = await get_deployed_environment_region(deployed_env)
-    if not region:
-        return {
-            "available": False,
-            "status": "configuration_error",
-            "reason": "Unable to determine AWS region for deployed environment",
-        }
-
     try:
-        ecs_client = await create_aws_client(project, "ecs", region)
+        ecs_client = await create_aws_client(deployed_env, "ecs")
 
         # Extract cluster name from ARN or use default
         cluster_name = deployed_env.ecs_cluster_arn or "default"
@@ -969,7 +961,7 @@ async def execute_command(
     region = os.getenv("AWS_REGION", "us-east-1")
 
     try:
-        ecs_client = await create_aws_client(project, "ecs", region)
+        ecs_client = await create_aws_client(deployed_env, "ecs")
 
         # Extract cluster ARN or use default
         cluster_arn = deployed_env.ecs_cluster_arn or "default"
@@ -1165,9 +1157,9 @@ async def get_project_deployed_resources(
         )
 
         # Initialize AWS clients
-        ecs_client = await create_aws_client(project, "ecs", region)
-        ec2_client = await create_aws_client(project, "ec2", region)
-        elbv2_client = await create_aws_client(project, "elbv2", region)
+        ecs_client = await create_aws_client(deployed_env, "ecs")
+        ec2_client = await create_aws_client(deployed_env, "ec2")
+        elbv2_client = await create_aws_client(deployed_env, "elbv2")
 
         result = {
             "vpc": None,
@@ -1705,20 +1697,8 @@ async def check_environment_exec_availability(
             "reason": "Environment must be deployed to access shell",
         }
 
-    # Check if there are running tasks
-    from botocore.exceptions import ClientError
-
-    # Get the correct region from the deployed environment's AWS config
-    region = await get_deployed_environment_region(environment)
-    if not region:
-        return {
-            "available": False,
-            "status": "configuration_error",
-            "reason": "Unable to determine AWS region for deployed environment",
-        }
-
     try:
-        ecs_client = await create_aws_client(project, "ecs", region)
+        ecs_client = await create_aws_client(deployed_env, "ecs")
 
         # Extract cluster name from ARN or use default
         cluster_name = environment.ecs_cluster_arn or "default"
@@ -1824,7 +1804,7 @@ async def execute_environment_command(
     region = os.getenv("AWS_REGION", "us-east-1")
 
     try:
-        ecs_client = await create_aws_client(project, "ecs", region)
+        ecs_client = await create_aws_client(deployed_env, "ecs")
 
         # Extract cluster ARN or use default
         cluster_arn = environment.ecs_cluster_arn or "default"
