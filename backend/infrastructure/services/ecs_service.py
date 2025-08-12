@@ -1,3 +1,4 @@
+import asyncio
 import boto3
 import json
 import logging
@@ -126,12 +127,14 @@ class ECSService:
             logger.warning(f"Error checking for ECS service-linked role: {error}")
             # Continue to try creating it
         
+        role_created = False
         try:
             # Create the ECS service-linked role
             response = self.iam.create_service_linked_role(
                 AWSServiceName="ecs.amazonaws.com"
             )
             logger.info(f"Created ECS service-linked role: {response.get('Role', {}).get('RoleName', 'Unknown')}")
+            role_created = True
         except self.iam.exceptions.InvalidInputException as error:
             if "already exists" in str(error):
                 logger.info("ECS service-linked role already exists")
@@ -140,6 +143,11 @@ class ECSService:
         except Exception as error:
             logger.warning(f"Could not create ECS service-linked role: {error}")
             # Don't fail the entire deployment for this - AWS might create it automatically
+        
+        # Add delay if we just created the role to allow for IAM propagation
+        if role_created:
+            logger.info("Waiting 5 seconds for IAM role propagation...")
+            await asyncio.sleep(5)
 
     async def _create_or_find_cluster(self) -> str:
         """Create or find ECS cluster"""
