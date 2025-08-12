@@ -59,7 +59,34 @@ class VPCService:
         """Create a new VPC for the project"""
         vpc_name = f"{self.project_name}-vpc"
 
-        # Create VPC
+        # First check if a VPC with this name already exists
+        try:
+            response = self.ec2.describe_vpcs(
+                Filters=[
+                    {"Name": "tag:Name", "Values": [vpc_name]},
+                    {"Name": "tag:Project", "Values": [self.project_name]},
+                    {"Name": "state", "Values": ["available"]}
+                ]
+            )
+            
+            if response["Vpcs"]:
+                # Use the existing VPC
+                vpc_id = response["Vpcs"][0]["VpcId"]
+                logger.info(f"Found existing VPC with name {vpc_name}: {vpc_id}")
+                
+                # Ensure DNS support is enabled on the existing VPC
+                self.ec2.modify_vpc_attribute(
+                    VpcId=vpc_id, EnableDnsSupport={"Value": True}
+                )
+                self.ec2.modify_vpc_attribute(
+                    VpcId=vpc_id, EnableDnsHostnames={"Value": True}
+                )
+                
+                return vpc_id
+        except Exception as e:
+            logger.warning(f"Error checking for existing VPC: {e}")
+
+        # Create VPC if it doesn't exist
         response = self.ec2.create_vpc(
             CidrBlock="10.0.0.0/16",
             TagSpecifications=[
@@ -74,7 +101,7 @@ class VPCService:
         )
 
         vpc_id = response["Vpc"]["VpcId"]
-        logger.info(f"Created VPC: {vpc_id}")
+        logger.info(f"Created new VPC: {vpc_id}")
 
         # Wait for VPC to be available
         waiter = self.ec2.get_waiter("vpc_available")
@@ -105,6 +132,31 @@ class VPCService:
 
     async def _create_subnets(self) -> List[str]:
         """Create subnets for the VPC"""
+        # First check if subnets already exist for this VPC
+        try:
+            response = self.ec2.describe_subnets(
+                Filters=[
+                    {"Name": "vpc-id", "Values": [self.vpc_id]},
+                    {"Name": "tag:Project", "Values": [self.project_name]},
+                    {"Name": "state", "Values": ["available"]}
+                ]
+            )
+            
+            if response["Subnets"] and len(response["Subnets"]) >= 2:
+                # Use existing subnets
+                subnet_ids = [subnet["SubnetId"] for subnet in response["Subnets"][:2]]
+                logger.info(f"Found existing subnets for project {self.project_name}: {subnet_ids}")
+                
+                # Ensure public IP assignment is enabled
+                for subnet_id in subnet_ids:
+                    self.ec2.modify_subnet_attribute(
+                        SubnetId=subnet_id, MapPublicIpOnLaunch={"Value": True}
+                    )
+                
+                return subnet_ids
+        except Exception as e:
+            logger.warning(f"Error checking for existing subnets: {e}")
+
         # Get available AZs
         azs_response = self.ec2.describe_availability_zones()
         azs = [az["ZoneName"] for az in azs_response["AvailabilityZones"]][
