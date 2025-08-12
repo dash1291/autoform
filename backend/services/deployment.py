@@ -1307,6 +1307,38 @@ phases:
                 )
 
         result = await infrastructure.create_or_update_infrastructure()
+        
+        # Save infrastructure resources immediately after creation (don't wait for full deployment)
+        if config.environment_id:
+            immediate_update_data = {}
+            
+            # Save VPC and subnets if they were created (not using existing)
+            if result.vpc_id and not environment_network.get("existing_vpc_id"):
+                immediate_update_data["existing_vpc_id"] = result.vpc_id
+            if result.subnet_ids and not environment_network.get("existing_subnet_ids"):
+                immediate_update_data["existing_subnet_ids"] = json.dumps(result.subnet_ids)
+            
+            # Save ALB and cluster info immediately
+            if result.load_balancer_arn:
+                immediate_update_data["alb_arn"] = result.load_balancer_arn
+            if result.load_balancer_dns:
+                immediate_update_data["domain"] = result.load_balancer_dns
+            if result.cluster_arn:
+                immediate_update_data["ecs_cluster_arn"] = result.cluster_arn
+            if result.service_arn:
+                immediate_update_data["ecs_service_arn"] = result.service_arn
+            
+            if immediate_update_data:
+                async with get_async_session() as session:
+                    env_result = await session.execute(
+                        select(Environment).where(Environment.id == config.environment_id)
+                    )
+                    environment = env_result.scalar_one_or_none()
+                    if environment:
+                        for key, value in immediate_update_data.items():
+                            setattr(environment, key, value)
+                        await session.commit()
+                        logger.info(f"Saved infrastructure resources immediately: {immediate_update_data}")
 
         if deployment_id:
             await self.log_to_database(deployment_id, "✅ Infrastructure ready!")
@@ -1317,25 +1349,10 @@ phases:
                 deployment_id, f"- Load Balancer: {result.load_balancer_dns}"
             )
 
-        # Update environment with deployed resource ARNs and network info
+        # Update any remaining fields that weren't saved immediately (like certificate_arn)
         environment_update_data = {}
-        if result.service_arn:
-            environment_update_data["ecsServiceArn"] = result.service_arn
-        if result.cluster_arn:
-            environment_update_data["ecsClusterArn"] = result.cluster_arn
-        if result.load_balancer_arn:
-            environment_update_data["albArn"] = result.load_balancer_arn
-        if result.load_balancer_dns:
-            # Always store ALB DNS in domain field
-            environment_update_data["domain"] = result.load_balancer_dns
         if result.certificate_arn:
             environment_update_data["certificate_arn"] = result.certificate_arn
-        if result.vpc_id and not environment_network.get("existing_vpc_id"):
-            # Only update VPC if it wasn't using an existing one
-            environment_update_data["existingVpcId"] = result.vpc_id
-        if result.subnet_ids and not environment_network.get("existing_subnet_ids"):
-            # Only update subnets if it wasn't using existing ones
-            environment_update_data["existingSubnetIds"] = json.dumps(result.subnet_ids)
 
         if environment_update_data and config.environment_id:
             async with get_async_session() as session:
