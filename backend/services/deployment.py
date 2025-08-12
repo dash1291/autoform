@@ -107,8 +107,10 @@ class DeploymentService:
         env_vars = []
         
         try:
-            # Try to get Docker Hub credentials from user's Secrets Manager
-            response = self.secretsmanager.get_secret_value(SecretId="dockerhub-credentials")
+            # Get Docker Hub credentials from Autoform's Secrets Manager (using default credentials)
+            autoform_region = os.environ.get("AWS_REGION", "us-east-1")
+            autoform_secrets_client = create_client("secretsmanager", autoform_region, None)  # None = use Autoform's credentials
+            response = autoform_secrets_client.get_secret_value(SecretId="dockerhub-credentials")
             docker_creds = json.loads(response["SecretString"])
             
             env_vars.extend([
