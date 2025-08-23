@@ -73,7 +73,7 @@ export default function Home() {
   ]
 
   return (
-    <main className="min-h-screen bg-gradient-to-br">
+    <main className="min-h-screen bg-gradient-to-br pt-16">
       {/* Hero Section */}
       <section className="pt-32 pb-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto text-center">
@@ -113,7 +113,7 @@ export default function Home() {
                     <feature.icon strokeWidth={1} className={`text-secondary w-12 h-12 rounded`} />
                   </span>
                 <div className="flex-1">
-                  <h3 className="text-2xl font-normal text-foreground mb-4">
+                  <h3 className="text-3xl font-normal text-foreground mb-4">
                     {feature.title}
                   </h3>
                   <p className="text-lg text-muted-foreground leading-relaxed">
@@ -128,7 +128,7 @@ export default function Home() {
 
 
       {/* CTA Section */}
-      <section className="py-20 text-foreground border-t border-border">
+      <section className="py-20 text-foreground border-t border-border/50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl font-normal mb-4">
             Ready to deploy?

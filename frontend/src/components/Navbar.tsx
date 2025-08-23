@@ -18,7 +18,7 @@ export default function Navbar() {
   const { user, isAuthenticated, isLoading } = useAuth()
 
   return (
-    <nav className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-gray-700">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-background backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
@@ -39,7 +39,7 @@ export default function Navbar() {
                 <div className="flex items-center space-x-3">
                   <Link href="/docs">
                     <Button variant="ghost" className="text-foreground hover:text-foreground">
-                      Documentation
+                      Docs
                     </Button>
                   </Link>
                   <div className="border-l pl-3 ml-3">
@@ -73,12 +73,23 @@ export default function Navbar() {
                 </div>
               </>
             ) : (
-              <Button 
-                onClick={() => signIn('github')}
-                className="bg-primary"
-              >
-                Sign in with GitHub
-              </Button>
+              <>
+                <Link 
+                  href="https://calendly.com/ashish-dubey91/30min"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="outline">
+                    Book a demo
+                  </Button>
+                </Link>
+                <Button 
+                  onClick={() => signIn('github')}
+                  className="bg-primary"
+                >
+                  Sign in
+                </Button>
+              </>
             )}
           </div>
         </div>
