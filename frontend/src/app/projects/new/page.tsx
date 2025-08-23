@@ -204,7 +204,6 @@ export default function NewProject() {
                 onChange={(value) => setFormData({ ...formData, name: value as string })}
                 placeholder="my-awesome-app"
                 required
-                helpText="This will be used as the container name and resource prefix"
                 type="text"
               />
             </div>
@@ -246,25 +245,21 @@ export default function NewProject() {
                   </SelectContent>
                 </Select>
               )}
-              <p className="text-xs mt-1 text-muted-foreground">
-                {teamsLoading 
-                  ? 'Loading teams...' 
-                  : teams.length > 0 
-                    ? 'Projects must belong to a team for AWS credential and resource management'
-                    : 'Create a team first to organize your projects and AWS resources'
-                }
-              </p>
             </div>
 
             <div>
               <FormInput
                 id="gitRepoUrl"
                 label="Git Repository URL"
-                helpText='Can be public or private repository. Private repos use your GitHub authentication.'
                 value={formData.gitRepoUrl}
                 onChange={(value) => {
                   setFormData({ ...formData, gitRepoUrl: value as string })
                   setRepoInfo(null)
+                }}
+                onBlur={() => {
+                  if (formData.gitRepoUrl && !repoInfo && !validating) {
+                    validateRepository(formData.gitRepoUrl)
+                  }
                 }}
                 placeholder="https://github.com/username/repository"
                 required
@@ -273,35 +268,19 @@ export default function NewProject() {
                   <Spinner size="sm" />
                 ) : undefined}
                 bottomElement={
-                  <>
-                    {repoInfo && (
-                      <div className="mt-2 p-3 bg-popover border border-gray-700 rounded">
-                        <div className="flex items-center">
-                          <span className="text-success-foreground text-sm">✅ Repository validated</span>
-                          {repoInfo.private && (
-                            <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">Private</span>
-                          )}
-                        </div>
-                        <p className="text-sm mt-1">
-                          <strong>{repoInfo.fullName}</strong>
-                        </p>
+                  repoInfo && (
+                    <div className="mt-2 p-3 bg-popover border border-gray-700 rounded">
+                      <div className="flex items-center">
+                        <span className="text-success-foreground text-sm">✅ Repository validated</span>
+                        {repoInfo.private && (
+                          <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">Private</span>
+                        )}
                       </div>
-                    )}
-                    <div className="flex items-center justify-between mt-1">
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm mt-1">
+                        <strong>{repoInfo.fullName}</strong>
                       </p>
-                      {formData.gitRepoUrl && !repoInfo && (
-                        <button
-                          type="button"
-                          onClick={() => validateRepository(formData.gitRepoUrl)}
-                          disabled={validating}
-                          className="text-sm text-blue-400 hover:text-blue-700 disabled:opacity-50"
-                        >
-                          {validating ? 'Validating...' : 'Save'}
-                        </button>
-                      )}
                     </div>
-                  </>
+                  )
                 }
               />
             </div>
@@ -327,7 +306,7 @@ export default function NewProject() {
             <div className="flex space-x-4">
               <Button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !formData.name || !formData.teamId || !formData.gitRepoUrl || !repoInfo}
                 className="flex-1"
               >
                 {loading ? 'Creating...' : 'Create Project'}

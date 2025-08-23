@@ -5,6 +5,7 @@ interface FormInputProps {
   label: string
   value: string | number
   onChange: (value: string | number) => void
+  onBlur?: () => void
   type?: 'text' | 'number' | 'url' | 'email' | 'password'
   placeholder?: string
   helpText?: string
@@ -21,6 +22,7 @@ export function FormInput({
   label,
   value,
   onChange,
+  onBlur,
   type = 'text',
   placeholder,
   helpText,
@@ -36,7 +38,7 @@ export function FormInput({
     onChange(newValue)
   }
 
-  const defaultInputClasses = inputClassName || 'bg-popover border-gray-700'
+  const defaultInputClasses = inputClassName || 'bg-popover autofill:bg-popover border-border'
 
   return (
     <div className={className}>
@@ -49,6 +51,7 @@ export function FormInput({
           id={id}
           value={value}
           onChange={handleChange}
+          onBlur={onBlur}
           disabled={disabled}
           className={`w-full text-sm px-3 py-3 border ${defaultInputClasses} rounded focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ${rightElement ? 'pr-10' : ''}`}
           placeholder={placeholder}

@@ -165,7 +165,7 @@ async def validate_repository(
             if repo_response.status_code == 404:
                 return ValidateRepoResponse(
                     valid=False,
-                    error="Repository not found or you do not have access to this repository",
+                    error="Repository not found or you do not have access to this repository.",
                 )
             elif repo_response.status_code == 403:
                 return ValidateRepoResponse(
