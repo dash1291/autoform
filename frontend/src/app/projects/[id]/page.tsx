@@ -308,7 +308,7 @@ export default function ProjectDetail() {
 
   if (!authLoading && !isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center py-20">
         <div className="text-center">
         <h1 className="text-xl font-semibold mb-4">Please sign in</h1>
         <p className="text-muted-foreground">You need to be signed in to view this project.</p>
@@ -319,7 +319,7 @@ export default function ProjectDetail() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center py-20">
         <Spinner />
       </div>
     )
@@ -327,7 +327,7 @@ export default function ProjectDetail() {
 
   if (error || !project) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-foreground mb-4">Project Not Found</h1>
           <p className="text-muted-foreground mb-4">{error || 'The project you are looking for does not exist.'}</p>
@@ -343,7 +343,7 @@ export default function ProjectDetail() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">

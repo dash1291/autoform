@@ -28,10 +28,10 @@ export default function DocsClientLayout({ children }: DocsClientLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-screen py-8">
-      <div className="max-w-6xl mx-auto w-full flex flex-col lg:flex-row">
+    <div className="py-8">
+      <div className="max-w-6xl mx-auto w-full flex flex-col lg:flex-row relative">
         {/* Mobile sidebar toggle */}
-        <div className="lg:hidden fixed top-16 left-0 right-0 z-40 border-b px-4 py-3">
+        <div className="lg:hidden sticky top-0 z-40 bg-background border-b px-4 py-3">
           <Button
             variant="ghost"
             size="sm"
@@ -53,10 +53,11 @@ export default function DocsClientLayout({ children }: DocsClientLayoutProps) {
         <aside
           className={cn(
             // On desktop: static, column, not fixed
-            "hidden lg:block lg:relative lg:w-64 lg:border-r lg:overflow-y-auto lg:transition-none",
+            "lg:block lg:relative lg:w-64 lg:border-r lg:transition-none",
             // On mobile: fixed, slide in/out
-            "fixed top-16 bottom-0 z-30 w-64 border-r overflow-y-auto transition-transform lg:translate-x-0",
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+            "fixed top-0 bottom-0 z-30 w-64 bg-background border-r overflow-y-auto transition-transform lg:translate-x-0",
+            sidebarOpen ? "translate-x-0" : "-translate-x-full",
+            "lg:sticky lg:top-0 lg:h-[calc(100vh-8rem)]"
           )}
         >
           <nav className="px-6 pb-6">
@@ -92,10 +93,10 @@ export default function DocsClientLayout({ children }: DocsClientLayoutProps) {
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 pt-16 flex flex-col items-center">
+        <main className="flex-1 flex flex-col items-center">
           <div className="w-full max-w-4xl mx-auto px-6 py-8 lg:py-12">
             {/* Breadcrumb */}
-            <nav className="flex items-center text-sm mb-8 mt-12 lg:mt-0">
+            <nav className="flex items-center text-sm mb-8">
               <Link href="/" className="hover:text-muted-foreground">
                 Home
               </Link>

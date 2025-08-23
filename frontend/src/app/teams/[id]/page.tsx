@@ -109,7 +109,7 @@ export default function TeamDetail() {
 
   if (!authLoading && !isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-xl font-semibold mb-4">Please sign in</h1>
           <p className="text-gray-600">You need to be signed in to view team details.</p>
@@ -120,7 +120,7 @@ export default function TeamDetail() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center">
         <Spinner />
       </div>
     )
@@ -128,7 +128,7 @@ export default function TeamDetail() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-normal mb-4">Error</h1>
           <p className="text-muted-foreground mb-4">{error}</p>
@@ -142,7 +142,7 @@ export default function TeamDetail() {
 
   if (!team) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Team not found</h1>
           <p className="text-gray-600 mb-4">The team you're looking for doesn't exist or you don't have access to it.</p>
@@ -158,7 +158,7 @@ export default function TeamDetail() {
   const canManageMembers = isOwner || team.userRole === TeamMemberRole.ADMIN
 
   return (
-    <div className="min-h-screen">
+    <div className="">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <div className="flex items-center justify-between">

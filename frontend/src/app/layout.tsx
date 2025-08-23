@@ -24,7 +24,9 @@ export default function RootLayout({
       <body className={inter.className}>
         <Providers>
           <Navbar />
-          {children}
+          <div className="inset-0 pt-16 overflow-y-auto">
+            {children}
+          </div>
         </Providers>
       </body>
     </html>

@@ -138,7 +138,7 @@ export default function NewProject() {
 
   if (!authLoading && !isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <h1 className="text-xl font-semibold mb-4">Please sign in</h1>
           <p className="text-gray-600">You need to be signed in to create a project.</p>
@@ -149,7 +149,7 @@ export default function NewProject() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center py-20">
         <Spinner />
       </div>
     )
@@ -158,7 +158,7 @@ export default function NewProject() {
   // Show environment creation step after project is created
   if (projectCreated) {
     return (
-      <div className="min-h-screen">
+      <div>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="mb-8">
             <h1 className="text-lg">Project Created Successfully!</h1>
@@ -189,7 +189,7 @@ export default function NewProject() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-4 mt-4 w-full text-center">
           <h1 className="text-lg">Create New Project</h1>

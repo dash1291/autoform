@@ -60,7 +60,7 @@ export default function Dashboard() {
 
   if (!isLoading && !isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <h1 className="text-xl font-semibold mb-4">Please sign in</h1>
           <p>You need to be signed in to access the dashboard.</p>
@@ -71,7 +71,7 @@ export default function Dashboard() {
 
   if (isLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center py-20">
         <Spinner />
       </div>
     )
@@ -85,7 +85,7 @@ export default function Dashboard() {
   const selectedTeamData = teams.find(t => t.id === selectedTeam)
 
   return (
-    <div className="min-h-screen text-foreground">
+    <div className="text-foreground">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {teams.length === 0 && !teamsLoading ? (
           <Card>
