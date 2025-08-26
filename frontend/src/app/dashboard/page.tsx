@@ -60,7 +60,7 @@ export default function Dashboard() {
 
   if (!isLoading && !isAuthenticated) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-xl font-semibold mb-4">Please sign in</h1>
           <p>You need to be signed in to access the dashboard.</p>
@@ -71,7 +71,7 @@ export default function Dashboard() {
 
   if (isLoading || loading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="min-h-screen flex items-center justify-center">
         <Spinner />
       </div>
     )
