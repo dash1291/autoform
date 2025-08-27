@@ -140,7 +140,7 @@ export default function Home() {
             </div>
           </div>
           <div className="mt-16 max-w-4xl mx-auto">
-            <p className="text-2xl text-left font-normal text-foreground mb-3">
+            <p className="text-2xl text-left font-normal text-foreground mb-6">
               Get modern developer experience (like Heroku, Vercel, Railway) <span className="text-muted-foreground">at 80-90% lower cost.</span>
             </p>
             <p className="text-2xl text-left font-normal text-foreground">
@@ -155,10 +155,10 @@ export default function Home() {
       {/* CTA Section */}
       <section className="py-20 text-foreground border-t border-border/50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-normal mb-4">
+          <h2 className="text-2xl font-normal mb-4">
             Deploy your next app in 5 minutes
           </h2>
-          <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
+          <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
             Join developers who spend more time building and less time wrangling deployment pipelines. We'll help you migrate.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
