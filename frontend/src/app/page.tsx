@@ -65,7 +65,7 @@ export default function Home() {
           
           <div className="space-y-16">
             {/* Easy Setup */}
-            <div className="flex flex-col w-full md:flex-row items-start gap-8 mb-8">
+            <div className="flex flex-row w-full items-start gap-8 mb-8">
               <span>
                 <PackageOpen strokeWidth={1} className="text-secondary w-12 h-12 rounded" />
               </span>
@@ -80,8 +80,8 @@ export default function Home() {
             </div>
 
             {/* Ready to Scale */}
-            <div className="flex flex-col w-full md:flex-row items-start gap-8 mb-8">
-              <span>
+            <div className="flex flex-row w-full items-start gap-8 mb-8">
+              <span className="inline-block w-auto">
                 <Expand strokeWidth={1} className="text-secondary w-12 h-12 rounded" />
               </span>
               <div className="flex-1">
@@ -95,7 +95,7 @@ export default function Home() {
             </div>
 
             {/* Fast Automated Deployments */}
-            <div className="flex flex-col w-full md:flex-row items-start gap-8 mb-8">
+            <div className="flex flex-row w-full items-start gap-8 mb-8">
               <span>
                 <Zap strokeWidth={1} className="text-secondary w-12 h-12 rounded" />
               </span>
@@ -110,7 +110,7 @@ export default function Home() {
             </div>
 
             {/* Multiple Environments */}
-            <div className="flex flex-col w-full md:flex-row items-start gap-8 mb-8">
+            <div className="flex flex-row w-full items-start gap-8 mb-8">
               <span>
                 <Copy strokeWidth={1} className="text-secondary w-12 h-12 rounded" />
               </span>
@@ -125,7 +125,7 @@ export default function Home() {
             </div>
 
             {/* Integrated Logging */}
-            <div className="flex flex-col w-full md:flex-row items-start gap-8 mb-8">
+            <div className="flex flex-row w-full items-start gap-8 mb-8">
               <span>
                 <Logs strokeWidth={1} className="text-secondary w-12 h-12 rounded" />
               </span>
