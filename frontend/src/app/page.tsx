@@ -62,7 +62,7 @@ export default function Home() {
             className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed"
             {...animations.fadeUpViewport}
           >
-            No Terraform. No Kubernetes. No DevOps effort needed. Just push your code and ship in minutes. Get seamless developer experience at AWS prices.
+            Deploy on your cloud without compromising on developer experience and spending precious engineering cycles. No Terraform. No Kubernetes. No deployment pipelines. Just push your code and ship in minutes.
           </motion.p>
           <motion.div 
             className="flex flex-col sm:flex-row gap-4 justify-center"
@@ -109,7 +109,7 @@ export default function Home() {
                   Production-ready in 5 minutes
                 </h3>
                 <p className="text-lg text-muted-foreground leading-relaxed">
-                  What takes days with Terraform takes minutes with Autoform. Connect your repo, pick your AWS account, deploy. That's it.
+                  What takes days with IaC tools like Terraform takes minutes with Autoform. Connect your repo, configure your AWS account, deploy. That's it.
                 </p>
               </div>
             </motion.div>
@@ -127,7 +127,7 @@ export default function Home() {
                   Scales automatically, bills reasonably
                 </h3>
                 <p className="text-lg text-muted-foreground leading-relaxed">
-                  Your app scales to handle viral traffic without the viral bill. Auto-scaling that actually works, configured from day one.
+                  Whether it's a hobby project or serving millions of users, Autoform sets up your service that is ready for any scale, in a cost-effective manner.
                 </p>
               </div>
             </motion.div>
