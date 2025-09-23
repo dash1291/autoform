@@ -1,150 +1,181 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { Spinner } from '@/components/ui/spinner'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useAuth } from '@/lib/auth-client'
-import { apiClient } from '@/lib/api'
-import { Team } from '@/types'
-import { CheckCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAuth } from "@/lib/auth-client";
+import { apiClient } from "@/lib/api";
+import { Team } from "@/types";
 
-import { FormInput } from '@/components/ui/FormInput'
+import { FormInput } from "@/components/ui/FormInput";
+
+const serviceTypes = [
+  {
+    type: "web",
+    text: "Web service",
+  },
+  {
+    type: "job",
+    text: "Background job",
+  },
+  {
+    type: "worker",
+    text: "Worker",
+  },
+];
+
+const getServiceTypeText = (serviceType: string) => {
+  return serviceTypes.find((st) => st.type === serviceType)?.text;
+};
+
+const getServiceTypes = () => {
+  return serviceTypes.map((st) => st.type);
+};
 
 export default function NewProject() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth()
-  const router = useRouter()
-  const searchParams = useSearchParams()
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [formData, setFormData] = useState({
-    name: '',
-    gitRepoUrl: '',
-    teamId: '', // team is required
-    branch: 'main', // default branch
-    subdirectory: '',
-    cpu: 256,
-    memory: 512,
-    diskSize: 21,
-  })
-  const [projectCreated, setProjectCreated] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [validating, setValidating] = useState(false)
-  const [repoInfo, setRepoInfo] = useState<any>(null)
-  const [teams, setTeams] = useState<Team[]>([])
-  const [teamsLoading, setTeamsLoading] = useState(true)
+    name: "",
+    serviceType: "web",
+    gitRepoUrl: "",
+    teamId: "", // team is required
+    subdirectory: "",
+  });
+
+  const [projectCreated, setProjectCreated] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [validating, setValidating] = useState(false);
+  const [repoInfo, setRepoInfo] = useState<any>(null);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [teamsLoading, setTeamsLoading] = useState(true);
 
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
-      fetchTeams()
-      
+      fetchTeams();
+
       // Set team from query parameter if provided
-      const teamParam = searchParams.get('team')
+      const teamParam = searchParams.get("team");
       if (teamParam) {
-        setFormData(prev => ({ ...prev, teamId: teamParam }))
+        setFormData((prev) => ({ ...prev, teamId: teamParam }));
       }
     }
-  }, [isAuthenticated, authLoading, searchParams])
+  }, [isAuthenticated, authLoading, searchParams]);
 
   const fetchTeams = async () => {
     try {
-      const data = await apiClient.getTeams()
-      setTeams(data)
+      const data = await apiClient.getTeams();
+      setTeams(data);
     } catch (error) {
-      console.error('Failed to fetch teams:', error)
+      console.error("Failed to fetch teams:", error);
     } finally {
-      setTeamsLoading(false)
+      setTeamsLoading(false);
     }
-  }
+  };
 
   const validateRepository = async (url: string) => {
-    if (!url || !url.includes('github.com')) return
+    if (!url || !url.includes("github.com")) return;
 
-    console.log('Starting repository validation for:', url)
-    console.log('Auth status:', isAuthenticated ? 'authenticated' : 'not authenticated')
-    
-    setValidating(true)
-    setError('')
-    setRepoInfo(null)
+    console.log("Starting repository validation for:", url);
+    console.log(
+      "Auth status:",
+      isAuthenticated ? "authenticated" : "not authenticated",
+    );
+
+    setValidating(true);
+    setError("");
+    setRepoInfo(null);
 
     try {
-      console.log('Making fetch request to validate repository')
-      const data = await apiClient.validateRepository(url)
-      console.log('Response data:', data)
+      console.log("Making fetch request to validate repository");
+      const data = await apiClient.validateRepository(url);
+      console.log("Response data:", data);
 
       if (data.valid && data.repository) {
-        const repository = data.repository
-        setRepoInfo(repository)
+        const repository = data.repository;
+        setRepoInfo(repository);
         // Auto-fill project name and branch if empty
         if (!formData.name && repository.name) {
-          setFormData(prev => ({ 
-            ...prev, 
+          setFormData((prev) => ({
+            ...prev,
             name: repository.name,
-            branch: repository.defaultBranch 
-          }))
+            branch: repository.defaultBranch,
+          }));
         } else if (repository.defaultBranch) {
-          setFormData(prev => ({ 
-            ...prev, 
-            branch: repository.defaultBranch 
-          }))
+          setFormData((prev) => ({
+            ...prev,
+            branch: repository.defaultBranch,
+          }));
         }
       } else {
-        setError(data.error || 'Unknown error occurred')
-        
+        setError(data.error || "Unknown error occurred");
+
         // If re-authentication is needed, show special message
         if (data.needsReauth) {
-          setError((data.error || 'Authentication needed') + ' Click here to refresh your GitHub connection.')
+          setError(
+            (data.error || "Authentication needed") +
+              " Click here to refresh your GitHub connection.",
+          );
         }
       }
     } catch (err) {
-      setError('Failed to validate repository')
+      setError("Failed to validate repository");
     } finally {
-      setValidating(false)
+      setValidating(false);
     }
-  }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!isAuthenticated) return
+    e.preventDefault();
+    if (!isAuthenticated) return;
 
-    setLoading(true)
-    setError('')
+    setLoading(true);
+    setError("");
 
     try {
       // Validate repository first if not already validated
       if (!repoInfo) {
-        await validateRepository(formData.gitRepoUrl)
+        await validateRepository(formData.gitRepoUrl);
         if (!repoInfo) {
-          setLoading(false)
-          return
+          setLoading(false);
+          return;
         }
       }
 
       const newProject = await apiClient.createProject({
         name: formData.name,
         gitRepoUrl: formData.gitRepoUrl,
-        teamId: formData.teamId
-      })
-      setProjectCreated(newProject)
+        teamId: formData.teamId,
+      });
+      setProjectCreated(newProject);
     } catch (err: any) {
-      setError(err.message || 'Failed to create project')
+      setError(err.message || "Failed to create project");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   if (!authLoading && !isAuthenticated) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <h1 className="text-xl font-semibold mb-4">Please sign in</h1>
-          <p className="text-gray-600">You need to be signed in to create a project.</p>
+          <p className="text-gray-600">
+            You need to be signed in to create a project.
+          </p>
         </div>
       </div>
-    )
+    );
   }
 
   if (authLoading) {
@@ -152,7 +183,7 @@ export default function NewProject() {
       <div className="flex items-center justify-center py-20">
         <Spinner />
       </div>
-    )
+    );
   }
 
   // Show environment creation step after project is created
@@ -163,20 +194,25 @@ export default function NewProject() {
           <div className="mb-8">
             <h1 className="text-lg">Project Created Successfully!</h1>
             <p className="text-muted-foreground mt-2">
-              Your project "{projectCreated.name}" has been created. Now let's set up your first environment.
+              Your project "{projectCreated.name}" has been created. Now let's
+              set up your first environment.
             </p>
           </div>
           <div className="shadow rounded-lg py-6">
             <div className="space-y-4">
-              <Button 
-                onClick={() => router.push(`/projects/${projectCreated.id}?tab=settings_environments`)}
+              <Button
+                onClick={() =>
+                  router.push(
+                    `/projects/${projectCreated.id}?tab=settings_environments`,
+                  )
+                }
                 className=""
               >
                 Set Up Environment
               </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => router.push('/dashboard')}
+              <Button
+                variant="outline"
+                onClick={() => router.push("/dashboard")}
                 className="ml-2"
               >
                 Skip for Now (Go to Dashboard)
@@ -185,7 +221,7 @@ export default function NewProject() {
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -201,7 +237,9 @@ export default function NewProject() {
                 id="name"
                 label="Project Name"
                 value={formData.name}
-                onChange={(value) => setFormData({ ...formData, name: value as string })}
+                onChange={(value) =>
+                  setFormData({ ...formData, name: value as string })
+                }
                 placeholder="my-awesome-app"
                 required
                 type="text"
@@ -221,15 +259,17 @@ export default function NewProject() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => router.push('/dashboard')}
+                    onClick={() => router.push("/dashboard")}
                   >
                     Go to Dashboard
                   </Button>
                 </div>
               ) : (
-                <Select 
-                  value={formData.teamId} 
-                  onValueChange={(value) => setFormData({ ...formData, teamId: value })}
+                <Select
+                  value={formData.teamId}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, teamId: value })
+                  }
                   disabled={teamsLoading}
                   required
                 >
@@ -253,27 +293,29 @@ export default function NewProject() {
                 label="Git Repository URL"
                 value={formData.gitRepoUrl}
                 onChange={(value) => {
-                  setFormData({ ...formData, gitRepoUrl: value as string })
-                  setRepoInfo(null)
+                  setFormData({ ...formData, gitRepoUrl: value as string });
+                  setRepoInfo(null);
                 }}
                 onBlur={() => {
                   if (formData.gitRepoUrl && !repoInfo && !validating) {
-                    validateRepository(formData.gitRepoUrl)
+                    validateRepository(formData.gitRepoUrl);
                   }
                 }}
                 placeholder="https://github.com/username/repository"
                 required
                 type="url"
-                rightElement={validating ? (
-                  <Spinner size="sm" />
-                ) : undefined}
+                rightElement={validating ? <Spinner size="sm" /> : undefined}
                 bottomElement={
                   repoInfo && (
                     <div className="mt-2 p-3 bg-popover border border-gray-700 rounded">
                       <div className="flex items-center">
-                        <span className="text-success-foreground text-sm">✅ Repository validated</span>
+                        <span className="text-success-foreground text-sm">
+                          ✅ Repository validated
+                        </span>
                         {repoInfo.private && (
-                          <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">Private</span>
+                          <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">
+                            Private
+                          </span>
                         )}
                       </div>
                       <p className="text-sm mt-1">
@@ -284,19 +326,43 @@ export default function NewProject() {
                 }
               />
             </div>
-
+            <div>
+              <label htmlFor="team" className="block text-sm mb-2">
+                Select service type
+              </label>
+              <Select
+                value={formData.serviceType}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, serviceType: value })
+                }
+                disabled={teamsLoading}
+                required
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Service type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getServiceTypes().map((serviceType) => (
+                    <SelectItem key={serviceType} value={serviceType}>
+                      {getServiceTypeText(serviceType)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div>
               <FormInput
                 id="subdirectory"
                 label="Subdirectory (Optional)"
                 value={formData.subdirectory}
-                onChange={(value) => setFormData({ ...formData, subdirectory: value as string })}
+                onChange={(value) =>
+                  setFormData({ ...formData, subdirectory: value as string })
+                }
                 placeholder="e.g., backend or apps/api"
                 helpText="Specify a subdirectory if your application code is not in the repository root"
                 type="text"
               />
             </div>
-
             {error && (
               <div className="bg-popover border border-destructive rounded-lg p-4">
                 <p className="text-destructive">{error}</p>
@@ -306,15 +372,21 @@ export default function NewProject() {
             <div className="flex space-x-4">
               <Button
                 type="submit"
-                disabled={loading || !formData.name || !formData.teamId || !formData.gitRepoUrl || !repoInfo}
+                disabled={
+                  loading ||
+                  !formData.name ||
+                  !formData.teamId ||
+                  !formData.gitRepoUrl ||
+                  !repoInfo
+                }
                 className="flex-1"
               >
-                {loading ? 'Creating...' : 'Create Project'}
+                {loading ? "Creating..." : "Create Project"}
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push('/dashboard')}
+                onClick={() => router.push("/dashboard")}
               >
                 Cancel
               </Button>
@@ -323,5 +395,5 @@ export default function NewProject() {
         </div>
       </div>
     </div>
-  )
+  );
 }

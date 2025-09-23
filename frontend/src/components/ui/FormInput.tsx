@@ -1,20 +1,20 @@
-import { ReactNode } from 'react'
+import { ReactNode } from "react";
 
 interface FormInputProps {
-  id: string
-  label: string
-  value: string | number
-  onChange: (value: string | number) => void
-  onBlur?: () => void
-  type?: 'text' | 'number' | 'url' | 'email' | 'password'
-  placeholder?: string
-  helpText?: string
-  required?: boolean
-  disabled?: boolean
-  className?: string
-  inputClassName?: string
-  rightElement?: ReactNode
-  bottomElement?: ReactNode
+  id: string;
+  label: string;
+  value: string | number;
+  onChange: (value: string | number) => void;
+  onBlur?: () => void;
+  type?: "text" | "number" | "url" | "email" | "password";
+  placeholder?: string;
+  helpText?: string;
+  required?: boolean;
+  disabled?: boolean;
+  className?: string;
+  inputClassName?: string;
+  rightElement?: ReactNode;
+  bottomElement?: ReactNode;
 }
 
 export function FormInput({
@@ -23,22 +23,24 @@ export function FormInput({
   value,
   onChange,
   onBlur,
-  type = 'text',
+  type = "text",
   placeholder,
   helpText,
   required = false,
   disabled = false,
-  className = '',
-  inputClassName = '',
+  className = "",
+  inputClassName = "",
   rightElement,
-  bottomElement
+  bottomElement,
 }: FormInputProps) {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = type === 'number' ? (parseInt(e.target.value) || 0) : e.target.value
-    onChange(newValue)
-  }
+    const newValue =
+      type === "number" ? parseInt(e.target.value) || 0 : e.target.value;
+    onChange(newValue);
+  };
 
-  const defaultInputClasses = inputClassName || 'bg-popover autofill:bg-popover border-border'
+  const defaultInputClasses =
+    inputClassName || "bg-popover autofill:bg-popover border-border";
 
   return (
     <div className={className}>
@@ -53,7 +55,7 @@ export function FormInput({
           onChange={handleChange}
           onBlur={onBlur}
           disabled={disabled}
-          className={`w-full text-sm px-3 py-3 border ${defaultInputClasses} rounded focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ${rightElement ? 'pr-10' : ''}`}
+          className={`w-full text-sm px-3 py-3 border ${defaultInputClasses} rounded focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ${rightElement ? "pr-10" : ""}`}
           placeholder={placeholder}
           required={required}
         />
@@ -68,5 +70,5 @@ export function FormInput({
         <p className="text-xs text-muted-foreground mt-1">{helpText}</p>
       )}
     </div>
-  )
+  );
 }

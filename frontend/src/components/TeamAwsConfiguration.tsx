@@ -1,126 +1,153 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 // Dialog component will be replaced with conditional rendering
-import { apiClient } from '@/lib/api'
-import { Key, Shield, TestTube, Trash2, AlertCircle, CheckCircle, BookOpen, ExternalLink, Plus, Settings } from 'lucide-react'
-import { Spinner } from '@/components/ui/spinner'
+import { apiClient } from "@/lib/api";
+import {
+  Key,
+  Shield,
+  TestTube,
+  Trash2,
+  AlertCircle,
+  CheckCircle,
+  BookOpen,
+  ExternalLink,
+  Plus,
+  Settings,
+} from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
 
 interface TeamAwsConfig {
-  id: string
-  name: string
-  awsAccessKeyId: string // This will be masked from the API
-  awsSecretAccessKey: string // This will be masked from the API
-  awsRegion: string
-  isActive: boolean
-  createdAt: string
-  updatedAt: string
+  id: string;
+  name: string;
+  awsAccessKeyId: string; // This will be masked from the API
+  awsSecretAccessKey: string; // This will be masked from the API
+  awsRegion: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface TeamAwsConfigurationProps {
-  teamId: string
+  teamId: string;
 }
 
 const AWS_REGIONS = [
-  { value: 'us-east-1', label: 'US East (N. Virginia)' },
-  { value: 'us-east-2', label: 'US East (Ohio)' },
-  { value: 'us-west-1', label: 'US West (N. California)' },
-  { value: 'us-west-2', label: 'US West (Oregon)' },
-  { value: 'eu-west-1', label: 'Europe (Ireland)' },
-  { value: 'eu-west-2', label: 'Europe (London)' },
-  { value: 'eu-west-3', label: 'Europe (Paris)' },
-  { value: 'eu-central-1', label: 'Europe (Frankfurt)' },
-  { value: 'ap-southeast-1', label: 'Asia Pacific (Singapore)' },
-  { value: 'ap-southeast-2', label: 'Asia Pacific (Sydney)' },
-  { value: 'ap-northeast-1', label: 'Asia Pacific (Tokyo)' },
-  { value: 'ap-south-1', label: 'Asia Pacific (Mumbai)' },
-]
+  { value: "us-east-1", label: "US East (N. Virginia)" },
+  { value: "us-east-2", label: "US East (Ohio)" },
+  { value: "us-west-1", label: "US West (N. California)" },
+  { value: "us-west-2", label: "US West (Oregon)" },
+  { value: "eu-west-1", label: "Europe (Ireland)" },
+  { value: "eu-west-2", label: "Europe (London)" },
+  { value: "eu-west-3", label: "Europe (Paris)" },
+  { value: "eu-central-1", label: "Europe (Frankfurt)" },
+  { value: "ap-southeast-1", label: "Asia Pacific (Singapore)" },
+  { value: "ap-southeast-2", label: "Asia Pacific (Sydney)" },
+  { value: "ap-northeast-1", label: "Asia Pacific (Tokyo)" },
+  { value: "ap-south-1", label: "Asia Pacific (Mumbai)" },
+];
 
-export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationProps) {
-  const [configs, setConfigs] = useState<TeamAwsConfig[]>([])
-  const [loading, setLoading] = useState(true)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isTesting, setIsTesting] = useState<string | null>(null)
-  const [isDeleting, setIsDeleting] = useState<string | null>(null)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-  const [testResult, setTestResult] = useState<any>(null)
-  const [showForm, setShowForm] = useState(false)
-  const [editingConfig, setEditingConfig] = useState<TeamAwsConfig | null>(null)
+export default function TeamAwsConfiguration({
+  teamId,
+}: TeamAwsConfigurationProps) {
+  const [configs, setConfigs] = useState<TeamAwsConfig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isTesting, setIsTesting] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [testResult, setTestResult] = useState<any>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingConfig, setEditingConfig] = useState<TeamAwsConfig | null>(
+    null,
+  );
 
   // Form state
   const [formData, setFormData] = useState({
-    name: '',
-    awsAccessKeyId: '',
-    awsSecretAccessKey: '',
-    awsRegion: 'us-east-1'
-  })
+    name: "",
+    awsAccessKeyId: "",
+    awsSecretAccessKey: "",
+    awsRegion: "us-east-1",
+  });
 
   useEffect(() => {
-    fetchAwsConfigs()
-  }, [teamId])
+    fetchAwsConfigs();
+  }, [teamId]);
 
   useEffect(() => {
     if (success) {
-      const timer = setTimeout(() => setSuccess(''), 5000)
-      return () => clearTimeout(timer)
+      const timer = setTimeout(() => setSuccess(""), 5000);
+      return () => clearTimeout(timer);
     }
-  }, [success])
+  }, [success]);
 
   const fetchAwsConfigs = async () => {
     try {
-      setLoading(true)
+      setLoading(true);
       try {
-        const data = await apiClient.getTeamAwsConfigs(teamId)
-        setConfigs(data || [])
+        const data = await apiClient.getTeamAwsConfigs(teamId);
+        setConfigs(data || []);
       } catch (error: any) {
-        if (error.message.includes('404')) {
-          setConfigs([])
+        if (error.message.includes("404")) {
+          setConfigs([]);
         } else {
-          throw error
+          throw error;
         }
       }
     } catch (error: any) {
-      setError('Failed to load AWS configurations')
+      setError("Failed to load AWS configurations");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const openCreateForm = () => {
-    setEditingConfig(null)
+    setEditingConfig(null);
     setFormData({
-      name: '',
-      awsAccessKeyId: '',
-      awsSecretAccessKey: '',
-      awsRegion: 'us-east-1'
-    })
-    setShowForm(true)
-  }
+      name: "",
+      awsAccessKeyId: "",
+      awsSecretAccessKey: "",
+      awsRegion: "us-east-1",
+    });
+    setShowForm(true);
+  };
 
   const openEditForm = (config: TeamAwsConfig) => {
-    setEditingConfig(config)
+    setEditingConfig(config);
     setFormData({
       name: config.name,
       awsAccessKeyId: config.awsAccessKeyId,
-      awsSecretAccessKey: '••••••••••••••••••••', // Show masked placeholder
-      awsRegion: config.awsRegion
-    })
-    setShowForm(true)
-  }
+      awsSecretAccessKey: "••••••••••••••••••••", // Show masked placeholder
+      awsRegion: config.awsRegion,
+    });
+    setShowForm(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitting(true)
-    setError('')
-    setSuccess('')
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError("");
+    setSuccess("");
 
     try {
       // Prepare data for submission
@@ -128,87 +155,102 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
         name: formData.name,
         awsAccessKeyId: formData.awsAccessKeyId,
         awsSecretAccessKey: formData.awsSecretAccessKey,
-        awsRegion: formData.awsRegion
-      }
+        awsRegion: formData.awsRegion,
+      };
 
       // If updating existing config and secret key wasn't changed, don't send masked value
-      if (editingConfig && formData.awsSecretAccessKey === '••••••••••••••••••••') {
+      if (
+        editingConfig &&
+        formData.awsSecretAccessKey === "••••••••••••••••••••"
+      ) {
         // Only update other fields, keep existing secret
-        submitData.awsSecretAccessKey = '' // Backend will handle keeping existing value
+        submitData.awsSecretAccessKey = ""; // Backend will handle keeping existing value
       }
 
       if (editingConfig) {
-        await apiClient.updateTeamAwsConfig(teamId, editingConfig.id, submitData)
+        await apiClient.updateTeamAwsConfig(
+          teamId,
+          editingConfig.id,
+          submitData,
+        );
       } else {
-        await apiClient.createTeamAwsConfig(teamId, submitData)
+        await apiClient.createTeamAwsConfig(teamId, submitData);
       }
-      setSuccess(`AWS configuration "${formData.name}" ${editingConfig ? 'updated' : 'created'} successfully`)
-      setShowForm(false)
-      await fetchAwsConfigs()
+      setSuccess(
+        `AWS configuration "${formData.name}" ${editingConfig ? "updated" : "created"} successfully`,
+      );
+      setShowForm(false);
+      await fetchAwsConfigs();
     } catch (error: any) {
-      setError(error.message || 'Failed to save AWS configuration')
+      setError(error.message || "Failed to save AWS configuration");
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   const handleTest = async (configId: string) => {
-    setIsTesting(configId)
-    setError('')
-    setTestResult(null)
+    setIsTesting(configId);
+    setError("");
+    setTestResult(null);
 
     try {
-      const result = await apiClient.testTeamAwsConfig(teamId, configId)
-      setTestResult({ 
-        ...result as any, 
-        configId 
-      })
+      const result = await apiClient.testTeamAwsConfig(teamId, configId);
+      setTestResult({
+        ...(result as any),
+        configId,
+      });
     } catch (error: any) {
-      const errorMessage = error.message || 'Failed to test AWS credentials'
-      
-      if (errorMessage.includes('404') || errorMessage.includes('not found')) {
-        setError('Please save your credentials before testing the connection')
-      } else if (errorMessage.includes('lack sufficient permissions') || 
-          errorMessage.includes('not authorized to perform') ||
-          errorMessage.includes('permission to list S3 buckets')) {
+      const errorMessage = error.message || "Failed to test AWS credentials";
+
+      if (errorMessage.includes("404") || errorMessage.includes("not found")) {
+        setError("Please save your credentials before testing the connection");
+      } else if (
+        errorMessage.includes("lack sufficient permissions") ||
+        errorMessage.includes("not authorized to perform") ||
+        errorMessage.includes("permission to list S3 buckets")
+      ) {
         setTestResult({
           configId,
           success: false,
           permissionIssue: true,
-          message: errorMessage
-        })
+          message: errorMessage,
+        });
       } else {
-        setError(errorMessage)
+        setError(errorMessage);
       }
     } finally {
-      setIsTesting(null)
+      setIsTesting(null);
     }
-  }
+  };
 
   const handleDelete = async (config: TeamAwsConfig) => {
-    if (!confirm(`Are you sure you want to delete the AWS configuration "${config.name}"? This may affect team deployments using this configuration.`)) {
-      return
+    if (
+      !confirm(
+        `Are you sure you want to delete the AWS configuration "${config.name}"? This may affect team deployments using this configuration.`,
+      )
+    ) {
+      return;
     }
 
-    setIsDeleting(config.id)
-    setError('')
+    setIsDeleting(config.id);
+    setError("");
 
     try {
-      await apiClient.deleteTeamAwsConfig(teamId, config.id)
-      setSuccess(`AWS configuration "${config.name}" deleted successfully`)
-      setTestResult(null)
-      await fetchAwsConfigs()
+      await apiClient.deleteTeamAwsConfig(teamId, config.id);
+      setSuccess(`AWS configuration "${config.name}" deleted successfully`);
+      setTestResult(null);
+      await fetchAwsConfigs();
     } catch (error: any) {
-      setError(error.message || 'Failed to delete AWS configuration')
+      setError(error.message || "Failed to delete AWS configuration");
     } finally {
-      setIsDeleting(null)
+      setIsDeleting(null);
     }
-  }
+  };
 
   const getRegionLabel = (regionValue: string) => {
-    const region = AWS_REGIONS.find(r => r.value === regionValue)
-    return region ? region.label : regionValue
-  }
+    const region = AWS_REGIONS.find((r) => r.value === regionValue);
+    return region ? region.label : regionValue;
+  };
 
   if (loading) {
     return (
@@ -216,7 +258,7 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
         <Spinner className="mx-auto" />
         <p className="text-gray-600 mt-2">Loading AWS configurations...</p>
       </div>
-    )
+    );
   }
 
   return (
@@ -261,7 +303,9 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
         <Card>
           <CardHeader>
             <CardTitle>
-              {editingConfig ? 'Edit AWS Configuration' : 'Add AWS Configuration'}
+              {editingConfig
+                ? "Edit AWS Configuration"
+                : "Add AWS Configuration"}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -271,7 +315,9 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
                 <Input
                   type="text"
                   value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
                   placeholder="e.g., Production, Staging, Development"
                   required
                   className="mt-1"
@@ -286,8 +332,12 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
                 <Input
                   type="text"
                   value={formData.awsAccessKeyId}
-                  onChange={(e) => setFormData({ ...formData, awsAccessKeyId: e.target.value })}
-                  placeholder={editingConfig ? "AKIA••••••••••••••••" : "AKIA..."}
+                  onChange={(e) =>
+                    setFormData({ ...formData, awsAccessKeyId: e.target.value })
+                  }
+                  placeholder={
+                    editingConfig ? "AKIA••••••••••••••••" : "AKIA..."
+                  }
                   autoComplete="new-password"
                   data-lpignore="true"
                   required
@@ -303,8 +353,17 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
                 <Input
                   type="password"
                   value={formData.awsSecretAccessKey}
-                  onChange={(e) => setFormData({ ...formData, awsSecretAccessKey: e.target.value })}
-                  placeholder={editingConfig ? "••••••••••••••••••••••••••••••••••••••••" : "Enter your secret access key"}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      awsSecretAccessKey: e.target.value,
+                    })
+                  }
+                  placeholder={
+                    editingConfig
+                      ? "••••••••••••••••••••••••••••••••••••••••"
+                      : "Enter your secret access key"
+                  }
                   autoComplete="new-password"
                   data-lpignore="true"
                   required
@@ -319,7 +378,9 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
                 <Label>AWS Region</Label>
                 <Select
                   value={formData.awsRegion}
-                  onValueChange={(value) => setFormData({ ...formData, awsRegion: value })}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, awsRegion: value })
+                  }
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Select a region" />
@@ -338,14 +399,27 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
               </div>
 
               <div className="flex justify-end space-x-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowForm(false)}
+                >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isSubmitting || !formData.name || !formData.awsAccessKeyId || (!formData.awsSecretAccessKey && !editingConfig)}
+                  disabled={
+                    isSubmitting ||
+                    !formData.name ||
+                    !formData.awsAccessKeyId ||
+                    (!formData.awsSecretAccessKey && !editingConfig)
+                  }
                 >
-                  {isSubmitting ? 'Saving...' : editingConfig ? 'Update Configuration' : 'Save Configuration'}
+                  {isSubmitting
+                    ? "Saving..."
+                    : editingConfig
+                      ? "Update Configuration"
+                      : "Save Configuration"}
                 </Button>
               </div>
             </form>
@@ -359,7 +433,8 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
             <Key className="h-8 w-8 text-gray-400 mb-4" />
             <h3 className="text-lg mb-2">No AWS Configurations</h3>
             <p className="text-gray-500 text-center mb-6 max-w-md">
-              Add your AWS configuration to enable deployments and infrastructure management.
+              Add your AWS configuration to enable deployments and
+              infrastructure management.
             </p>
           </CardContent>
         </Card>
@@ -374,25 +449,29 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
                       {config.name}
                     </CardTitle>
                     <CardDescription className="mt-1 text-xs">
-                      Region: {getRegionLabel(config.awsRegion)} • Access Key: {config.awsAccessKeyId}
+                      Region: {getRegionLabel(config.awsRegion)} • Access Key:{" "}
+                      {config.awsAccessKeyId}
                     </CardDescription>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Badge variant="outline" className="bg-green-50 text-green-700">
-                      {config.isActive ? 'Active' : 'Inactive'}
+                    <Badge
+                      variant="outline"
+                      className="bg-green-50 text-green-700"
+                    >
+                      {config.isActive ? "Active" : "Inactive"}
                     </Badge>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => handleTest(config.id)} 
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleTest(config.id)}
                       disabled={isTesting === config.id}
                     >
                       <TestTube className="h-4 w-4 mr-2" />
-                      {isTesting === config.id ? 'Testing...' : 'Test'}
+                      {isTesting === config.id ? "Testing..." : "Test"}
                     </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => openEditForm(config)}
                     >
                       <Settings className="h-4 w-4 mr-2" />
@@ -406,29 +485,34 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
                       className="text-destructive border-destructive hover:bg-destructive"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      {isDeleting === config.id ? 'Deleting...' : 'Delete'}
+                      {isDeleting === config.id ? "Deleting..." : "Delete"}
                     </Button>
                   </div>
                 </div>
               </CardHeader>
               {testResult && testResult.configId === config.id && (
                 <CardContent>
-                  <div className={`bg-background border-gray-700 p-4 rounded border`}>
-                    <h4 className={`text-sm font-medium mb-2 ${
-                      testResult.permissionIssue
-                        ? 'text-yellow-300' 
-                        : 'text-green-300'
-                    }`}>
-                      {testResult.permissionIssue 
-                        ? '⚠️ Credentials Valid, Limited Permissions' 
-                        : '✅ Connection Test Successful'
-                      }
+                  <div
+                    className={`bg-background border-gray-700 p-4 rounded border`}
+                  >
+                    <h4
+                      className={`text-sm font-medium mb-2 ${
+                        testResult.permissionIssue
+                          ? "text-yellow-300"
+                          : "text-green-300"
+                      }`}
+                    >
+                      {testResult.permissionIssue
+                        ? "⚠️ Credentials Valid, Limited Permissions"
+                        : "✅ Connection Test Successful"}
                     </h4>
-                    <div className={`text-sm space-y-1 ${
-                      testResult.permissionIssue 
-                        ? 'text-yellow-300' 
-                        : 'text-green-300'
-                    }`}>
+                    <div
+                      className={`text-sm space-y-1 ${
+                        testResult.permissionIssue
+                          ? "text-yellow-300"
+                          : "text-green-300"
+                      }`}
+                    >
                       {testResult.permissionIssue ? (
                         <p>{testResult.message}</p>
                       ) : (
@@ -448,5 +532,5 @@ export default function TeamAwsConfiguration({ teamId }: TeamAwsConfigurationPro
         </div>
       )}
     </div>
-  )
+  );
 }

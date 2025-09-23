@@ -1,31 +1,35 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { cn } from '@/lib/utils'
-import { ChevronRight, Menu, X } from 'lucide-react'
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+import { ChevronRight, Menu, X } from "lucide-react";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 const docSections = [
   {
-    title: 'Documentation',
-    slug: 'docs',
+    title: "Documentation",
+    slug: "docs",
     items: [
-      { title: 'Overview', slug: 'overview', href: '/docs' },
-      { title: 'AWS Setup', slug: 'aws-setup', href: '/docs/aws-setup' },
-      { title: 'Cost Breakdown', slug: 'cost-breakdown', href: '/docs/cost-breakdown' },
-    ]
-  }
-]
+      { title: "Overview", slug: "overview", href: "/docs" },
+      { title: "AWS Setup", slug: "aws-setup", href: "/docs/aws-setup" },
+      {
+        title: "Cost Breakdown",
+        slug: "cost-breakdown",
+        href: "/docs/cost-breakdown",
+      },
+    ],
+  },
+];
 
 interface DocsClientLayoutProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 export default function DocsClientLayout({ children }: DocsClientLayoutProps) {
-  const pathname = usePathname()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="py-8">
@@ -37,7 +41,11 @@ export default function DocsClientLayout({ children }: DocsClientLayoutProps) {
             size="sm"
             onClick={() => setSidebarOpen(!sidebarOpen)}
           >
-            {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {sidebarOpen ? (
+              <X className="h-5 w-5" />
+            ) : (
+              <Menu className="h-5 w-5" />
+            )}
           </Button>
         </div>
 
@@ -57,7 +65,7 @@ export default function DocsClientLayout({ children }: DocsClientLayoutProps) {
             // On mobile: fixed, slide in/out
             "fixed top-0 bottom-0 z-30 w-64 bg-background border-r overflow-y-auto transition-transform lg:translate-x-0",
             sidebarOpen ? "translate-x-0" : "-translate-x-full",
-            "lg:sticky lg:top-0 lg:h-[calc(100vh-8rem)]"
+            "lg:sticky lg:top-0 lg:h-[calc(100vh-8rem)]",
           )}
         >
           <nav className="px-6 pb-6">
@@ -68,7 +76,7 @@ export default function DocsClientLayout({ children }: DocsClientLayoutProps) {
                 </h3>
                 <ul className="space-y-1">
                   {section.items.map((item) => {
-                    const isActive = pathname === item.href
+                    const isActive = pathname === item.href;
                     return (
                       <li key={item.slug}>
                         <Link
@@ -78,13 +86,13 @@ export default function DocsClientLayout({ children }: DocsClientLayoutProps) {
                             "block px-3 py-2 text-sm rounded-md transition-colors",
                             isActive
                               ? "text-foreground font-medium"
-                              : "text-muted-foreground hover:text-foreground"
+                              : "text-muted-foreground hover:text-foreground",
                           )}
                         >
                           {item.title}
                         </Link>
                       </li>
-                    )
+                    );
                   })}
                 </ul>
               </div>
@@ -104,11 +112,15 @@ export default function DocsClientLayout({ children }: DocsClientLayoutProps) {
               <Link href="/docs" className="hover:text-muted-foreground">
                 Docs
               </Link>
-              {pathname !== '/docs' && (
+              {pathname !== "/docs" && (
                 <>
                   <ChevronRight className="h-4 w-4 mx-2" />
                   <span className="">
-                    {pathname.split('/').pop()?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    {pathname
+                      .split("/")
+                      .pop()
+                      ?.replace(/-/g, " ")
+                      .replace(/\b\w/g, (l) => l.toUpperCase())}
                   </span>
                 </>
               )}
@@ -122,5 +134,5 @@ export default function DocsClientLayout({ children }: DocsClientLayoutProps) {
         </main>
       </div>
     </div>
-  )
+  );
 }

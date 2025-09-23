@@ -1,18 +1,18 @@
-import { getDocBySlug } from '@/lib/docs'
-import { notFound } from 'next/navigation'
-import AuthGuard from '@/components/AuthGuard'
-import DocsContentWrapper from '@/components/DocsContentWrapper'
+import { getDocBySlug } from "@/lib/docs";
+import { notFound } from "next/navigation";
+import AuthGuard from "@/components/AuthGuard";
+import DocsContentWrapper from "@/components/DocsContentWrapper";
 
 export default async function DocsPage() {
-  const doc = await getDocBySlug('')
-  
+  const doc = await getDocBySlug("");
+
   if (!doc) {
-    notFound()
+    notFound();
   }
 
   return (
     <AuthGuard>
       <DocsContentWrapper content={doc.content} />
     </AuthGuard>
-  )
+  );
 }

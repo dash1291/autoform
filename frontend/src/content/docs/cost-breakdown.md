@@ -37,6 +37,7 @@ BASE COST:                        $27/month + usage
 **AWS Free Tier**: If you're on the free tier, you'll only pay ~$9/month (ALB, CloudWatch up to 5GB, and ECR up to 500MB are free for the first year).
 
 **Regional Pricing**: Costs shown are for US East (N. Virginia). Examples:
+
 - US West (Oregon): ~same
 - Europe (Ireland): +10%
 - Asia Pacific (Mumbai): -5%

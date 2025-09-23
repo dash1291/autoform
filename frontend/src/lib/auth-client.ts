@@ -1,18 +1,18 @@
-'use client'
+"use client";
 
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import { useSession } from 'next-auth/react'
-import { useEffect } from 'react'
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { useSession } from "next-auth/react";
+import { useEffect } from "react";
 
 interface AuthTokenStore {
-  jwtToken: string | null
-  tokenExpiry: number | null
-  setJwtToken: (token: string | null) => void
-  clearJwtToken: () => void
+  jwtToken: string | null;
+  tokenExpiry: number | null;
+  setJwtToken: (token: string | null) => void;
+  clearJwtToken: () => void;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // Store for JWT token from Python backend
 export const useJwtStore = create<AuthTokenStore>()(
@@ -24,94 +24,102 @@ export const useJwtStore = create<AuthTokenStore>()(
         if (token) {
           // Decode token to get expiry
           try {
-            const payload = JSON.parse(atob(token.split('.')[1]))
-            const expiry = payload.exp * 1000 // Convert to milliseconds
-            set({ jwtToken: token, tokenExpiry: expiry })
+            const payload = JSON.parse(atob(token.split(".")[1]));
+            const expiry = payload.exp * 1000; // Convert to milliseconds
+            set({ jwtToken: token, tokenExpiry: expiry });
           } catch {
-            set({ jwtToken: token, tokenExpiry: null })
+            set({ jwtToken: token, tokenExpiry: null });
           }
         } else {
-          set({ jwtToken: null, tokenExpiry: null })
+          set({ jwtToken: null, tokenExpiry: null });
         }
       },
       clearJwtToken: () => set({ jwtToken: null, tokenExpiry: null }),
     }),
     {
-      name: 'jwt-storage',
-    }
-  )
-)
+      name: "jwt-storage",
+    },
+  ),
+);
 
 // Helper hook that combines NextAuth session with JWT token
 export const useAuth = () => {
-  const { data: session, status } = useSession()
-  const { jwtToken, tokenExpiry, setJwtToken, clearJwtToken } = useJwtStore()
+  const { data: session, status } = useSession();
+  const { jwtToken, tokenExpiry, setJwtToken, clearJwtToken } = useJwtStore();
 
   // Check if token is expired or will expire soon (within 5 minutes)
-  const isTokenExpired = tokenExpiry && tokenExpiry < Date.now() + (5 * 60 * 1000)
+  const isTokenExpired =
+    tokenExpiry && tokenExpiry < Date.now() + 5 * 60 * 1000;
 
   // Exchange NextAuth session for JWT token when session changes or token is expired
   useEffect(() => {
-    if (session?.user && (!jwtToken || isTokenExpired) && status === 'authenticated') {
-      exchangeSessionForJwt()
-    } else if (!session && jwtToken && status === 'unauthenticated') {
-      clearJwtToken()
+    if (
+      session?.user &&
+      (!jwtToken || isTokenExpired) &&
+      status === "authenticated"
+    ) {
+      exchangeSessionForJwt();
+    } else if (!session && jwtToken && status === "unauthenticated") {
+      clearJwtToken();
     }
-  }, [session, jwtToken, isTokenExpired, status])
+  }, [session, jwtToken, isTokenExpired, status]);
 
   const exchangeSessionForJwt = async () => {
     try {
-      console.log('Exchanging session for JWT...', {
+      console.log("Exchanging session for JWT...", {
         hasSession: !!session,
         hasUser: !!session?.user,
         userEmail: session?.user?.email,
-        hasAccessToken: !!session?.accessToken
-      })
+        hasAccessToken: !!session?.accessToken,
+      });
 
-      const response = await fetch(`${API_BASE_URL}/api/auth/exchange-session`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        `${API_BASE_URL}/api/auth/exchange-session`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            sessionUser: session?.user,
+            accessToken: session?.accessToken,
+          }),
         },
-        body: JSON.stringify({
-          sessionUser: session?.user,
-          accessToken: session?.accessToken,
-        }),
-      })
+      );
 
-      console.log('Session exchange response:', response.status)
+      console.log("Session exchange response:", response.status);
 
       if (response.ok) {
-        const data = await response.json()
-        console.log('JWT token received:', !!data.access_token)
-        setJwtToken(data.access_token)
+        const data = await response.json();
+        console.log("JWT token received:", !!data.access_token);
+        setJwtToken(data.access_token);
       } else {
-        const error = await response.text()
-        console.error('Session exchange failed:', response.status, error)
+        const error = await response.text();
+        console.error("Session exchange failed:", response.status, error);
       }
     } catch (error) {
-      console.error('Failed to exchange session for JWT:', error)
+      console.error("Failed to exchange session for JWT:", error);
     }
-  }
+  };
 
   const getAuthHeaders = (): HeadersInit => {
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    }
+      "Content-Type": "application/json",
+    };
 
     if (jwtToken) {
-      headers.Authorization = `Bearer ${jwtToken}`
+      headers.Authorization = `Bearer ${jwtToken}`;
     }
 
-    return headers
-  }
+    return headers;
+  };
 
   return {
     user: session?.user || null,
     isAuthenticated: !!session && !!jwtToken,
-    isLoading: status === 'loading' || (!!session && !jwtToken),
+    isLoading: status === "loading" || (!!session && !jwtToken),
     jwtToken,
     getAuthHeaders,
     refreshJwtToken: exchangeSessionForJwt,
-  }
-}
+  };
+};

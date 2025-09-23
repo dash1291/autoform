@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -9,17 +9,17 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { AlertTriangle, Loader2, CheckCircle, XCircle } from 'lucide-react'
-import { apiClient } from '@/lib/api'
+} from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertTriangle, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { apiClient } from "@/lib/api";
 
 interface DeleteProjectDialogProps {
-  isOpen: boolean
-  onClose: () => void
-  projectId: string
-  projectName: string
-  onSuccess: () => void
+  isOpen: boolean;
+  onClose: () => void;
+  projectId: string;
+  projectName: string;
+  onSuccess: () => void;
 }
 
 export function DeleteProjectDialog({
@@ -29,58 +29,58 @@ export function DeleteProjectDialog({
   projectName,
   onSuccess,
 }: DeleteProjectDialogProps) {
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [deletionResult, setDeletionResult] = useState<{
-    deleted: string[]
-    failed: string[]
-    errors: string[]
-  } | null>(null)
+    deleted: string[];
+    failed: string[];
+    errors: string[];
+  } | null>(null);
 
   const handleDelete = async () => {
-    setIsDeleting(true)
-    setError(null)
-    setDeletionResult(null)
+    setIsDeleting(true);
+    setError(null);
+    setDeletionResult(null);
 
     try {
       // Always delete infrastructure
-      const result = await apiClient.deleteProject(projectId, true)
-      
+      const result = await apiClient.deleteProject(projectId, true);
+
       if (result.infrastructure_deletion?.resources) {
         setDeletionResult({
           deleted: result.infrastructure_deletion.resources.deleted || [],
           failed: result.infrastructure_deletion.resources.failed || [],
           errors: result.infrastructure_deletion.resources.errors || [],
-        })
-        
+        });
+
         // If there were failures but the project was deleted, show success after a delay
         if (result.infrastructure_deletion.resources.failed?.length) {
           setTimeout(() => {
-            onSuccess()
-          }, 3000)
+            onSuccess();
+          }, 3000);
         } else {
           // Complete success
           setTimeout(() => {
-            onSuccess()
-          }, 2000)
+            onSuccess();
+          }, 2000);
         }
       } else {
         // No infrastructure deletion, just project deletion
-        onSuccess()
+        onSuccess();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete project')
-      setIsDeleting(false)
+      setError(err instanceof Error ? err.message : "Failed to delete project");
+      setIsDeleting(false);
     }
-  }
+  };
 
   const handleClose = () => {
     if (!isDeleting) {
-      setError(null)
-      setDeletionResult(null)
-      onClose()
+      setError(null);
+      setDeletionResult(null);
+      onClose();
     }
-  }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -98,12 +98,15 @@ export function DeleteProjectDialog({
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
-                  <strong>This action cannot be undone.</strong> All project data and AWS infrastructure will be permanently deleted.
+                  <strong>This action cannot be undone.</strong> All project
+                  data and AWS infrastructure will be permanently deleted.
                 </AlertDescription>
               </Alert>
 
               <div className="space-y-2">
-                <p className="text-sm font-medium">The following will be deleted:</p>
+                <p className="text-sm font-medium">
+                  The following will be deleted:
+                </p>
                 <ul className="text-sm text-muted-foreground ml-4 list-disc space-y-1">
                   <li>Project database records and configuration</li>
                   <li>All deployments and environment data</li>
@@ -116,7 +119,8 @@ export function DeleteProjectDialog({
                 </ul>
                 <Alert className="mt-4">
                   <AlertDescription className="text-sm">
-                    <strong>Note:</strong> Shared resources (VPC, subnets, ECS clusters) will be preserved for use by other projects.
+                    <strong>Note:</strong> Shared resources (VPC, subnets, ECS
+                    clusters) will be preserved for use by other projects.
                   </AlertDescription>
                 </Alert>
               </div>
@@ -151,7 +155,9 @@ export function DeleteProjectDialog({
                 <XCircle className="h-4 w-4" />
                 <AlertDescription>
                   <div>
-                    <p className="font-medium">Some resources failed to delete:</p>
+                    <p className="font-medium">
+                      Some resources failed to delete:
+                    </p>
                     <ul className="text-sm mt-2 ml-4 list-disc">
                       {deletionResult.failed.map((resource, i) => (
                         <li key={i}>{resource}</li>
@@ -181,7 +187,8 @@ export function DeleteProjectDialog({
               <Alert>
                 <CheckCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Project and infrastructure deleted successfully. Redirecting...
+                  Project and infrastructure deleted successfully.
+                  Redirecting...
                 </AlertDescription>
               </Alert>
             )}
@@ -191,7 +198,11 @@ export function DeleteProjectDialog({
         <DialogFooter>
           {!deletionResult && (
             <>
-              <Button variant="outline" onClick={handleClose} disabled={isDeleting}>
+              <Button
+                variant="outline"
+                onClick={handleClose}
+                disabled={isDeleting}
+              >
                 Cancel
               </Button>
               <Button
@@ -205,7 +216,7 @@ export function DeleteProjectDialog({
                     Deleting...
                   </>
                 ) : (
-                  'Delete Project'
+                  "Delete Project"
                 )}
               </Button>
             </>
@@ -213,5 +224,5 @@ export function DeleteProjectDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

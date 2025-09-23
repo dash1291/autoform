@@ -1,64 +1,72 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Spinner } from '@/components/ui/spinner'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { apiClient } from '@/lib/api'
-import { useAuth } from '@/lib/auth-client'
-import { Team } from '@/types'
-import { Users, ArrowLeft } from 'lucide-react'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { apiClient } from "@/lib/api";
+import { useAuth } from "@/lib/auth-client";
+import { Team } from "@/types";
+import { Users, ArrowLeft } from "lucide-react";
 
 export default function NewTeamPage() {
-  const { isAuthenticated, isLoading } = useAuth()
-  const router = useRouter()
-  const [isCreating, setIsCreating] = useState(false)
-  const [error, setError] = useState('')
+  const { isAuthenticated, isLoading } = useAuth();
+  const router = useRouter();
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState("");
   const [formData, setFormData] = useState({
-    name: '',
-    description: ''
-  })
+    name: "",
+    description: "",
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!formData.name.trim()) return
+    e.preventDefault();
+    if (!formData.name.trim()) return;
 
-    setIsCreating(true)
-    setError('')
-    
+    setIsCreating(true);
+    setError("");
+
     try {
-      const team = await apiClient.createTeam({
+      const team = (await apiClient.createTeam({
         name: formData.name.trim(),
-        description: formData.description.trim() || undefined
-      }) as Team
-      
+        description: formData.description.trim() || undefined,
+      })) as Team;
+
       // Redirect to AWS settings for the newly created team
-      router.push(`/teams/${team.id}?tab=settings`)
+      router.push(`/teams/${team.id}?tab=settings`);
     } catch (error: any) {
-      console.error('Failed to create team:', error)
-      setError(error.message || 'Failed to create team')
+      console.error("Failed to create team:", error);
+      setError(error.message || "Failed to create team");
     } finally {
-      setIsCreating(false)
+      setIsCreating(false);
     }
-  }
+  };
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-  }
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
 
   if (!isLoading && !isAuthenticated) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <h1 className="text-xl font-semibold mb-4">Please sign in</h1>
-          <p className="text-gray-600">You need to be signed in to create a team.</p>
+          <p className="text-gray-600">
+            You need to be signed in to create a team.
+          </p>
         </div>
       </div>
-    )
+    );
   }
 
   if (isLoading) {
@@ -66,7 +74,7 @@ export default function NewTeamPage() {
       <div className="flex items-center justify-center py-20">
         <Spinner />
       </div>
-    )
+    );
   }
 
   return (
@@ -75,7 +83,7 @@ export default function NewTeamPage() {
         <div className="mb-8">
           <Button
             variant="ghost"
-            onClick={() => router.push('/dashboard')}
+            onClick={() => router.push("/dashboard")}
             className="mb-4"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -93,7 +101,8 @@ export default function NewTeamPage() {
           <CardHeader>
             <CardTitle>Team Details</CardTitle>
             <CardDescription>
-              Provide basic information about your team. You can always change this later.
+              Provide basic information about your team. You can always change
+              this later.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -110,7 +119,7 @@ export default function NewTeamPage() {
                   id="name"
                   type="text"
                   value={formData.name}
-                  onChange={(e) => handleInputChange('name', e.target.value)}
+                  onChange={(e) => handleInputChange("name", e.target.value)}
                   className="mt-1"
                   placeholder="Enter team name"
                   required
@@ -125,13 +134,16 @@ export default function NewTeamPage() {
                 <Textarea
                   id="description"
                   value={formData.description}
-                  onChange={(e) => handleInputChange('description', e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("description", e.target.value)
+                  }
                   className="mt-1"
                   rows={3}
                   placeholder="Enter team description (optional)"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Optional description to help team members understand the team's purpose
+                  Optional description to help team members understand the
+                  team's purpose
                 </p>
               </div>
 
@@ -141,12 +153,12 @@ export default function NewTeamPage() {
                   disabled={isCreating || !formData.name.trim()}
                   className="flex-1"
                 >
-                  {isCreating ? 'Creating Team...' : 'Create Team'}
+                  {isCreating ? "Creating Team..." : "Create Team"}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => router.push('/dashboard')}
+                  onClick={() => router.push("/dashboard")}
                   disabled={isCreating}
                 >
                   Cancel
@@ -157,5 +169,5 @@ export default function NewTeamPage() {
         </Card>
       </div>
     </div>
-  )
+  );
 }

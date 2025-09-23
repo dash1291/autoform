@@ -7,8 +7,7 @@ description: Learn how to configure AWS credentials for Autoform deployments
 
 Learn how to configure AWS credentials for Autoform deployments
 
->**Security Note:** Autoform encrypts your AWS credentials before storing them.
-
+> **Security Note:** Autoform encrypts your AWS credentials before storing them.
 
 ## Requirements
 

@@ -1,33 +1,36 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { useAuth } from '@/lib/auth-client'
-import { signIn, signOut } from 'next-auth/react'
-import { Spinner } from '@/components/ui/spinner'
-import { LogoSVG } from '@/components/LogoSVG'
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth-client";
+import { signIn, signOut } from "next-auth/react";
+import { Spinner } from "@/components/ui/spinner";
+import { LogoSVG } from "@/components/LogoSVG";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+} from "@/components/ui/dropdown-menu";
 
 export default function Navbar() {
-  const { user, isAuthenticated, isLoading } = useAuth()
+  const { user, isAuthenticated, isLoading } = useAuth();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border/50">
       <div className="max-w-full w-full px-4 sm:px-6">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
-            <Link href="/" className="flex items-center gap-2 text-xl font-normal text-foreground">
+            <Link
+              href="/"
+              className="flex items-center gap-2 text-xl font-normal text-foreground"
+            >
               <LogoSVG className="h-8" />
               Autoform
             </Link>
           </div>
-          
+
           <div className="flex items-center space-x-4">
             {isLoading ? (
               <div className="text-muted-foreground flex items-center gap-2">
@@ -38,7 +41,10 @@ export default function Navbar() {
               <>
                 <div className="flex items-center space-x-3">
                   <Link href="/docs">
-                    <Button variant="ghost" className="text-foreground hover:text-foreground">
+                    <Button
+                      variant="ghost"
+                      className="text-foreground hover:text-foreground"
+                    >
                       Docs
                     </Button>
                   </Link>
@@ -48,20 +54,20 @@ export default function Navbar() {
                         <button className="flex items-center space-x-2 rounded-md px-2 py-1.5 hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring">
                           <img
                             className="h-8 w-8 rounded-full"
-                            src={user.image || ''}
-                            alt={user.name || ''}
+                            src={user.image || ""}
+                            alt={user.name || ""}
                           />
-                          <span className="text-sm text-foreground">{user.name}</span>
+                          <span className="text-sm text-foreground">
+                            {user.name}
+                          </span>
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-56">
                         <DropdownMenuItem asChild>
-                          <Link href="/dashboard">
-                            Projects
-                          </Link>
+                          <Link href="/dashboard">Projects</Link>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           onClick={() => signOut()}
                           className="text-destructive focus:text-destructive"
                         >
@@ -74,19 +80,14 @@ export default function Navbar() {
               </>
             ) : (
               <>
-                <Link 
+                <Link
                   href="https://calendly.com/ashish-dubey91/30min"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Button variant="outline">
-                    Book a demo
-                  </Button>
+                  <Button variant="outline">Book a demo</Button>
                 </Link>
-                <Button 
-                  onClick={() => signIn('github')}
-                  className="bg-primary"
-                >
+                <Button onClick={() => signIn("github")} className="bg-primary">
                   Sign in
                 </Button>
               </>
@@ -95,5 +96,5 @@ export default function Navbar() {
         </div>
       </div>
     </nav>
-  )
+  );
 }

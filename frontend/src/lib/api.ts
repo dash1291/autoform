@@ -1,34 +1,41 @@
-import { useJwtStore } from './auth-client'
-import { Project, Team, TeamMember, EnvironmentVariable, Deployment, Environment } from '../types'
+import { useJwtStore } from "./auth-client";
+import {
+  Project,
+  Team,
+  TeamMember,
+  EnvironmentVariable,
+  Deployment,
+  Environment,
+} from "../types";
 
 class ApiClient {
-  private baseUrl: string
+  private baseUrl: string;
 
   constructor() {
     // Use the build-time environment variable for API URL
-    this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    this.baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   }
 
   private getAuthHeaders(): HeadersInit {
-    const { jwtToken } = useJwtStore.getState()
+    const { jwtToken } = useJwtStore.getState();
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    }
+      "Content-Type": "application/json",
+    };
 
     if (jwtToken) {
-      headers.Authorization = `Bearer ${jwtToken}`
+      headers.Authorization = `Bearer ${jwtToken}`;
     }
 
-    return headers
+    return headers;
   }
 
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
-    isRetry: boolean = false
+    isRetry: boolean = false,
   ): Promise<T> {
-    const url = `${this.baseUrl}/api${endpoint}`
-    const headers = this.getAuthHeaders()
+    const url = `${this.baseUrl}/api${endpoint}`;
+    const headers = this.getAuthHeaders();
 
     const config: RequestInit = {
       ...options,
@@ -36,59 +43,67 @@ class ApiClient {
         ...headers,
         ...options.headers,
       },
-    }
+    };
 
-    const response = await fetch(url, config)
+    const response = await fetch(url, config);
 
     // Handle 401 errors by trying to refresh the token
     if (response.status === 401 && !isRetry) {
       try {
         // Try to refresh the JWT token
-        await this.refreshToken()
-        
+        await this.refreshToken();
+
         // Retry the request with the new token
-        return this.request(endpoint, options, true)
+        return this.request(endpoint, options, true);
       } catch (refreshError) {
         // If refresh fails, clear the token and throw the original error
-        useJwtStore.getState().clearJwtToken()
-        const error = await response.json().catch(() => ({ message: 'Authentication failed' }))
-        throw new Error(error.message || error.detail || `HTTP ${response.status}`)
+        useJwtStore.getState().clearJwtToken();
+        const error = await response
+          .json()
+          .catch(() => ({ message: "Authentication failed" }));
+        throw new Error(
+          error.message || error.detail || `HTTP ${response.status}`,
+        );
       }
     }
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Network error' }))
-      throw new Error(error.message || error.detail || `HTTP ${response.status}`)
+      const error = await response
+        .json()
+        .catch(() => ({ message: "Network error" }));
+      throw new Error(
+        error.message || error.detail || `HTTP ${response.status}`,
+      );
     }
 
-    return response.json()
+    return response.json();
   }
 
   private async refreshToken(): Promise<void> {
     // Import dynamically to avoid circular dependencies
-    const { getSession } = await import('next-auth/react')
-    const session = await getSession()
-    
+    const { getSession } = await import("next-auth/react");
+    const session = await getSession();
+
     if (!session?.user) {
-      throw new Error('No session available for token refresh')
+      throw new Error("No session available for token refresh");
     }
 
     const response = await fetch(`${this.baseUrl}/api/auth/exchange-session`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         sessionUser: session.user,
         accessToken: session.accessToken,
       }),
-    })
+    });
 
     if (response.ok) {
-      const data = await response.json()
-      useJwtStore.getState().setJwtToken(data.access_token)
+      const data = await response.json();
+      useJwtStore.getState().setJwtToken(data.access_token);
     } else {
-      throw new Error('Token refresh failed')
+      throw new Error("Token refresh failed");
     }
   }
 
@@ -96,463 +111,669 @@ class ApiClient {
 
   // Project endpoints
   async getProjects(): Promise<Project[]> {
-    return this.request<Project[]>('/projects/')
+    return this.request<Project[]>("/projects/");
   }
 
   async getProject(id: string): Promise<Project> {
-    return this.request<Project>(`/projects/${id}`)
+    return this.request<Project>(`/projects/${id}`);
   }
 
   async createProject(projectData: any): Promise<Project> {
-    return this.request<Project>('/projects/', {
-      method: 'POST',
+    return this.request<Project>("/projects/", {
+      method: "POST",
       body: JSON.stringify(projectData),
-    })
+    });
   }
 
-  async updateProject(id: string, projectData: any): Promise<Project & { healthCheckUpdateStatus?: string }> {
-    return this.request<Project & { healthCheckUpdateStatus?: string }>(`/projects/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(projectData),
-    })
+  async updateProject(
+    id: string,
+    projectData: any,
+  ): Promise<Project & { healthCheckUpdateStatus?: string }> {
+    return this.request<Project & { healthCheckUpdateStatus?: string }>(
+      `/projects/${id}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(projectData),
+      },
+    );
   }
 
-  async deleteProject(id: string, deleteInfrastructure: boolean = true): Promise<{ 
-    message: string; 
+  async deleteProject(
+    id: string,
+    deleteInfrastructure: boolean = true,
+  ): Promise<{
+    message: string;
     infrastructure_deletion?: {
       infrastructure_deleted: boolean;
       resources: {
         deleted?: string[];
         failed?: string[];
         errors?: string[];
-      }
-    }
+      };
+    };
   }> {
-    const params = new URLSearchParams({ delete_infrastructure: deleteInfrastructure.toString() })
-    return this.request<{ 
-      message: string; 
+    const params = new URLSearchParams({
+      delete_infrastructure: deleteInfrastructure.toString(),
+    });
+    return this.request<{
+      message: string;
       infrastructure_deletion?: {
         infrastructure_deleted: boolean;
         resources: {
           deleted?: string[];
           failed?: string[];
           errors?: string[];
-        }
-      }
+        };
+      };
     }>(`/projects/${id}?${params}`, {
-      method: 'DELETE',
-    })
+      method: "DELETE",
+    });
   }
 
   // Deployment endpoints
   async getDeployments(projectId: string): Promise<Deployment[]> {
-    return this.request<Deployment[]>(`/deployments/projects/${projectId}/deployments`)
+    return this.request<Deployment[]>(
+      `/deployments/projects/${projectId}/deployments`,
+    );
   }
 
-  async deployProject(projectId: string): Promise<{ message: string; deploymentId?: string }> {
-    return this.request<{ message: string; deploymentId?: string }>(`/deployments/projects/${projectId}/deploy`, {
-      method: 'POST',
-    })
+  async deployProject(
+    projectId: string,
+  ): Promise<{ message: string; deploymentId?: string }> {
+    return this.request<{ message: string; deploymentId?: string }>(
+      `/deployments/projects/${projectId}/deploy`,
+      {
+        method: "POST",
+      },
+    );
   }
 
   async abortDeployment(deploymentId: string): Promise<{ message: string }> {
-    return this.request<{ message: string }>(`/deployments/${deploymentId}/abort`, {
-      method: 'POST',
-    })
+    return this.request<{ message: string }>(
+      `/deployments/${deploymentId}/abort`,
+      {
+        method: "POST",
+      },
+    );
   }
 
   async getDeploymentLogs(deploymentId: string): Promise<{ logs: string }> {
-    return this.request<{ logs: string }>(`/deployments/${deploymentId}/logs`)
+    return this.request<{ logs: string }>(`/deployments/${deploymentId}/logs`);
   }
 
   // Environment variables endpoints
-  async getEnvironmentVariables(environmentId: string): Promise<Array<Omit<EnvironmentVariable, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }>> {
-    return this.request<Array<Omit<EnvironmentVariable, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }>>(`/environments/${environmentId}/environment-variables/`)
+  async getEnvironmentVariables(
+    environmentId: string,
+  ): Promise<
+    Array<
+      Omit<EnvironmentVariable, "createdAt" | "updatedAt"> & {
+        createdAt: string;
+        updatedAt: string;
+      }
+    >
+  > {
+    return this.request<
+      Array<
+        Omit<EnvironmentVariable, "createdAt" | "updatedAt"> & {
+          createdAt: string;
+          updatedAt: string;
+        }
+      >
+    >(`/environments/${environmentId}/environment-variables/`);
   }
 
-  async createEnvironmentVariable(environmentId: string, envVar: any): Promise<EnvironmentVariable> {
-    return this.request<EnvironmentVariable>(`/environments/${environmentId}/environment-variables/`, {
-      method: 'POST',
-      body: JSON.stringify(envVar),
-    })
+  async createEnvironmentVariable(
+    environmentId: string,
+    envVar: any,
+  ): Promise<EnvironmentVariable> {
+    return this.request<EnvironmentVariable>(
+      `/environments/${environmentId}/environment-variables/`,
+      {
+        method: "POST",
+        body: JSON.stringify(envVar),
+      },
+    );
   }
 
-  async updateEnvironmentVariable(environmentId: string, envVarId: string, envVar: any): Promise<EnvironmentVariable> {
-    return this.request<EnvironmentVariable>(`/environments/${environmentId}/environment-variables/${envVarId}`, {
-      method: 'PUT',
-      body: JSON.stringify(envVar),
-    })
+  async updateEnvironmentVariable(
+    environmentId: string,
+    envVarId: string,
+    envVar: any,
+  ): Promise<EnvironmentVariable> {
+    return this.request<EnvironmentVariable>(
+      `/environments/${environmentId}/environment-variables/${envVarId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(envVar),
+      },
+    );
   }
 
-  async deleteEnvironmentVariable(environmentId: string, envVarId: string): Promise<{ message: string }> {
-    return this.request<{ message: string }>(`/environments/${environmentId}/environment-variables/${envVarId}`, {
-      method: 'DELETE',
-    })
+  async deleteEnvironmentVariable(
+    environmentId: string,
+    envVarId: string,
+  ): Promise<{ message: string }> {
+    return this.request<{ message: string }>(
+      `/environments/${environmentId}/environment-variables/${envVarId}`,
+      {
+        method: "DELETE",
+      },
+    );
   }
 
   // Environment endpoints
   async getProjectEnvironments(projectId: string): Promise<Environment[]> {
-    return this.request<Environment[]>(`/environments/projects/${projectId}/environments`)
+    return this.request<Environment[]>(
+      `/environments/projects/${projectId}/environments`,
+    );
   }
 
-  async createEnvironment(projectId: string, environmentData: any): Promise<{ message: string; id: string; name: string }> {
-    return this.request<{ message: string; id: string; name: string }>(`/environments/projects/${projectId}/environments`, {
-      method: 'POST',
-      body: JSON.stringify(environmentData),
-    })
+  async createEnvironment(
+    projectId: string,
+    environmentData: any,
+  ): Promise<{ message: string; id: string; name: string }> {
+    return this.request<{ message: string; id: string; name: string }>(
+      `/environments/projects/${projectId}/environments`,
+      {
+        method: "POST",
+        body: JSON.stringify(environmentData),
+      },
+    );
   }
 
   async getEnvironment(environmentId: string): Promise<Environment> {
-    return this.request<Environment>(`/environments/environments/${environmentId}`)
+    return this.request<Environment>(
+      `/environments/environments/${environmentId}`,
+    );
   }
 
-  async updateEnvironment(environmentId: string, environmentData: any): Promise<{ message: string; id: string; name: string }> {
-    return this.request<{ message: string; id: string; name: string }>(`/environments/environments/${environmentId}`, {
-      method: 'PUT',
-      body: JSON.stringify(environmentData),
-    })
+  async updateEnvironment(
+    environmentId: string,
+    environmentData: any,
+  ): Promise<{ message: string; id: string; name: string }> {
+    return this.request<{ message: string; id: string; name: string }>(
+      `/environments/environments/${environmentId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(environmentData),
+      },
+    );
   }
 
   async deleteEnvironment(environmentId: string): Promise<{ message: string }> {
-    return this.request<{ message: string }>(`/environments/environments/${environmentId}`, {
-      method: 'DELETE',
-    })
+    return this.request<{ message: string }>(
+      `/environments/environments/${environmentId}`,
+      {
+        method: "DELETE",
+      },
+    );
   }
 
-  async getAvailableAwsConfigs(environmentId: string): Promise<{ teamConfigs: Array<{ id: string; name: string; region: string; type: string }> }> {
-    return this.request<{ teamConfigs: Array<{ id: string; name: string; region: string; type: string }> }>(`/environments/environments/${environmentId}/available-aws-configs`)
+  async getAvailableAwsConfigs(
+    environmentId: string,
+  ): Promise<{
+    teamConfigs: Array<{
+      id: string;
+      name: string;
+      region: string;
+      type: string;
+    }>;
+  }> {
+    return this.request<{
+      teamConfigs: Array<{
+        id: string;
+        name: string;
+        region: string;
+        type: string;
+      }>;
+    }>(`/environments/environments/${environmentId}/available-aws-configs`);
   }
 
-  async getCertificateStatus(environmentId: string): Promise<{ status: string; message: string }> {
-    return this.request<{ status: string; message: string }>(`/environments/environments/${environmentId}/certificate-status`)
+  async getCertificateStatus(
+    environmentId: string,
+  ): Promise<{ status: string; message: string }> {
+    return this.request<{ status: string; message: string }>(
+      `/environments/environments/${environmentId}/certificate-status`,
+    );
   }
 
-  async deployEnvironment(environmentId: string): Promise<{ message: string; deploymentId: string }> {
-    return this.request<{ message: string; deploymentId: string }>(`/deployments/environments/${environmentId}/deploy`, {
-      method: 'POST',
-    })
+  async deployEnvironment(
+    environmentId: string,
+  ): Promise<{ message: string; deploymentId: string }> {
+    return this.request<{ message: string; deploymentId: string }>(
+      `/deployments/environments/${environmentId}/deploy`,
+      {
+        method: "POST",
+      },
+    );
   }
 
   // GitHub endpoints
   async validateRepository(repoUrl: string): Promise<{
-    valid: boolean
+    valid: boolean;
     repository?: {
-      name: string
-      fullName: string
-      private: boolean
-      defaultBranch: string
-      description?: string
-      branches: string[]
-    }
-    error?: string
-    needsReauth?: boolean
+      name: string;
+      fullName: string;
+      private: boolean;
+      defaultBranch: string;
+      description?: string;
+      branches: string[];
+    };
+    error?: string;
+    needsReauth?: boolean;
   }> {
     return this.request<{
-      valid: boolean
+      valid: boolean;
       repository?: {
-        name: string
-        fullName: string
-        private: boolean
-        defaultBranch: string
-        description?: string
-        branches: string[]
-      }
-      error?: string
-      needsReauth?: boolean
-    }>('/github/validate-repo', {
-      method: 'POST',
+        name: string;
+        fullName: string;
+        private: boolean;
+        defaultBranch: string;
+        description?: string;
+        branches: string[];
+      };
+      error?: string;
+      needsReauth?: boolean;
+    }>("/github/validate-repo", {
+      method: "POST",
       body: JSON.stringify({ gitRepoUrl: repoUrl }),
-    })
+    });
   }
 
   // Note: Branch information is included in validateRepository response
 
-  // Service status endpoints  
+  // Service status endpoints
   async getServiceStatus(projectId: string): Promise<any> {
-    return this.request<any>(`/projects/${projectId}/service-status`)
+    return this.request<any>(`/projects/${projectId}/service-status`);
   }
 
   async getEnvironmentServiceStatus(environmentId: string): Promise<any> {
-    return this.request<any>(`/environments/${environmentId}/service-status`)
+    return this.request<any>(`/environments/${environmentId}/service-status`);
   }
 
   // Shell execution endpoints
-  async checkExecAvailability(projectId: string): Promise<{ available: boolean; status: string; reason?: string; clusterArn?: string; taskArn?: string; containerName?: string; region?: string }> {
-    return this.request<{ available: boolean; status: string; reason?: string; clusterArn?: string; taskArn?: string; containerName?: string; region?: string }>(`/projects/${projectId}/exec`)
+  async checkExecAvailability(
+    projectId: string,
+  ): Promise<{
+    available: boolean;
+    status: string;
+    reason?: string;
+    clusterArn?: string;
+    taskArn?: string;
+    containerName?: string;
+    region?: string;
+  }> {
+    return this.request<{
+      available: boolean;
+      status: string;
+      reason?: string;
+      clusterArn?: string;
+      taskArn?: string;
+      containerName?: string;
+      region?: string;
+    }>(`/projects/${projectId}/exec`);
   }
 
-  async executeCommand(projectId: string, command: string): Promise<{ success: boolean; sessionId?: string; streamUrl?: string; tokenValue?: string; message?: string }> {
-    return this.request<{ success: boolean; sessionId?: string; streamUrl?: string; tokenValue?: string; message?: string }>(`/projects/${projectId}/exec/command`, {
-      method: 'POST',
+  async executeCommand(
+    projectId: string,
+    command: string,
+  ): Promise<{
+    success: boolean;
+    sessionId?: string;
+    streamUrl?: string;
+    tokenValue?: string;
+    message?: string;
+  }> {
+    return this.request<{
+      success: boolean;
+      sessionId?: string;
+      streamUrl?: string;
+      tokenValue?: string;
+      message?: string;
+    }>(`/projects/${projectId}/exec/command`, {
+      method: "POST",
       body: JSON.stringify({ command }),
-    })
+    });
   }
 
   // Logs endpoints
-  async getProjectLogs(projectId: string, limit: number = 100, hoursBack?: number): Promise<{ logs: any[]; logGroupName: string; totalStreams: number; message?: string }> {
-    let url = `/projects/${projectId}/logs?limit=${limit}`
+  async getProjectLogs(
+    projectId: string,
+    limit: number = 100,
+    hoursBack?: number,
+  ): Promise<{
+    logs: any[];
+    logGroupName: string;
+    totalStreams: number;
+    message?: string;
+  }> {
+    let url = `/projects/${projectId}/logs?limit=${limit}`;
     if (hoursBack !== undefined) {
-      url += `&hours_back=${hoursBack}`
+      url += `&hours_back=${hoursBack}`;
     }
-    return this.request<{ logs: any[]; logGroupName: string; totalStreams: number; message?: string }>(url)
+    return this.request<{
+      logs: any[];
+      logGroupName: string;
+      totalStreams: number;
+      message?: string;
+    }>(url);
   }
 
-  async getCodeBuildLogs(projectId: string, limit: number = 100): Promise<{ logs: any[]; logGroupName: string; totalStreams: number; message?: string }> {
-    return this.request<{ logs: any[]; logGroupName: string; totalStreams: number; message?: string }>(`/projects/${projectId}/codebuild-logs?limit=${limit}`)
+  async getCodeBuildLogs(
+    projectId: string,
+    limit: number = 100,
+  ): Promise<{
+    logs: any[];
+    logGroupName: string;
+    totalStreams: number;
+    message?: string;
+  }> {
+    return this.request<{
+      logs: any[];
+      logGroupName: string;
+      totalStreams: number;
+      message?: string;
+    }>(`/projects/${projectId}/codebuild-logs?limit=${limit}`);
   }
 
   // AWS resources endpoints
-  async getAwsResources(credentialType: string = 'auto', teamId?: string): Promise<{ vpcs: any[]; subnetsByVpc: any; clusters: any[]; message?: string }> {
-    let url = `/aws/resources?credential_type=${credentialType}`
+  async getAwsResources(
+    credentialType: string = "auto",
+    teamId?: string,
+  ): Promise<{
+    vpcs: any[];
+    subnetsByVpc: any;
+    clusters: any[];
+    message?: string;
+  }> {
+    let url = `/aws/resources?credential_type=${credentialType}`;
     if (teamId) {
-      url += `&team_id=${teamId}`
+      url += `&team_id=${teamId}`;
     }
-    return this.request<{ vpcs: any[]; subnetsByVpc: any; clusters: any[]; message?: string }>(url)
+    return this.request<{
+      vpcs: any[];
+      subnetsByVpc: any;
+      clusters: any[];
+      message?: string;
+    }>(url);
   }
 
   async getProjectDeployedResources(projectId: string): Promise<any> {
-    return this.request<any>(`/projects/${projectId}/deployed-resources`)
+    return this.request<any>(`/projects/${projectId}/deployed-resources`);
   }
 
   // Webhook endpoints
-  async configureWebhook(projectId: string, githubAccessToken?: string): Promise<{
-    webhookUrl: string
-    webhookSecret: string
-    instructions?: Record<string, string>
-    automatic?: boolean
-    status?: string
-    webhookId?: string
+  async configureWebhook(
+    projectId: string,
+    githubAccessToken?: string,
+  ): Promise<{
+    webhookUrl: string;
+    webhookSecret: string;
+    instructions?: Record<string, string>;
+    automatic?: boolean;
+    status?: string;
+    webhookId?: string;
   }> {
-    const headers: HeadersInit = {}
+    const headers: HeadersInit = {};
     if (githubAccessToken) {
-      headers['X-GitHub-Token'] = githubAccessToken
+      headers["X-GitHub-Token"] = githubAccessToken;
     }
-    
+
     return this.request<{
-      webhookUrl: string
-      webhookSecret: string
-      instructions?: Record<string, string>
-      automatic?: boolean
-      status?: string
-      webhookId?: string
+      webhookUrl: string;
+      webhookSecret: string;
+      instructions?: Record<string, string>;
+      automatic?: boolean;
+      status?: string;
+      webhookId?: string;
     }>(`/projects/${projectId}/webhook/configure`, {
-      method: 'POST',
-      headers
-    })
+      method: "POST",
+      headers,
+    });
   }
 
   async deleteWebhookConfig(projectId: string, githubAccessToken?: string) {
-    const headers: HeadersInit = {}
+    const headers: HeadersInit = {};
     if (githubAccessToken) {
-      headers['X-GitHub-Token'] = githubAccessToken
+      headers["X-GitHub-Token"] = githubAccessToken;
     }
-    
+
     return this.request(`/projects/${projectId}/webhook`, {
-      method: 'DELETE',
-      headers
-    })
+      method: "DELETE",
+      headers,
+    });
   }
 
   // Team endpoints
   async getTeams(): Promise<Team[]> {
-    return this.request<Team[]>('/teams/')
+    return this.request<Team[]>("/teams/");
   }
 
   async getTeam(teamId: string): Promise<Team> {
-    return this.request<Team>(`/teams/${teamId}`)
+    return this.request<Team>(`/teams/${teamId}`);
   }
 
   async createTeam(teamData: { name: string; description?: string }) {
-    return this.request('/teams/', {
-      method: 'POST',
+    return this.request("/teams/", {
+      method: "POST",
       body: JSON.stringify(teamData),
-    })
+    });
   }
 
-  async updateTeam(teamId: string, teamData: { name?: string; description?: string }) {
+  async updateTeam(
+    teamId: string,
+    teamData: { name?: string; description?: string },
+  ) {
     return this.request(`/teams/${teamId}`, {
-      method: 'PUT',
+      method: "PUT",
       body: JSON.stringify(teamData),
-    })
+    });
   }
 
   async deleteTeam(teamId: string) {
     return this.request(`/teams/${teamId}`, {
-      method: 'DELETE',
-    })
+      method: "DELETE",
+    });
   }
 
-  async addTeamMember(teamId: string, memberData: { githubUsername: string; role: string }) {
+  async addTeamMember(
+    teamId: string,
+    memberData: { githubUsername: string; role: string },
+  ) {
     return this.request(`/teams/${teamId}/members`, {
-      method: 'POST',
+      method: "POST",
       body: JSON.stringify(memberData),
-    })
+    });
   }
 
   async removeTeamMember(teamId: string, memberId: string) {
     return this.request(`/teams/${teamId}/members/${memberId}`, {
-      method: 'DELETE',
-    })
+      method: "DELETE",
+    });
   }
 
   async updateTeamMemberRole(teamId: string, memberId: string, role: string) {
     return this.request(`/teams/${teamId}/members/${memberId}/role`, {
-      method: 'PUT',
+      method: "PUT",
       body: JSON.stringify({ role }),
-    })
+    });
   }
 
   // Team AWS Configuration endpoints
   async getTeamAwsConfig(teamId: string): Promise<{
-    awsAccessKeyId: string
-    awsSecretAccessKey: string
-    awsRegion: string
-    isActive: boolean
-    createdAt: string
-    updatedAt: string
+    awsAccessKeyId: string;
+    awsSecretAccessKey: string;
+    awsRegion: string;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
   }> {
     return this.request<{
-      awsAccessKeyId: string
-      awsSecretAccessKey: string
-      awsRegion: string
-      isActive: boolean
-      createdAt: string
-      updatedAt: string
-    }>(`/teams/${teamId}/aws-config`)
+      awsAccessKeyId: string;
+      awsSecretAccessKey: string;
+      awsRegion: string;
+      isActive: boolean;
+      createdAt: string;
+      updatedAt: string;
+    }>(`/teams/${teamId}/aws-config`);
   }
 
-  async createSingleTeamAwsConfig(teamId: string, awsConfig: { 
-    awsAccessKeyId: string
-    awsSecretAccessKey: string
-    awsRegion: string 
-  }) {
+  async createSingleTeamAwsConfig(
+    teamId: string,
+    awsConfig: {
+      awsAccessKeyId: string;
+      awsSecretAccessKey: string;
+      awsRegion: string;
+    },
+  ) {
     return this.request(`/teams/${teamId}/aws-config`, {
-      method: 'POST',
+      method: "POST",
       body: JSON.stringify(awsConfig),
-    })
+    });
   }
 
   async deleteSingleTeamAwsConfig(teamId: string) {
     return this.request(`/teams/${teamId}/aws-config`, {
-      method: 'DELETE',
-    })
+      method: "DELETE",
+    });
   }
 
-
-  async getTeamAwsConfigs(teamId: string): Promise<Array<{ 
-    id: string; 
-    name: string; 
-    awsRegion: string; 
-    isActive: boolean;
-    awsAccessKeyId: string;
-    awsSecretAccessKey: string;
-    createdAt: string;
-    updatedAt: string;
-  }>> {
-    return this.request<Array<{ 
-      id: string; 
-      name: string; 
-      awsRegion: string; 
+  async getTeamAwsConfigs(teamId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      awsRegion: string;
       isActive: boolean;
       awsAccessKeyId: string;
       awsSecretAccessKey: string;
       createdAt: string;
       updatedAt: string;
-    }>>(`/teams/${teamId}/aws-configs`)
+    }>
+  > {
+    return this.request<
+      Array<{
+        id: string;
+        name: string;
+        awsRegion: string;
+        isActive: boolean;
+        awsAccessKeyId: string;
+        awsSecretAccessKey: string;
+        createdAt: string;
+        updatedAt: string;
+      }>
+    >(`/teams/${teamId}/aws-configs`);
   }
 
-  async createTeamAwsConfig(teamId: string, awsConfig: { 
-    name: string
-    awsAccessKeyId: string
-    awsSecretAccessKey: string
-    awsRegion: string 
-  }) {
+  async createTeamAwsConfig(
+    teamId: string,
+    awsConfig: {
+      name: string;
+      awsAccessKeyId: string;
+      awsSecretAccessKey: string;
+      awsRegion: string;
+    },
+  ) {
     return this.request(`/teams/${teamId}/aws-configs`, {
-      method: 'POST',
+      method: "POST",
       body: JSON.stringify(awsConfig),
-    })
+    });
   }
 
-  async updateTeamAwsConfig(teamId: string, configId: string, awsConfig: { 
-    name?: string
-    awsAccessKeyId?: string
-    awsSecretAccessKey?: string
-    awsRegion?: string
-    isActive?: boolean
-  }) {
+  async updateTeamAwsConfig(
+    teamId: string,
+    configId: string,
+    awsConfig: {
+      name?: string;
+      awsAccessKeyId?: string;
+      awsSecretAccessKey?: string;
+      awsRegion?: string;
+      isActive?: boolean;
+    },
+  ) {
     return this.request(`/teams/${teamId}/aws-configs/${configId}`, {
-      method: 'PUT',
+      method: "PUT",
       body: JSON.stringify(awsConfig),
-    })
+    });
   }
 
   async deleteTeamAwsConfig(teamId: string, configId: string) {
     return this.request(`/teams/${teamId}/aws-configs/${configId}`, {
-      method: 'DELETE',
-    })
+      method: "DELETE",
+    });
   }
 
   async testTeamAwsConfig(teamId: string, configId: string) {
     return this.request(`/teams/${teamId}/aws-configs/${configId}/test`, {
-      method: 'POST',
-    })
+      method: "POST",
+    });
   }
 
   // User AWS Configuration endpoints
   async getUserAwsConfig(): Promise<{
-    configured: boolean
-    region: string | null
-    accessKeyId?: string
-    createdAt?: string
-    updatedAt?: string
+    configured: boolean;
+    region: string | null;
+    accessKeyId?: string;
+    createdAt?: string;
+    updatedAt?: string;
   }> {
     return this.request<{
-      configured: boolean
-      region: string | null
-      accessKeyId?: string
-      createdAt?: string
-      updatedAt?: string
-    }>('/aws/user-credentials')
+      configured: boolean;
+      region: string | null;
+      accessKeyId?: string;
+      createdAt?: string;
+      updatedAt?: string;
+    }>("/aws/user-credentials");
   }
 
-  async saveUserAwsConfig(awsConfig: { 
-    accessKeyId: string
-    secretAccessKey: string
-    region: string 
+  async saveUserAwsConfig(awsConfig: {
+    accessKeyId: string;
+    secretAccessKey: string;
+    region: string;
   }) {
-    return this.request('/aws/user-credentials', {
-      method: 'POST',
+    return this.request("/aws/user-credentials", {
+      method: "POST",
       body: JSON.stringify(awsConfig),
-    })
+    });
   }
 
   async deleteUserAwsConfig() {
-    return this.request('/aws/user-credentials', {
-      method: 'DELETE',
-    })
+    return this.request("/aws/user-credentials", {
+      method: "DELETE",
+    });
   }
 
   // Test AWS credentials (works for both team and personal)
-  async testAwsCredentials(credentialType: string = 'auto') {
-    return this.request(`/aws/credentials-check?credential_type=${credentialType}`)
+  async testAwsCredentials(credentialType: string = "auto") {
+    return this.request(
+      `/aws/credentials-check?credential_type=${credentialType}`,
+    );
   }
 
   // Environment-specific endpoints
-  async getEnvironmentLogs(environmentId: string, limit: number = 100, hoursBack: number = 1) {
-    return this.request(`/projects/environments/${environmentId}/logs?limit=${limit}&hours_back=${hoursBack}`)
+  async getEnvironmentLogs(
+    environmentId: string,
+    limit: number = 100,
+    hoursBack: number = 1,
+  ) {
+    return this.request(
+      `/projects/environments/${environmentId}/logs?limit=${limit}&hours_back=${hoursBack}`,
+    );
   }
 
   async checkEnvironmentExecAvailability(environmentId: string) {
-    return this.request(`/projects/environments/${environmentId}/exec`)
+    return this.request(`/projects/environments/${environmentId}/exec`);
   }
 
   async executeEnvironmentCommand(environmentId: string, command: string) {
-    return this.request(`/projects/environments/${environmentId}/exec/command`, {
-      method: 'POST',
-      body: JSON.stringify({ command }),
-    })
+    return this.request(
+      `/projects/environments/${environmentId}/exec/command`,
+      {
+        method: "POST",
+        body: JSON.stringify({ command }),
+      },
+    );
   }
 }
 
-export const apiClient = new ApiClient()
-export default apiClient
+export const apiClient = new ApiClient();
+export default apiClient;

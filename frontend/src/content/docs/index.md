@@ -12,7 +12,7 @@ Autoform is a platform that simplifies deploying applications to AWS. Whether yo
 ### Key Features
 
 - Creates and manages AWS infrastructure
-- Builds and deploys from Git repositories  
+- Builds and deploys from Git repositories
 - Team collaboration features
 
 ## Prerequisites

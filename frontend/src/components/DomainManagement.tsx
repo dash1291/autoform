@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,32 +14,23 @@ import {
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiClient } from "@/lib/api";
 import { Environment } from "@/types";
 import {
-  Globe,
-  Lock,
-  ExternalLink,
   AlertCircle,
   CheckCircle,
-  Copy,
   Server,
   RefreshCw,
 } from "lucide-react";
 
 interface DomainManagementProps {
   projectId: string;
-  teamId?: string;
 }
 
 export default function DomainManagement({
-  projectId,
-  teamId,
+  projectId
 }: DomainManagementProps) {
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [selectedEnvironmentId, setSelectedEnvironmentId] =
@@ -61,9 +52,26 @@ export default function DomainManagement({
     useRoute53Validation: false,
   });
 
+  const fetchEnvironments = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await apiClient.getProjectEnvironments(projectId);
+      setEnvironments(data);
+
+      // Auto-select first environment (regardless of status)
+      if (data.length > 0 && !selectedEnvironmentId) {
+        setSelectedEnvironmentId(data[0].id);
+      }
+    } catch (error: any) {
+      setError("Failed to load environments");
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, selectedEnvironmentId, setSelectedEnvironmentId]);
+
   useEffect(() => {
     fetchEnvironments();
-  }, [projectId]);
+  }, [projectId, fetchEnvironments]);
 
   useEffect(() => {
     if (selectedEnvironmentId) {
@@ -91,26 +99,9 @@ export default function DomainManagement({
     }
   }, [selectedEnvironmentId, environments]);
 
-  const fetchEnvironments = async () => {
-    try {
-      setLoading(true);
-      const data = await apiClient.getProjectEnvironments(projectId);
-      setEnvironments(data);
-
-      // Auto-select first environment (regardless of status)
-      if (data.length > 0 && !selectedEnvironmentId) {
-        setSelectedEnvironmentId(data[0].id);
-      }
-    } catch (error: any) {
-      setError("Failed to load environments");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fetchCertificateStatus = async (
     environmentId: string,
-    showLoading = false
+    showLoading = false,
   ) => {
     if (showLoading) setIsRefreshingStatus(true);
     try {
@@ -152,7 +143,7 @@ export default function DomainManagement({
 
       const result = await apiClient.updateEnvironment(
         selectedEnvironment.id,
-        updateData
+        updateData,
       );
 
       setSuccess("Domain configuration updated successfully!");
@@ -292,24 +283,24 @@ export default function DomainManagement({
                         certificateStatus.status === "ready"
                           ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400"
                           : certificateStatus.status === "pending_validation"
-                          ? "bg-muted text-muted-foreground"
-                          : certificateStatus.status === "failed" ||
-                            certificateStatus.status === "error"
-                          ? "bg-destructive/10 text-destructive"
-                          : "bg-muted text-muted-foreground"
+                            ? "bg-muted text-muted-foreground"
+                            : certificateStatus.status === "failed" ||
+                                certificateStatus.status === "error"
+                              ? "bg-destructive/10 text-destructive"
+                              : "bg-muted text-muted-foreground"
                       }`}
                     >
                       {certificateStatus.status === "ready"
                         ? "Done"
                         : certificateStatus.status === "pending_validation"
-                        ? "Pending"
-                        : certificateStatus.status === "not_requested"
-                        ? "Pending"
-                        : certificateStatus.status === "failed"
-                        ? "Failed"
-                        : certificateStatus.status === "error"
-                        ? "Error"
-                        : "Unknown"}
+                          ? "Pending"
+                          : certificateStatus.status === "not_requested"
+                            ? "Pending"
+                            : certificateStatus.status === "failed"
+                              ? "Failed"
+                              : certificateStatus.status === "error"
+                                ? "Error"
+                                : "Unknown"}
                     </span>
                     <Button
                       variant="ghost"
@@ -393,8 +384,8 @@ export default function DomainManagement({
 
                         <div className="text-sm text-muted-foreground space-y-1">
                           <p>
-                            • Validation typically completes within
-                            15 minutes after DNS records have been set
+                            • Validation typically completes within 15 minutes
+                            after DNS records have been set
                           </p>
                           <p>• You can check status by refreshing this page</p>
                         </div>
@@ -406,7 +397,6 @@ export default function DomainManagement({
                           on is in progress. The certificate will be
                           automatically validated.
                         </p>
-
                         <div className="text-sm text-muted-foreground space-y-1">
                           <p>
                             • Route53 DNS validation is handling the
@@ -418,14 +408,13 @@ export default function DomainManagement({
                           </p>
                           <p>• No manual action required</p>
                         </div>
-
                         {certificateInfo?.certificateStatus && (
                           <div className="text-xs text-muted-foreground">
                             Current status: {certificateInfo.certificateStatus}
                           </div>
-                        )}Please add the following DNS records to validate your domain ownership:
-
-
+                        )}
+                        Please add the following DNS records to validate your
+                        domain ownership:
                       </>
                     )}
                   </div>
@@ -446,10 +435,10 @@ export default function DomainManagement({
                       </p>
                     </div>
                     <div className="flex items-center space-x-2">
-                          <code className="bg-muted mt-2 px-1.5 py-0.5 rounded text-sm font-mono text-foreground block break-all">
-                            {selectedEnvironment.albDns || "Not available"}
-                          </code>
-                        </div>
+                      <code className="bg-muted mt-2 px-1.5 py-0.5 rounded text-sm font-mono text-foreground block break-all">
+                        {selectedEnvironment.albDns || "Not available"}
+                      </code>
+                    </div>
                   </CardContent>
                 </Card>
               )}

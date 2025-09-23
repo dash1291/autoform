@@ -1,121 +1,148 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { Spinner } from '@/components/ui/spinner'
-import { Team, TeamMember, TeamMemberRole } from '@/types'
-import { apiClient } from '@/lib/api'
-import { useAuth } from '@/lib/auth-client'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Users, Mail, Settings, Trash2, UserMinus, Crown, Shield, User } from 'lucide-react'
-import TeamAwsConfiguration from '@/components/TeamAwsConfiguration'
-import TabNavButton from '@/components/TabNavButton'
-import { FormInput } from '@/components/ui/FormInput'
+import { useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Spinner } from "@/components/ui/spinner";
+import { Team, TeamMember, TeamMemberRole } from "@/types";
+import { apiClient } from "@/lib/api";
+import { useAuth } from "@/lib/auth-client";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Users,
+  Mail,
+  Settings,
+  Trash2,
+  UserMinus,
+  Crown,
+  Shield,
+  User,
+} from "lucide-react";
+import TeamAwsConfiguration from "@/components/TeamAwsConfiguration";
+import TabNavButton from "@/components/TabNavButton";
+import { FormInput } from "@/components/ui/FormInput";
 
 export default function TeamDetail() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth()
-  const params = useParams()
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const teamId = params.id as string
-  const initialTab = searchParams.get('tab') || 'team-settings'
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const teamId = params.id as string;
+  const initialTab = searchParams.get("tab") || "team-settings";
 
-  const [team, setTeam] = useState<Team | null>(null)
-  const [members, setMembers] = useState<TeamMember[]>([])
-  const [loading, setLoading] = useState(true)
-  const [membersLoading, setMembersLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState<'members' | 'settings' | 'team-settings'>(initialTab as any || 'members')
+  const [team, setTeam] = useState<Team | null>(null);
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [membersLoading, setMembersLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<
+    "members" | "settings" | "team-settings"
+  >((initialTab as any) || "members");
 
   useEffect(() => {
     if (isAuthenticated && !authLoading && teamId) {
-      fetchTeam()
+      fetchTeam();
     }
-  }, [isAuthenticated, authLoading, teamId])
+  }, [isAuthenticated, authLoading, teamId]);
 
   const fetchTeam = async () => {
     try {
-      const data = await apiClient.getTeam(teamId)
-      setTeam(data)
-      setMembers(data.members || [])
-      setMembersLoading(false)
+      const data = await apiClient.getTeam(teamId);
+      setTeam(data);
+      setMembers(data.members || []);
+      setMembersLoading(false);
     } catch (error: any) {
-      setError(error.message || 'Failed to fetch team')
+      setError(error.message || "Failed to fetch team");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const fetchMembers = async () => {
     try {
-      const data = await apiClient.getTeam(teamId)
-      setMembers(data.members || [])
+      const data = await apiClient.getTeam(teamId);
+      setMembers(data.members || []);
     } catch (error) {
-      console.error('Failed to fetch team members:', error)
+      console.error("Failed to fetch team members:", error);
     } finally {
-      setMembersLoading(false)
+      setMembersLoading(false);
     }
-  }
+  };
 
-  const handleAddMember = async (githubUsername: string, role: TeamMemberRole) => {
+  const handleAddMember = async (
+    githubUsername: string,
+    role: TeamMemberRole,
+  ) => {
     try {
-      await apiClient.addTeamMember(teamId, { githubUsername, role })
-      fetchTeam() // Refresh team data including members
+      await apiClient.addTeamMember(teamId, { githubUsername, role });
+      fetchTeam(); // Refresh team data including members
     } catch (error: any) {
-      setError(error.message || 'Failed to add member')
+      setError(error.message || "Failed to add member");
     }
-  }
+  };
 
   const handleRemoveMember = async (memberId: string) => {
-    if (confirm('Are you sure you want to remove this member from the team?')) {
+    if (confirm("Are you sure you want to remove this member from the team?")) {
       try {
-        await apiClient.removeTeamMember(teamId, memberId)
-        fetchTeam() // Refresh team data including members
+        await apiClient.removeTeamMember(teamId, memberId);
+        fetchTeam(); // Refresh team data including members
       } catch (error: any) {
-        setError(error.message || 'Failed to remove member')
+        setError(error.message || "Failed to remove member");
       }
     }
-  }
-
+  };
 
   const getRoleIcon = (role: TeamMemberRole) => {
     switch (role) {
       case TeamMemberRole.OWNER:
-        return <Crown className="h-4 w-4" />
+        return <Crown className="h-4 w-4" />;
       case TeamMemberRole.ADMIN:
-        return <Shield className="h-4 w-4" />
+        return <Shield className="h-4 w-4" />;
       case TeamMemberRole.MEMBER:
-        return <User className="h-4 w-4" />
+        return <User className="h-4 w-4" />;
       default:
-        return <User className="h-4 w-4" />
+        return <User className="h-4 w-4" />;
     }
-  }
+  };
 
   const getRoleBadgeColor = (role: TeamMemberRole) => {
     switch (role) {
       case TeamMemberRole.OWNER:
-        return 'bg-yellow-100 text-yellow-800'
+        return "bg-yellow-100 text-yellow-800";
       case TeamMemberRole.ADMIN:
-        return 'bg-blue-100 text-blue-800'
+        return "bg-blue-100 text-blue-800";
       case TeamMemberRole.MEMBER:
-        return 'bg-gray-100 text-gray-800'
+        return "bg-gray-100 text-gray-800";
       default:
-        return 'bg-gray-100 text-gray-800'
+        return "bg-gray-100 text-gray-800";
     }
-  }
+  };
 
   if (!authLoading && !isAuthenticated) {
     return (
       <div className="flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-xl font-semibold mb-4">Please sign in</h1>
-          <p className="text-gray-600">You need to be signed in to view team details.</p>
+          <p className="text-gray-600">
+            You need to be signed in to view team details.
+          </p>
         </div>
       </div>
-    )
+    );
   }
 
   if (authLoading || loading) {
@@ -123,7 +150,7 @@ export default function TeamDetail() {
       <div className="flex items-center justify-center">
         <Spinner />
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -132,30 +159,35 @@ export default function TeamDetail() {
         <div className="text-center">
           <h1 className="text-2xl font-normal mb-4">Error</h1>
           <p className="text-muted-foreground mb-4">{error}</p>
-          <Button size="sm" onClick={() => router.push('/dashboard')}>
+          <Button size="sm" onClick={() => router.push("/dashboard")}>
             Back to Dashboard
           </Button>
         </div>
       </div>
-    )
+    );
   }
 
   if (!team) {
     return (
       <div className="flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Team not found</h1>
-          <p className="text-gray-600 mb-4">The team you're looking for doesn't exist or you don't have access to it.</p>
-          <Button onClick={() => router.push('/dashboard')}>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">
+            Team not found
+          </h1>
+          <p className="text-gray-600 mb-4">
+            The team you're looking for doesn't exist or you don't have access
+            to it.
+          </p>
+          <Button onClick={() => router.push("/dashboard")}>
             Back to Dashboard
           </Button>
         </div>
       </div>
-    )
+    );
   }
 
-  const isOwner = team.userRole === TeamMemberRole.OWNER
-  const canManageMembers = isOwner || team.userRole === TeamMemberRole.ADMIN
+  const isOwner = team.userRole === TeamMemberRole.OWNER;
+  const canManageMembers = isOwner || team.userRole === TeamMemberRole.ADMIN;
 
   return (
     <div className="">
@@ -169,7 +201,7 @@ export default function TeamDetail() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => router.push('/dashboard')}
+                onClick={() => router.push("/dashboard")}
               >
                 Back to Dashboard
               </Button>
@@ -183,21 +215,21 @@ export default function TeamDetail() {
             <nav className="-mb-px flex space-x-8">
               {isOwner && (
                 <TabNavButton
-                  active={activeTab === 'team-settings'}
-                  onClick={() => setActiveTab('team-settings')}
+                  active={activeTab === "team-settings"}
+                  onClick={() => setActiveTab("team-settings")}
                 >
                   Team Settings
                 </TabNavButton>
               )}
               <TabNavButton
-                active={activeTab === 'members'}
-                onClick={() => setActiveTab('members')}
+                active={activeTab === "members"}
+                onClick={() => setActiveTab("members")}
               >
                 Members
               </TabNavButton>
               <TabNavButton
-                active={activeTab === 'settings'}
-                onClick={() => setActiveTab('settings')}
+                active={activeTab === "settings"}
+                onClick={() => setActiveTab("settings")}
               >
                 AWS Settings
               </TabNavButton>
@@ -206,7 +238,7 @@ export default function TeamDetail() {
         </div>
 
         <div className="space-y-6">
-          {activeTab === 'members' && (
+          {activeTab === "members" && (
             <Card>
               <CardHeader>
                 <div className="flex justify-between items-center">
@@ -222,8 +254,8 @@ export default function TeamDetail() {
                 </div>
               </CardHeader>
               <CardContent>
-                <MembersList 
-                  members={members} 
+                <MembersList
+                  members={members}
                   loading={membersLoading}
                   canManageMembers={canManageMembers}
                   onRemoveMember={handleRemoveMember}
@@ -232,7 +264,7 @@ export default function TeamDetail() {
             </Card>
           )}
 
-          {activeTab === 'settings' && (
+          {activeTab === "settings" && (
             <Card>
               <CardContent className="p-8">
                 <TeamAwsConfiguration teamId={teamId} />
@@ -240,7 +272,7 @@ export default function TeamDetail() {
             </Card>
           )}
 
-          {activeTab === 'team-settings' && isOwner && (
+          {activeTab === "team-settings" && isOwner && (
             <Card>
               <CardHeader>
                 <CardTitle>Team Settings</CardTitle>
@@ -253,19 +285,19 @@ export default function TeamDetail() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-function MembersList({ 
-  members, 
-  loading, 
-  canManageMembers, 
-  onRemoveMember 
-}: { 
-  members: TeamMember[]
-  loading: boolean
-  canManageMembers: boolean
-  onRemoveMember: (memberId: string) => void
+function MembersList({
+  members,
+  loading,
+  canManageMembers,
+  onRemoveMember,
+}: {
+  members: TeamMember[];
+  loading: boolean;
+  canManageMembers: boolean;
+  onRemoveMember: (memberId: string) => void;
 }) {
   if (loading) {
     return (
@@ -273,7 +305,7 @@ function MembersList({
         <Spinner className="mx-auto" />
         <p className="mt-2">Loading members...</p>
       </div>
-    )
+    );
   }
 
   if (members.length === 0) {
@@ -283,33 +315,36 @@ function MembersList({
         <h3 className="text-lg mb-2">No members yet</h3>
         <p className="text-sm">Invite team members to start collaborating.</p>
       </div>
-    )
+    );
   }
 
   const getRoleIcon = (role: TeamMemberRole) => {
     switch (role) {
       case TeamMemberRole.OWNER:
-        return <Crown className="h-4 w-4 text-yellow-600" />
+        return <Crown className="h-4 w-4 text-yellow-600" />;
       case TeamMemberRole.ADMIN:
-        return <Shield className="h-4 w-4 text-blue-600" />
+        return <Shield className="h-4 w-4 text-blue-600" />;
       case TeamMemberRole.MEMBER:
-        return <User className="h-4 w-4 text-gray-600" />
+        return <User className="h-4 w-4 text-gray-600" />;
       default:
-        return <User className="h-4 w-4 text-gray-600" />
+        return <User className="h-4 w-4 text-gray-600" />;
     }
-  }
+  };
 
   return (
     <div className="space-y-4">
       {members.map((member) => (
-        <div key={member.id} className="flex items-center justify-between p-4 border border-bordee rounded-lg">
+        <div
+          key={member.id}
+          className="flex items-center justify-between p-4 border border-bordee rounded-lg"
+        >
           <div className="flex items-center space-x-3">
             <div className="flex-shrink-0">
               {member.user?.image ? (
-                <img 
-                  className="h-10 w-10 rounded-full" 
-                  src={member.user.image} 
-                  alt={member.user.name || 'User'} 
+                <img
+                  className="h-10 w-10 rounded-full"
+                  src={member.user.image}
+                  alt={member.user.name || "User"}
                 />
               ) : (
                 <div className="h-10 w-10 rounded-full flex items-center justify-center">
@@ -319,15 +354,19 @@ function MembersList({
             </div>
             <div>
               <p className="text-sm font-medium">
-                {member.user?.name || 'Unknown User'}
+                {member.user?.name || "Unknown User"}
               </p>
-              <p className="text-sm text-muted-foreground">{member.user?.email}</p>
+              <p className="text-sm text-muted-foreground">
+                {member.user?.email}
+              </p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
             <div className="flex items-center space-x-1">
               {getRoleIcon(member.role)}
-              <span className="text-sm text-muted-foreground">{member.role}</span>
+              <span className="text-sm text-muted-foreground">
+                {member.role}
+              </span>
             </div>
             {canManageMembers && member.role !== TeamMemberRole.OWNER && (
               <Button
@@ -343,31 +382,35 @@ function MembersList({
         </div>
       ))}
     </div>
-  )
+  );
 }
 
-function AddMemberButton({ onAddMember }: { onAddMember: (githubUsername: string, role: TeamMemberRole) => void }) {
-  const [showForm, setShowForm] = useState(false)
-  const [githubUsername, setGithubUsername] = useState('')
-  const [role, setRole] = useState<TeamMemberRole>(TeamMemberRole.MEMBER)
-  const [isAdding, setIsAdding] = useState(false)
+function AddMemberButton({
+  onAddMember,
+}: {
+  onAddMember: (githubUsername: string, role: TeamMemberRole) => void;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [githubUsername, setGithubUsername] = useState("");
+  const [role, setRole] = useState<TeamMemberRole>(TeamMemberRole.MEMBER);
+  const [isAdding, setIsAdding] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!githubUsername.trim()) return
+    e.preventDefault();
+    if (!githubUsername.trim()) return;
 
-    setIsAdding(true)
+    setIsAdding(true);
     try {
-      await onAddMember(githubUsername.trim(), role)
-      setGithubUsername('')
-      setRole(TeamMemberRole.MEMBER)
-      setShowForm(false)
+      await onAddMember(githubUsername.trim(), role);
+      setGithubUsername("");
+      setRole(TeamMemberRole.MEMBER);
+      setShowForm(false);
     } catch (error) {
-      console.error('Failed to add member:', error)
+      console.error("Failed to add member:", error);
     } finally {
-      setIsAdding(false)
+      setIsAdding(false);
     }
-  }
+  };
 
   if (showForm) {
     return (
@@ -383,10 +426,11 @@ function AddMemberButton({ onAddMember }: { onAddMember: (githubUsername: string
             required
           />
           <div>
-            <label className="block text-sm font mb-2">
-              Role
-            </label>
-            <Select value={role} onValueChange={(value) => setRole(value as TeamMemberRole)}>
+            <label className="block text-sm font mb-2">Role</label>
+            <Select
+              value={role}
+              onValueChange={(value) => setRole(value as TeamMemberRole)}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -397,16 +441,25 @@ function AddMemberButton({ onAddMember }: { onAddMember: (githubUsername: string
             </Select>
           </div>
           <div className="flex space-x-2">
-            <Button size="sm" type="submit" disabled={isAdding || !githubUsername.trim()}>
-              {isAdding ? 'Adding...' : 'Add Member'}
+            <Button
+              size="sm"
+              type="submit"
+              disabled={isAdding || !githubUsername.trim()}
+            >
+              {isAdding ? "Adding..." : "Add Member"}
             </Button>
-            <Button size="sm" type="button" variant="outline" onClick={() => setShowForm(false)}>
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              onClick={() => setShowForm(false)}
+            >
               Cancel
             </Button>
           </div>
         </form>
       </div>
-    )
+    );
   }
 
   return (
@@ -414,37 +467,38 @@ function AddMemberButton({ onAddMember }: { onAddMember: (githubUsername: string
       <Users className="h-4 w-4 mr-2" />
       Add Member
     </Button>
-  )
+  );
 }
 
 function TeamSettings({ team }: { team: Team }) {
-  const [editName, setEditName] = useState(team.name)
-  const [editDescription, setEditDescription] = useState(team.description || '')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+  const [editName, setEditName] = useState(team.name);
+  const [editDescription, setEditDescription] = useState(
+    team.description || "",
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSave = async () => {
     if (!editName.trim()) {
-      setError('Team name is required')
-      return
+      setError("Team name is required");
+      return;
     }
 
-    setSaving(true)
-    setError('')
+    setSaving(true);
+    setError("");
     try {
       await apiClient.updateTeam(team.id, {
         name: editName.trim(),
-        description: editDescription.trim() || undefined
-      })
+        description: editDescription.trim() || undefined,
+      });
       // Refresh the page to show updated data
-      window.location.reload()
+      window.location.reload();
     } catch (err: any) {
-      setError(err.message || 'Failed to update team')
+      setError(err.message || "Failed to update team");
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
-
+  };
 
   return (
     <div className="space-y-8">
@@ -454,7 +508,7 @@ function TeamSettings({ team }: { team: Team }) {
             <p className="text-red-800 text-sm">{error}</p>
           </div>
         )}
-        
+
         <div className="space-y-4">
           <FormInput
             id="team-name"
@@ -465,9 +519,7 @@ function TeamSettings({ team }: { team: Team }) {
             required
           />
           <div>
-            <label className="block text-sm font mb-2">
-              Description
-            </label>
+            <label className="block text-sm font mb-2">Description</label>
             <textarea
               value={editDescription}
               onChange={(e) => setEditDescription(e.target.value)}
@@ -476,31 +528,38 @@ function TeamSettings({ team }: { team: Team }) {
               placeholder="Enter team description (optional)"
             />
           </div>
-          
+
           <div>
             <Button
               onClick={handleSave}
               disabled={saving || !editName.trim()}
               size="sm"
             >
-              {saving ? 'Saving...' : 'Save Changes'}
+              {saving ? "Saving..." : "Save Changes"}
             </Button>
           </div>
         </div>
       </div>
 
-
       <div className="border-t pt-6">
-        <h3 className="text-lg font-medium text-destructive mb-4">Danger Zone</h3>
+        <h3 className="text-lg font-medium text-destructive mb-4">
+          Danger Zone
+        </h3>
         <div className="border border-destructive rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div>
-              <h4 className="text-sm font-medium text-destructive">Delete Team</h4>
+              <h4 className="text-sm font-medium text-destructive">
+                Delete Team
+              </h4>
               <p className="text-sm text-destructive mt-1">
-                This action cannot be undone. All team projects will become personal projects.
+                This action cannot be undone. All team projects will become
+                personal projects.
               </p>
             </div>
-            <Button variant="outline" className="text-destructive border-destructive hover:bg-destructive hover:text-foreground">
+            <Button
+              variant="outline"
+              className="text-destructive border-destructive hover:bg-destructive hover:text-foreground"
+            >
               <Trash2 className="h-4 w-4 mr-2" />
               Delete Team
             </Button>
@@ -508,5 +567,5 @@ function TeamSettings({ team }: { team: Team }) {
         </div>
       </div>
     </div>
-  )
+  );
 }

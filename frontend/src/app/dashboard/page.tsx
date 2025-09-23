@@ -1,62 +1,74 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { Spinner } from '@/components/ui/spinner'
-import { Project, Team } from '@/types'
-import { apiClient } from '@/lib/api'
-import { useAuth } from '@/lib/auth-client'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Users, ChevronDown, Settings,Github } from 'lucide-react'
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Spinner } from "@/components/ui/spinner";
+import { Project, Team } from "@/types";
+import { apiClient } from "@/lib/api";
+import { useAuth } from "@/lib/auth-client";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Plus, Users, ChevronDown, Settings, Github } from "lucide-react";
 
 export default function Dashboard() {
-  const { isAuthenticated, isLoading } = useAuth()
-  const [projects, setProjects] = useState<Project[]>([])
-  const [teams, setTeams] = useState<Team[]>([])
-  const [loading, setLoading] = useState(true)
-  const [teamsLoading, setTeamsLoading] = useState(true)
-  const [selectedTeam, setSelectedTeam] = useState<string>('') // team ID
+  const { isAuthenticated, isLoading } = useAuth();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [teamsLoading, setTeamsLoading] = useState(true);
+  const [selectedTeam, setSelectedTeam] = useState<string>(""); // team ID
 
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
-      fetchProjects()
-      fetchTeams()
+      fetchProjects();
+      fetchTeams();
     } else if (!isLoading && !isAuthenticated) {
-      setLoading(false)
-      setTeamsLoading(false)
+      setLoading(false);
+      setTeamsLoading(false);
     }
-  }, [isAuthenticated, isLoading])
+  }, [isAuthenticated, isLoading]);
 
   // Set first team as selected when teams load
   useEffect(() => {
     if (teams.length > 0 && !selectedTeam) {
-      setSelectedTeam(teams[0].id)
+      setSelectedTeam(teams[0].id);
     }
-  }, [teams, selectedTeam])
+  }, [teams, selectedTeam]);
 
   const fetchProjects = async () => {
     try {
-      const data = await apiClient.getProjects()
-      setProjects(data)
+      const data = await apiClient.getProjects();
+      setProjects(data);
     } catch (error) {
-      console.error('Failed to fetch projects:', error)
+      console.error("Failed to fetch projects:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const fetchTeams = async () => {
     try {
-      const data = await apiClient.getTeams()
-      setTeams(data)
+      const data = await apiClient.getTeams();
+      setTeams(data);
     } catch (error) {
-      console.error('Failed to fetch teams:', error)
+      console.error("Failed to fetch teams:", error);
     } finally {
-      setTeamsLoading(false)
+      setTeamsLoading(false);
     }
-  }
+  };
 
   if (!isLoading && !isAuthenticated) {
     return (
@@ -66,7 +78,7 @@ export default function Dashboard() {
           <p>You need to be signed in to access the dashboard.</p>
         </div>
       </div>
-    )
+    );
   }
 
   if (isLoading || loading) {
@@ -74,15 +86,15 @@ export default function Dashboard() {
       <div className="min-h-screen flex items-center justify-center">
         <Spinner />
       </div>
-    )
+    );
   }
 
   // Filter projects based on selected team
-  const filteredProjects = selectedTeam 
-    ? projects.filter(p => p.teamId === selectedTeam)
-    : []
+  const filteredProjects = selectedTeam
+    ? projects.filter((p) => p.teamId === selectedTeam)
+    : [];
 
-  const selectedTeamData = teams.find(t => t.id === selectedTeam)
+  const selectedTeamData = teams.find((t) => t.id === selectedTeam);
 
   return (
     <div className="text-foreground">
@@ -92,7 +104,8 @@ export default function Dashboard() {
             <CardHeader>
               <CardTitle>Welcome to Autoform!</CardTitle>
               <CardDescription>
-                Get started by creating your first team. Teams help you organize projects and manage AWS resources.
+                Get started by creating your first team. Teams help you organize
+                projects and manage AWS resources.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -100,9 +113,12 @@ export default function Dashboard() {
                 <div className="text-muted-foreground mb-4">
                   <Users className="mx-auto h-12 w-12" />
                 </div>
-                <h3 className="text-lg font-medium mb-2">Create your first team</h3>
+                <h3 className="text-lg font-medium mb-2">
+                  Create your first team
+                </h3>
                 <p className="mb-6">
-                  Teams allow you to manage projects, configure AWS credentials, and collaborate with others.
+                  Teams allow you to manage projects, configure AWS credentials,
+                  and collaborate with others.
                 </p>
                 <CreateTeamButton onTeamCreated={fetchTeams} />
               </div>
@@ -128,7 +144,10 @@ export default function Dashboard() {
                   {/* Team Switcher */}
                   {teams.length > 0 && (
                     <div className="flex items-center space-x-2">
-                      <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+                      <Select
+                        value={selectedTeam}
+                        onValueChange={setSelectedTeam}
+                      >
                         <SelectTrigger className="w-48">
                           <SelectValue placeholder="Select a team" />
                         </SelectTrigger>
@@ -148,7 +167,9 @@ export default function Dashboard() {
                   {selectedTeamData && (
                     <Button
                       size="sm"
-                      onClick={() => window.location.href = `/teams/${selectedTeam}`}
+                      onClick={() =>
+                        (window.location.href = `/teams/${selectedTeam}`)
+                      }
                     >
                       <Settings className="h-4 w-4" />
                       Team Settings
@@ -172,31 +193,51 @@ export default function Dashboard() {
         )}
       </div>
     </div>
-  )
+  );
 }
 
-function ProjectsList({ projects, loading }: { projects: Project[], loading: boolean }) {
+function ProjectsList({
+  projects,
+  loading,
+}: {
+  projects: Project[];
+  loading: boolean;
+}) {
   if (loading) {
     return (
       <div className="text-center py-8">
         <Spinner className="mx-auto" />
         <p className="mt-2">Loading projects...</p>
       </div>
-    )
+    );
   }
 
   if (projects.length === 0) {
     return (
       <div className="text-center py-8">
         <div className="mb-4">
-          <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          <svg
+            className="mx-auto h-12 w-12"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+            />
           </svg>
         </div>
-        <h3 className="text-lg font-medium text-foreground mb-2">No projects yet</h3>
-        <p className="mb-4">Get started by creating your first project for this team.</p>
+        <h3 className="text-lg font-medium text-foreground mb-2">
+          No projects yet
+        </h3>
+        <p className="mb-4">
+          Get started by creating your first project for this team.
+        </p>
       </div>
-    )
+    );
   }
 
   return (
@@ -208,14 +249,18 @@ function ProjectsList({ projects, loading }: { projects: Project[], loading: boo
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-medium">{project.name}</h3>
               </div>
-              <div className="text-muted-foreground text-sm">{project.gitRepoUrl}</div>
+              <div className="text-muted-foreground text-sm">
+                {project.gitRepoUrl}
+              </div>
             </div>
             <div className="flex space-x-2">
               {project.domain && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => window.open(`http://${project.domain}`, '_blank')}
+                  onClick={() =>
+                    window.open(`http://${project.domain}`, "_blank")
+                  }
                 >
                   View App
                 </Button>
@@ -223,7 +268,9 @@ function ProjectsList({ projects, loading }: { projects: Project[], loading: boo
               <Button
                 variant="default"
                 size="sm"
-                onClick={() => window.location.href = `/projects/${project.id}`}
+                onClick={() =>
+                  (window.location.href = `/projects/${project.id}`)
+                }
               >
                 Settings
               </Button>
@@ -232,45 +279,42 @@ function ProjectsList({ projects, loading }: { projects: Project[], loading: boo
         </div>
       ))}
     </div>
-  )
+  );
 }
 
-
 function CreateTeamButton({ onTeamCreated }: { onTeamCreated: () => void }) {
-  const [isCreating, setIsCreating] = useState(false)
-  const [showForm, setShowForm] = useState(false)
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
+  const [isCreating, setIsCreating] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name.trim()) return
+    e.preventDefault();
+    if (!name.trim()) return;
 
-    setIsCreating(true)
+    setIsCreating(true);
     try {
       await apiClient.createTeam({
         name: name.trim(),
-        description: description.trim() || undefined
-      })
-      setName('')
-      setDescription('')
-      setShowForm(false)
-      onTeamCreated()
+        description: description.trim() || undefined,
+      });
+      setName("");
+      setDescription("");
+      setShowForm(false);
+      onTeamCreated();
     } catch (error) {
-      console.error('Failed to create team:', error)
+      console.error("Failed to create team:", error);
     } finally {
-      setIsCreating(false)
+      setIsCreating(false);
     }
-  }
+  };
 
   if (showForm) {
     return (
       <div className="space-y-4">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">
-              Team Name
-            </label>
+            <label className="block text-sm font-medium mb-1">Team Name</label>
             <input
               type="text"
               value={name}
@@ -294,21 +338,25 @@ function CreateTeamButton({ onTeamCreated }: { onTeamCreated: () => void }) {
           </div>
           <div className="flex space-x-2">
             <Button type="submit" disabled={isCreating || !name.trim()}>
-              {isCreating ? 'Creating...' : 'Create Team'}
+              {isCreating ? "Creating..." : "Create Team"}
             </Button>
-            <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowForm(false)}
+            >
               Cancel
             </Button>
           </div>
         </form>
       </div>
-    )
+    );
   }
 
   return (
-    <Button size="sm" onClick={() => window.location.href = '/teams/new'}>
+    <Button size="sm" onClick={() => (window.location.href = "/teams/new")}>
       <Plus className="h-4 w-4" />
       New Team
     </Button>
-  )
+  );
 }
