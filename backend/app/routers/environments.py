@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List, Optional, Dict, Any
+from typing import Dict, Any
 import logging
-import boto3
 
 from core.database import get_async_session
 from core.security import get_current_user

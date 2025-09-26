@@ -1,4 +1,3 @@
-import os
 import logging
 from typing import Optional, Dict, List
 from pathlib import Path
@@ -47,7 +46,7 @@ class BuildpackService:
         if has_dockerfile:
             logger.info(f"Dockerfile found at {dockerfile_path}")
         else:
-            logger.info(f"No Dockerfile found, will use Cloud Native Buildpack")
+            logger.info("No Dockerfile found, will use Cloud Native Buildpack")
             
         return not has_dockerfile
     

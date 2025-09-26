@@ -112,7 +112,6 @@ class TestEnvironmentTeamConfig:
     @pytest.mark.asyncio
     async def test_environment_schema_has_team_config_only(self):
         """Test that Environment schema only references team AWS config"""
-        from prisma import Prisma
         
         # This test verifies the schema structure
         # The Environment model should have teamAwsConfigId field

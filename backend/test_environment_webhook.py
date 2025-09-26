@@ -9,9 +9,7 @@ import os
 # Add the current directory to Python path
 sys.path.insert(0, os.path.abspath('.'))
 
-from core.database import prisma
 from app.routers.webhook import github_webhook
-from fastapi import Request, BackgroundTasks
 from unittest.mock import MagicMock, patch
 import json
 

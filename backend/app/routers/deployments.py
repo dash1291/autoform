@@ -1,15 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
-import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 
 from core.database import get_async_session
 from core.security import get_current_user
-from sqlmodel import select, update
+from sqlmodel import select
 from models.deployment import Deployment, DeploymentStatus
 from models.project import Project, ProjectStatus
-from models.user import User
 from models.team import Team, TeamMember
 from models.environment import Environment
 from schemas import User as UserSchema
@@ -20,7 +17,7 @@ from services import (
 )
 
 from .github import get_branch_commit_sha
-from app.workers.tasks import deploy_project as deploy_project_task, abort_deployment as abort_deployment_task
+from app.workers.tasks import deploy_project as deploy_project_task
 from models.team import TeamAwsConfig
 from services.deployment_manager import deployment_manager
 from app.workers.celery_app import app
@@ -430,175 +427,6 @@ async def abort_deployment(
             pass  # Ignore errors from deployment manager
 
         return {"message": "Deployment aborted"}
-
-
-@router.post("/admin/fix-stuck-environments")
-async def fix_stuck_environments(
-    current_user: UserSchema = Depends(get_current_user)
-):
-    """Fix environments stuck in deploying status (Admin only)"""
-    # For now, allow any authenticated user to run this
-    # In production, you'd want to check if user is admin
-    
-    async with get_async_session() as session:
-        # Find environments stuck in DEPLOYING status
-        stuck_result = await session.execute(
-            select(Environment).where(Environment.status == "DEPLOYING")
-        )
-        stuck_environments = stuck_result.scalars().all()
-        
-        fixed_environments = []
-        
-        for environment in stuck_environments:
-            # Check if there are any active deployments for this environment
-            active_result = await session.execute(
-                select(Deployment).where(
-                    (Deployment.environment_id == environment.id) &
-                    (Deployment.status.in_([
-                        DeploymentStatus.PENDING,
-                        DeploymentStatus.BUILDING,
-                        DeploymentStatus.PUSHING,
-                        DeploymentStatus.PROVISIONING,
-                        DeploymentStatus.DEPLOYING,
-                    ]))
-                )
-            )
-            active_deployment = active_result.scalar_one_or_none()
-            
-            if not active_deployment:
-                # No active deployments, so reset environment status
-                environment.status = "CREATED"
-                environment.updated_at = datetime.utcnow()
-                session.add(environment)
-                fixed_environments.append(environment.id)
-        
-        await session.commit()
-    
-    return {
-        "message": "Fixed stuck environments",
-        "fixed_environments": len(fixed_environments),
-        "environment_ids": fixed_environments
-    }
-
-
-@router.post("/admin/fix-stuck-deployments")
-async def fix_stuck_deployments(
-    current_user: UserSchema = Depends(get_current_user),
-    cutoff_minutes: int = 30
-):
-    """Fix deployments and environments stuck in deploying status (Admin only)"""
-    # For now, allow any authenticated user to run this
-    # In production, you'd want to check if user is admin
-    
-    cutoff_time = datetime.utcnow() - timedelta(minutes=cutoff_minutes)
-    
-    async with get_async_session() as session:
-        # Find stuck deployments
-        stuck_result = await session.execute(
-            select(Deployment).where(
-                (Deployment.status.in_([
-                    DeploymentStatus.PENDING,
-                    DeploymentStatus.BUILDING,
-                    DeploymentStatus.PUSHING,
-                    DeploymentStatus.PROVISIONING,
-                    DeploymentStatus.DEPLOYING,
-                ])) &
-                (Deployment.created_at < cutoff_time)
-            )
-        )
-        stuck_deployments = stuck_result.scalars().all()
-    
-    fixed_deployments = []
-    
-    for deployment in stuck_deployments:
-        # Update deployment to failed
-        async with get_async_session() as update_session:
-            deployment_result = await update_session.execute(
-                select(Deployment).where(Deployment.id == deployment.id)
-            )
-            deployment_to_update = deployment_result.scalar_one_or_none()
-            if deployment_to_update:
-                deployment_to_update.status = DeploymentStatus.FAILED
-                deployment_to_update.logs = (deployment.logs or "") + "\n[SYSTEM] Deployment timed out and was marked as failed"
-                deployment_to_update.updated_at = datetime.utcnow()
-                update_session.add(deployment_to_update)
-                await update_session.commit()
-        
-        fixed_deployments.append(deployment.id)
-        
-        # Update environment status if needed
-        if deployment.environment_id:
-            # Check if there are any other active deployments
-            async with get_async_session() as env_session:
-                active_result = await env_session.execute(
-                    select(Deployment).where(
-                        (Deployment.environment_id == deployment.environment_id) &
-                        (Deployment.id != deployment.id) &
-                        (Deployment.status.in_([
-                            DeploymentStatus.PENDING,
-                            DeploymentStatus.BUILDING,
-                            DeploymentStatus.PUSHING,
-                            DeploymentStatus.PROVISIONING,
-                            DeploymentStatus.DEPLOYING,
-                        ]))
-                    )
-                )
-                active_deployment = active_result.scalar_one_or_none()
-                
-                if not active_deployment:
-                    env_result = await env_session.execute(
-                        select(Environment).where(Environment.id == deployment.environment_id)
-                    )
-                    environment_to_update = env_result.scalar_one_or_none()
-                    if environment_to_update:
-                        environment_to_update.status = ProjectStatus.FAILED
-                        environment_to_update.updated_at = datetime.utcnow()
-                        env_session.add(environment_to_update)
-                        await env_session.commit()
-    
-    # Fix stuck environments
-    async with get_async_session() as env_session:
-        stuck_env_result = await env_session.execute(
-            select(Environment).where(
-                (Environment.status == ProjectStatus.DEPLOYING) &
-                (Environment.updated_at < cutoff_time)
-            )
-        )
-        stuck_environments = stuck_env_result.scalars().all()
-        
-        fixed_environments = []
-        
-        for environment in stuck_environments:
-            # Check if there are any active deployments
-            active_result = await env_session.execute(
-                select(Deployment).where(
-                    (Deployment.environment_id == environment.id) &
-                    (Deployment.status.in_([
-                        DeploymentStatus.PENDING,
-                        DeploymentStatus.BUILDING,
-                        DeploymentStatus.PUSHING,
-                        DeploymentStatus.PROVISIONING,
-                        DeploymentStatus.DEPLOYING,
-                    ]))
-                )
-            )
-            active_deployment = active_result.scalar_one_or_none()
-            
-            if not active_deployment:
-                environment.status = ProjectStatus.FAILED
-                environment.updated_at = datetime.utcnow()
-                env_session.add(environment)
-                fixed_environments.append(environment.id)
-        
-        await env_session.commit()
-    
-    return {
-        "message": "Fixed stuck deployments and environments",
-        "fixed_deployments": len(fixed_deployments),
-        "fixed_environments": len(fixed_environments),
-        "deployment_ids": fixed_deployments,
-        "environment_ids": fixed_environments
-    }
 
 
 @router.get("/{deployment_id}/logs")

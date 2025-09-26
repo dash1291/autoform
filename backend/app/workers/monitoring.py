@@ -2,7 +2,7 @@
 
 import asyncio
 import sys
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from celery import states
 from app.workers.celery_app import app
 from core.database import get_async_session

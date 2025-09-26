@@ -2,7 +2,6 @@
 Integration tests for webhook functionality (updated for environment-based architecture)
 """
 import pytest
-import pytest_asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 import json
 import hmac

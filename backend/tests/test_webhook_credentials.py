@@ -4,7 +4,6 @@ Integration tests for webhook auto-deployment credential selection
 import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
-from typing import Dict, Any
 
 from app.routers.webhook import trigger_auto_deployment
 

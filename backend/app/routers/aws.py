@@ -1,14 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import Dict, Any
+from fastapi import APIRouter, Depends
 import logging
-import boto3
 import os
 from botocore.exceptions import ClientError, NoCredentialsError
 
 from core.database import get_async_session
 from core.security import get_current_user
-from sqlmodel import select, and_, or_, func
-from models.user import User as UserModel
+from sqlmodel import select, and_
 from models.team import Team as TeamModel, TeamMember as TeamMemberModel, TeamAwsConfig
 from schemas import User
 from services.encryption_service import encryption_service
@@ -301,7 +298,7 @@ async def get_aws_resources(
                     "aws_secret_access_key": secret_key,
                 }
                 region = team_aws_config.aws_region
-                credential_source = f"team"
+                credential_source = "team"
                 logger.info(f"Using team AWS credentials for region: {region}")
 
         elif credential_type == "default":

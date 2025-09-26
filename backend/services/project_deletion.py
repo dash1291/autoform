@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Dict, List
+from typing import Optional, Dict
 from botocore.exceptions import ClientError
 from utils.aws_client import create_client
 from models.project import Project
@@ -63,7 +63,7 @@ async def delete_project_infrastructure(
         
         # Delete project-level resources (legacy deployments)
         if project.ecs_service_arn or project.alb_arn:
-            logger.info(f"Deleting legacy project-level infrastructure")
+            logger.info("Deleting legacy project-level infrastructure")
             project_deletion = await _delete_project_level_infrastructure(project, ecs, elbv2, ec2, secretsmanager)
             deletion_summary["deleted_resources"].extend(project_deletion.get("deleted", []))
             deletion_summary["failed_resources"].extend(project_deletion.get("failed", []))

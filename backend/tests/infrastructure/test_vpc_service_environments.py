@@ -2,9 +2,7 @@
 Tests for VPC service with environment-specific configurations
 """
 import pytest
-import pytest_asyncio
-from unittest.mock import Mock, patch, MagicMock
-import boto3
+from unittest.mock import patch
 
 from infrastructure.services.vpc_service import VPCService
 from infrastructure.types import SecurityGroupIds

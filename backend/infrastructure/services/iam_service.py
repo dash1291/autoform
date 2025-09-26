@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-from typing import Tuple
 from utils.aws_client import create_client
 
 logger = logging.getLogger(__name__)

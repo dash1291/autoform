@@ -1,6 +1,4 @@
-from sqlmodel import Field, SQLModel, Relationship
-from typing import Optional, List
-from datetime import datetime
+from sqlmodel import Field
 from .base import BaseModel
 
 

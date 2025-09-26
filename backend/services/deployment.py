@@ -8,8 +8,7 @@ import time
 import re
 import zipfile
 import asyncio
-import boto3
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from datetime import datetime
 from botocore.exceptions import ClientError
 from utils.aws_client import create_client
@@ -21,13 +20,12 @@ from infrastructure.types import (
 )
 from infrastructure import ECSInfrastructure
 from core.database import get_async_session
-from sqlmodel import select, Session
+from sqlmodel import select
 from models.deployment import Deployment, DeploymentStatus
 from models.project import Project
 from models.environment import Environment, EnvironmentVariable as EnvVarModel
 from models.user import Account
 from models.team import Team, TeamMember
-from services.encryption_service import encryption_service
 from services.deployment_manager import deployment_manager
 from services.buildpack_service import BuildpackService
 

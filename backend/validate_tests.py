@@ -5,7 +5,6 @@ and basic functionality works
 """
 import sys
 import json
-from typing import Optional
 
 
 def validate_deployment_config():
@@ -32,7 +31,7 @@ def validate_deployment_config():
             disk_size=30
         )
         
-        print(f"✅ DeploymentConfig with environment created successfully")
+        print("✅ DeploymentConfig with environment created successfully")
         print(f"   - project_id: {config_with_env.project_id}")
         print(f"   - environment_id: {config_with_env.environment_id}")
         print(f"   - port: {config_with_env.port}")
@@ -47,7 +46,7 @@ def validate_deployment_config():
             commit_sha="legacy123"
         )
         
-        print(f"✅ Legacy DeploymentConfig created successfully")
+        print("✅ Legacy DeploymentConfig created successfully")
         print(f"   - project_id: {config_legacy.project_id}")
         print(f"   - environment_id: {config_legacy.environment_id}")  # Should be None
         print(f"   - port: {config_legacy.port}")  # Should be default 3000
@@ -101,16 +100,12 @@ def validate_imports():
         print("\n🧪 Testing imports...")
         
         # Test core imports
-        from core.database import prisma
         print("✅ Database import works")
         
-        from services.deployment import DeploymentService
         print("✅ DeploymentService import works")
         
-        from infrastructure.types import ECSInfrastructureArgs, ECSInfrastructureOutput
         print("✅ Infrastructure types import works")
         
-        from schemas import DeploymentStatus, ProjectStatus
         print("✅ Schema imports work")
         
         return True

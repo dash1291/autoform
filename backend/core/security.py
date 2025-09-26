@@ -6,7 +6,6 @@ from fastapi.security import OAuth2PasswordBearer
 
 from core.config import settings
 from core.database import get_async_session
-from sqlmodel import select
 from models.user import User
 
 # OAuth2 scheme for JWT token authentication

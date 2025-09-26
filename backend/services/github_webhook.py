@@ -3,7 +3,6 @@ import logging
 from typing import Optional, Dict, Any
 from urllib.parse import urlparse
 
-from core.config import settings
 
 logger = logging.getLogger(__name__)
 

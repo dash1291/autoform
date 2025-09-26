@@ -1,11 +1,9 @@
 """
 Shared pytest fixtures and configuration for integration tests
 """
-import os
 import pytest
 import pytest_asyncio
 import boto3
-from typing import Dict, Any
 import asyncio
 from moto import (
     mock_sts,

@@ -2,7 +2,6 @@
 Working integration tests for infrastructure services
 Tests only the functionality that works reliably with moto
 """
-import pytest
 import pytest_asyncio
 from infrastructure.services.vpc_service import VPCService
 from infrastructure.services.ecs_service import ECSService

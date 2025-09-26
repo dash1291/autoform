@@ -3,13 +3,11 @@ Fixed integration tests for environment-based deployments
 Tests the actual integration without mocking Prisma objects
 """
 import pytest
-import pytest_asyncio
 import json
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime
+from unittest.mock import AsyncMock
 
 from services.deployment import DeploymentService, DeploymentConfig
-from infrastructure.types import ECSInfrastructureArgs, ECSInfrastructureOutput
+from infrastructure.types import ECSInfrastructureOutput
 
 
 class TestEnvironmentDeploymentIntegration:

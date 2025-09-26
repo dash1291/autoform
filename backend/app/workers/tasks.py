@@ -3,7 +3,6 @@
 import os
 import sys
 import asyncio
-import signal
 import traceback
 import gc
 from datetime import datetime, timedelta

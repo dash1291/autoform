@@ -1,5 +1,4 @@
 import logging
-import time
 from typing import List, Optional
 from utils.aws_client import create_client
 from .acm_service import ACMService
@@ -108,7 +107,7 @@ class LoadBalancerService:
                 logger.warning(f"⚠️  Requested subnets were: {self.subnet_ids}")
                 
                 if set(existing_lb_subnets) != set(self.subnet_ids):
-                    logger.error(f"❌ SUBNET MISMATCH: Existing load balancer is in different subnets than requested!")
+                    logger.error("❌ SUBNET MISMATCH: Existing load balancer is in different subnets than requested!")
                     logger.error(f"   Existing ALB subnets: {existing_lb_subnets}")
                     logger.error(f"   Requested subnets: {self.subnet_ids}")
                     raise Exception(

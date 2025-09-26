@@ -56,7 +56,7 @@ class ACMService:
                     logger.warning(f"  Name: {record['Name']} -> Value: {record['Value']}")
         else:
             # Return validation records for manual setup
-            logger.warning(f"Manual DNS validation required. Add these CNAME records to your DNS:")
+            logger.warning("Manual DNS validation required. Add these CNAME records to your DNS:")
             for record in self.validation_records:
                 logger.warning(f"  Name: {record['Name']} -> Value: {record['Value']}")
         

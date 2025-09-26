@@ -21,6 +21,7 @@ project = { dependencies = [
     "fastapi-cors==0.0.6",
     "email-validator>=2.2.0",
     "aiohttp==3.9.5",
+    "ruff>=0.13.2",
 ] }
 [tool.rye]
 managed = true

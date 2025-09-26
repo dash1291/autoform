@@ -3,10 +3,7 @@ Simple test script to check AWS resources fetching
 Run this to test if AWS resources can be fetched for your team
 """
 import asyncio
-import sys
 from core.database import prisma
-from core.security import get_current_user
-from app.routers.aws import get_aws_resources
 
 async def test_aws_resources():
     await prisma.connect()
@@ -48,7 +45,6 @@ async def test_aws_resources():
                     # Test the endpoint function directly
                     try:
                         import boto3
-                        from botocore.exceptions import ClientError, NoCredentialsError
                         from services.encryption_service import encryption_service
                         
                         # Get team AWS config
@@ -64,7 +60,7 @@ async def test_aws_resources():
                             secret_key = encryption_service.decrypt(team_aws_config.awsSecretAccessKey)
                             
                             if access_key and secret_key:
-                                print(f"Successfully decrypted credentials")
+                                print("Successfully decrypted credentials")
                                 print(f"Access Key: {access_key[:10]}..." if access_key else "None")
                                 print(f"Region: {team_aws_config.awsRegion}")
                                 

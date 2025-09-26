@@ -2,7 +2,7 @@ import boto3
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 from botocore.exceptions import ClientError, NoCredentialsError
 from utils.aws_client import create_client
 

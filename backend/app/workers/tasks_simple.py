@@ -2,9 +2,7 @@
 
 import os
 import sys
-import asyncio
 from typing import Dict, Any
-from celery import Task
 
 # Add the backend directory to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

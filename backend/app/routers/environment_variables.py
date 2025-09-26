@@ -1,7 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
-import boto3
-import json
 import logging
 
 from core.database import get_async_session

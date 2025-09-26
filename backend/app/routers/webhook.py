@@ -17,7 +17,6 @@ from models.team import Team, TeamAwsConfig
 from app.workers.tasks import deploy_project as deploy_project_task
 from services.encryption_service import encryption_service, EncryptionService
 from schemas import DeploymentStatus, EnvironmentStatus
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 

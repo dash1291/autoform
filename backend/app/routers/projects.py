@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
 from typing import List, Optional
-import json
 import logging
 import os
 import secrets
@@ -10,7 +9,7 @@ from core.database import get_async_session
 from core.security import get_current_user
 from core.config import settings
 from sqlmodel import select, and_
-from models.project import Project as ProjectModel, ProjectStatus
+from models.project import Project as ProjectModel
 from models.team import Team, TeamMember, TeamAwsConfig
 from models.environment import Environment, EnvironmentVariable as EnvVarModel
 from models.webhook import Webhook
@@ -252,7 +251,7 @@ async def create_project(
         if existing_project.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"A project with this name already exists in the team",
+                detail="A project with this name already exists in the team",
             )
 
     # Create the project
@@ -260,6 +259,7 @@ async def create_project(
         new_project = ProjectModel(
             name=project.name,
             git_repo_url=project.git_repo_url,
+            service_type=project.service_type,
             team_id=project.team_id,
             user_id=current_user.id,
             auto_deploy_enabled=project.auto_deploy_enabled,
@@ -283,6 +283,7 @@ async def create_project(
             "id": new_project.id,
             "name": new_project.name,
             "gitRepoUrl": new_project.git_repo_url,
+            "serviceType": new_project.service_type,
             "branch": new_project.branch,
             "subdirectory": new_project.subdirectory,
             "healthCheckPath": new_project.health_check_path,

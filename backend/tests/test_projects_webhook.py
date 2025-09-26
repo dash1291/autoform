@@ -2,10 +2,8 @@
 Tests for project webhook configuration endpoints
 """
 import pytest
-import pytest_asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
-from fastapi.testclient import TestClient
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 
 
 # Mock classes for testing

@@ -1,5 +1,5 @@
-from sqlmodel import Field, SQLModel, Relationship
-from typing import Optional, List
+from sqlmodel import Field
+from typing import Optional
 from datetime import datetime
 from enum import Enum
 from .base import BaseModel

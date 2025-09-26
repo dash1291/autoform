@@ -1,12 +1,9 @@
-import boto3
 import logging
 import os
-from typing import List
 
 from infrastructure.types import (
     ECSInfrastructureArgs,
     ECSInfrastructureOutput,
-    EnvironmentVariable,
 )
 from infrastructure.services.vpc_service import VPCService
 from infrastructure.services.iam_service import IAMService

@@ -1,12 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-from typing import List, Optional
-import secrets
+from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from core.database import get_async_session
 from core.security import get_current_user
-from core.config import settings
 from sqlmodel import select, and_, or_, func
 from models.user import User
 from models.team import Team as TeamModel, TeamMember as TeamMemberModel, TeamAwsConfig

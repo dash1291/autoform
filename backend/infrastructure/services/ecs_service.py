@@ -1,9 +1,6 @@
 import asyncio
-import boto3
-import json
 import logging
-import time
-from typing import List, Dict, Any
+from typing import List
 
 from infrastructure.types import EnvironmentVariable
 from utils.aws_client import create_client
@@ -107,7 +104,7 @@ class ECSService:
                             container_name = containers[0].get("name")
                             if container_name:
                                 self._existing_container_name = container_name
-        except Exception as e:
+        except Exception:
             # Continue with defaults if service doesn't exist
             pass
 
@@ -513,7 +510,7 @@ class ECSService:
                 # Try to update the existing service with new task definition
                 try:
                     logger.info(
-                        f"Updating existing service with new task definition..."
+                        "Updating existing service with new task definition..."
                     )
                     logger.info(f"Task definition ARN: {self.task_definition_arn}")
 

@@ -1,7 +1,6 @@
 """
 Simple integration test for VPC Service using moto
 """
-import pytest
 import pytest_asyncio
 from infrastructure.services.vpc_service import VPCService
 from infrastructure.types import EnvironmentVariable
@@ -60,7 +59,6 @@ class TestSimpleVPCService:
     ):
         """Test VPC service when existing VPC ID is provided"""
         # Create a VPC first
-        import boto3
         from tests.conftest import get_aws_client
 
         ec2_client = get_aws_client("ec2", test_region)

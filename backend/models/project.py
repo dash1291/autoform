@@ -1,6 +1,5 @@
-from sqlmodel import Field, SQLModel, Relationship
-from typing import Optional, List
-from datetime import datetime
+from sqlmodel import Field
+from typing import Optional
 from enum import Enum
 from .base import BaseModel
 
@@ -21,6 +20,7 @@ class Project(BaseModel, table=True):
     git_repo_url: str
     branch: str = Field(default="main")
     user_id: str = Field(foreign_key="users.id")
+    service_type: str = Field(default="web")
     team_id: Optional[str] = Field(default=None, foreign_key="teams.id")
     status: ProjectStatus = Field(default=ProjectStatus.CREATED)
     ecs_cluster_arn: Optional[str] = None

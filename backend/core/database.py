@@ -1,4 +1,4 @@
-from sqlmodel import Session, create_engine, SQLModel, select
+from sqlmodel import SQLModel
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 import os
@@ -42,12 +42,6 @@ def get_async_session():
 # Create tables
 async def create_db_and_tables():
     # Import all models to ensure they're registered
-    from models.user import User, Account, Session, VerificationToken, UserAWSConfig
-    from models.team import Team, TeamMember, TeamAwsConfig
-    from models.project import Project
-    from models.environment import Environment, EnvironmentVariable
-    from models.deployment import Deployment
-    from models.webhook import Webhook
     
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
