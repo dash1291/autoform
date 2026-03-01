@@ -2,36 +2,7 @@
 
 A platform for easily deploying applications to AWS ECS with automatic infrastructure provisioning.
 
-## Project Structure
-
-```
-autoform/
-├── frontend/              # Next.js frontend application
-│   ├── src/              # Frontend source code
-│   │   ├── app/          # Next.js app directory
-│   │   ├── components/   # React components
-│   │   ├── lib/          # Utility functions
-│   │   └── types/        # TypeScript types
-│   ├── public/           # Static assets
-│   ├── package.json      # Frontend dependencies
-│   └── next.config.js    # Next.js configuration
-│
-├── backend/              # FastAPI backend application
-│   ├── app/              # Application code
-│   │   └── routers/      # API endpoints
-│   ├── core/             # Core utilities (config, database, security)
-│   ├── infrastructure/   # AWS infrastructure code (boto3)
-│   ├── schemas/          # Pydantic models
-│   ├── services/         # Business logic services
-│   ├── main.py           # FastAPI application entry point
-│   └── requirements.txt  # Python dependencies
-│
-├── prisma/               # Database schema (shared)
-│   └── schema.prisma     # Prisma schema definition
-│
-├── infrastructure/       # Legacy TypeScript infrastructure (to be removed)
-└── package.json          # Root package.json for running both frontend and backend
-```
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Tech Stack
 
@@ -40,26 +11,31 @@ autoform/
 - **UI**: React with TypeScript
 - **Styling**: Tailwind CSS
 - **Components**: shadcn/ui
-- **Authentication**: NextAuth.js (migrating to JWT)
-- **State Management**: React hooks
+- **Authentication**: JWT with GitHub OAuth
 
 ### Backend
 - **Framework**: FastAPI (Python)
-- **Database**: PostgreSQL with Prisma ORM
+- **Package Manager**: rye
+- **Database**: PostgreSQL with SQLModel
+- **Migrations**: Alembic
 - **Authentication**: JWT with GitHub OAuth
 - **AWS SDK**: boto3
 - **Background Tasks**: Celery with Redis
-- **Infrastructure**: 
+- **Infrastructure**:
   - ECS for container orchestration
   - ALB for load balancing
   - ECR for container registry
   - CodeBuild for building Docker images
 
+### CLI
+- **Language**: Go
+
 ## Getting Started
 
 ### Prerequisites
 - Node.js 18+
-- Python 3.11+
+- Python 3.11+ with [rye](https://rye.astral.sh/)
+- Go 1.21+ (for CLI)
 - PostgreSQL
 - Redis (for background tasks)
 - AWS Account with appropriate permissions
@@ -72,61 +48,45 @@ git clone https://github.com/yourusername/autoform.git
 cd autoform
 ```
 
-2. Install dependencies:
+2. Install frontend dependencies:
 ```bash
-# Install all dependencies (frontend + backend)
-npm run install:all
+cd frontend && npm install
 ```
 
-3. Set up environment variables:
+3. Install backend dependencies:
 ```bash
-# Frontend
-cp frontend/.env.example frontend/.env
+cd backend && rye sync
+```
 
-# Backend
+4. Set up environment variables:
+```bash
+cp frontend/.env.example frontend/.env
 cp backend/.env.example backend/.env
 ```
 
-4. Generate encryption key for team AWS credentials:
+5. Generate an encryption key and set it as `ENCRYPTION_KEY` in `backend/.env`:
 ```bash
-# Generate a new encryption key
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-
-# Copy the output and replace the ENCRYPTION_KEY value in backend/.env
 ```
 
-Alternative methods to generate encryption key:
+6. Set up the database:
 ```bash
-# Using OpenSSL
-openssl rand -base64 32
-
-# Using Python secrets module
-python -c "import secrets, base64; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
-```
-
-5. Set up the database:
-```bash
-# Generate Prisma client
-npm run prisma:generate
-
-# Run migrations
-npm run prisma:migrate
+cd backend
+rye run prisma generate
+rye run alembic upgrade head
 ```
 
 ### Development
 
-Run both frontend and backend in development mode:
+Run both frontend and backend:
 ```bash
 npm run dev
 ```
 
-Or run them separately:
+Or separately:
 ```bash
-# Frontend only (runs on http://localhost:3000)
-npm run dev:frontend
-
-# Backend only (runs on http://localhost:8000)
-npm run dev:backend
+npm run dev:frontend   # http://localhost:3000
+npm run dev:backend    # http://localhost:8000
 ```
 
 ## Features
@@ -143,25 +103,9 @@ npm run dev:backend
 - **Subdirectory Support**: Deploy from monorepo subdirectories
 - **Secure Credential Storage**: Team AWS credentials are encrypted before storage
 
-## Security
+## Contributing
 
-### Team AWS Credentials
-- Team AWS credentials are encrypted using Fernet (AES 128-bit) before storage
-- Encryption key should be generated using cryptographically secure methods
-- Only team owners can configure AWS credentials
-- Credentials are never returned in API responses (only masked versions)
-
-### Important Security Notes
-- **Never commit `.env` files to version control**
-- **Use different encryption keys for different environments**
-- **Store production encryption keys securely** (e.g., AWS Secrets Manager)
-- **Rotate encryption keys periodically** (requires re-encrypting existing data)
-
-## API Documentation
-
-When running the backend, API documentation is available at:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+Contributions are welcome. Please open an issue to discuss your proposed change before submitting a pull request.
 
 ## License
 
