@@ -3,6 +3,7 @@
 A platform for easily deploying applications to AWS ECS with automatic infrastructure provisioning.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/dash1291/autoform/actions/workflows/ci.yml/badge.svg)](https://github.com/dash1291/autoform/actions/workflows/ci.yml)
 
 ## Features
 
@@ -25,13 +26,22 @@ A platform for easily deploying applications to AWS ECS with automatic infrastru
 - Python 3.11+ with [rye](https://rye.astral.sh/)
 - PostgreSQL
 - Redis (for background tasks)
-- AWS Account with appropriate permissions
+- AWS Account — see [required IAM permissions](frontend/public/aws-iam-policy.json)
+
+### Docker (recommended)
+
+The easiest way to run the backend dependencies (PostgreSQL + Redis) is with Docker Compose:
+
+```bash
+cd backend
+docker compose up -d postgres redis
+```
 
 ### Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/autoform.git
+git clone https://github.com/dash1291/autoform.git
 cd autoform
 ```
 
@@ -101,7 +111,7 @@ npm run dev:backend    # http://localhost:8000
 
 ## Contributing
 
-Contributions are welcome. Please open an issue to discuss your proposed change before submitting a pull request.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style, and the PR process.
 
 ## License
 
