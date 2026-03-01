@@ -4,38 +4,25 @@ A platform for easily deploying applications to AWS ECS with automatic infrastru
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Tech Stack
+## Features
 
-### Frontend
-- **Framework**: Next.js 14 with App Router
-- **UI**: React with TypeScript
-- **Styling**: Tailwind CSS
-- **Components**: shadcn/ui
-- **Authentication**: JWT with GitHub OAuth
-
-### Backend
-- **Framework**: FastAPI (Python)
-- **Package Manager**: rye
-- **Database**: PostgreSQL with SQLModel
-- **Migrations**: Alembic
-- **Authentication**: JWT with GitHub OAuth
-- **AWS SDK**: boto3
-- **Background Tasks**: Celery with Redis
-- **Infrastructure**:
-  - ECS for container orchestration
-  - ALB for load balancing
-  - ECR for container registry
-  - CodeBuild for building Docker images
-
-### CLI
-- **Language**: Go
+- **GitHub Integration**: Authenticate with GitHub and deploy directly from repositories
+- **Team Collaboration**: Create teams, manage members, and share projects
+- **Team AWS Configuration**: Each team can configure their own AWS credentials for deployments
+- **Automatic Infrastructure**: Automatically provisions AWS resources (VPC, ECS, ALB)
+- **Environment Variables**: Secure management with AWS Secrets Manager
+- **Real-time Logs**: Stream deployment logs in real-time
+- **Resource Configuration**: Configure CPU, memory, and disk for each project
+- **Branch Selection**: Deploy from any branch with automatic branch detection
+- **Health Checks**: Configurable health check endpoints
+- **Subdirectory Support**: Deploy from monorepo subdirectories
+- **Secure Credential Storage**: Team AWS credentials are encrypted before storage
 
 ## Getting Started
 
 ### Prerequisites
 - Node.js 18+
 - Python 3.11+ with [rye](https://rye.astral.sh/)
-- Go 1.21+ (for CLI)
 - PostgreSQL
 - Redis (for background tasks)
 - AWS Account with appropriate permissions
@@ -89,19 +76,28 @@ npm run dev:frontend   # http://localhost:3000
 npm run dev:backend    # http://localhost:8000
 ```
 
-## Features
+## Tech Stack
 
-- **GitHub Integration**: Authenticate with GitHub and deploy directly from repositories
-- **Team Collaboration**: Create teams, manage members, and share projects
-- **Team AWS Configuration**: Each team can configure their own AWS credentials for deployments
-- **Automatic Infrastructure**: Automatically provisions AWS resources (VPC, ECS, ALB)
-- **Environment Variables**: Secure management with AWS Secrets Manager
-- **Real-time Logs**: Stream deployment logs in real-time
-- **Resource Configuration**: Configure CPU, memory, and disk for each project
-- **Branch Selection**: Deploy from any branch with automatic branch detection
-- **Health Checks**: Configurable health check endpoints
-- **Subdirectory Support**: Deploy from monorepo subdirectories
-- **Secure Credential Storage**: Team AWS credentials are encrypted before storage
+### Frontend
+- **Framework**: Next.js 14 with App Router
+- **UI**: React with TypeScript
+- **Styling**: Tailwind CSS
+- **Components**: shadcn/ui
+- **Authentication**: JWT with GitHub OAuth
+
+### Backend
+- **Framework**: FastAPI (Python)
+- **Package Manager**: rye
+- **Database**: PostgreSQL with SQLModel
+- **Migrations**: Alembic
+- **Authentication**: JWT with GitHub OAuth
+- **AWS SDK**: boto3
+- **Background Tasks**: Celery with Redis
+- **Infrastructure**:
+  - ECS for container orchestration
+  - ALB for load balancing
+  - ECR for container registry
+  - CodeBuild for building Docker images
 
 ## Contributing
 
